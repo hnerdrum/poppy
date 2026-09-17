@@ -64,5 +64,6 @@ withTransaction :: DbPool -> Db a -> IO a
 withTransaction (DbPool pool) (Db action) =
   withResource pool $ \conn -> PG.withTransaction conn (action conn)
 
+-- | Wrap an in-flight 'Db' action in @BEGIN@/@COMMIT@ (vs 'withTransaction', which takes a pool).
 transaction :: Db a -> Db a
 transaction (Db action) = Db $ \conn -> PG.withTransaction conn (action conn)

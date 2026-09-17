@@ -1,0 +1,88 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.35.2.
+--
+-- see: https://github.com/sol/hpack
+
+name:           task
+version:        0.1.0.0
+synopsis:       Poppy getting-started example
+description:    A Task Schema, codegen executable, generated Client, and two queries.
+category:       Database
+author:         Henrik Nerdrum
+maintainer:     henrik.nerdrum@gmail.com
+copyright:      2023–2026 Henrik Nerdrum
+license:        BSD3
+build-type:     Simple
+
+library
+  exposed-modules:
+      Schema.Client.Task
+      Schema.Task
+  other-modules:
+      Paths_task
+  hs-source-dirs:
+      src
+  default-extensions:
+      AllowAmbiguousTypes
+      DuplicateRecordFields
+      FlexibleContexts
+      FlexibleInstances
+      NamedFieldPuns
+      NoFieldSelectors
+      OverloadedRecordDot
+      OverloadedStrings
+      RecordWildCards
+      TypeApplications
+      TypeFamilies
+  ghc-options: -Wall
+  build-depends:
+      base ==4.17.*
+    , poppy
+    , text
+    , time
+    , uuid
+  default-language: Haskell2010
+
+executable task
+  main-is: Main.hs
+  other-modules:
+      Paths_task
+  hs-source-dirs:
+      app
+  default-extensions:
+      DuplicateRecordFields
+      NamedFieldPuns
+      OverloadedRecordDot
+      OverloadedStrings
+  ghc-options: -Wall
+  build-depends:
+      base ==4.17.*
+    , poppy
+    , task
+    , text
+    , time
+    , uuid
+  default-language: Haskell2010
+
+executable task-codegen
+  main-is: Main.hs
+  other-modules:
+      TaskSchema
+      TaskTarget
+      Paths_task
+  hs-source-dirs:
+      codegen
+  default-extensions:
+      NamedFieldPuns
+      OverloadedRecordDot
+      OverloadedStrings
+  ghc-options: -Wall
+  build-depends:
+      base ==4.17.*
+    , poppy
+    , poppy-codegen
+    , text
+    , time
+    , uuid
+  default-language: Haskell2010

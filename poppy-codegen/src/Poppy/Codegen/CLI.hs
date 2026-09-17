@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | The first list is written and checked with @--check@.
+--   The second is compared to live Postgres with @--check-schema@.
 module Poppy.Codegen.CLI
   ( mainWith,
   )
@@ -19,8 +21,8 @@ import System.Directory (getCurrentDirectory)
 import System.Environment (getArgs, lookupEnv)
 import System.Exit (exitFailure, exitSuccess)
 
--- | @targets@ are generated and drift-checked with @--check@.
---   @schemaTargets@ are the Schemas compared to live Postgres by @--check-schema@.
+-- | Flags: none (write files), @--check@, @--check-schema@, @--list@.
+--   @--check-migrations@ is an alias for @--check-schema@.
 mainWith :: [CodegenTarget] -> [CodegenTarget] -> IO ()
 mainWith targets schemaTargets = do
   root <- getCurrentDirectory

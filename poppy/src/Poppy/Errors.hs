@@ -17,6 +17,7 @@ data DatabaseErrorInfo = DatabaseErrorInfo
   }
   deriving (Show, Eq)
 
+-- | @postgresql-simple@ failures that are not constraint violations.
 data DriverErrorKind
   = FormatMismatch
   | ClientQuery
@@ -29,8 +30,10 @@ data ORMError
   | UniqueViolation Text
   | ForeignKeyViolation Text
   | NotNullViolation Text
-  | EmptyWhere Text
-  | InvalidUniqueInput Text
+  | -- | A write or lookup required a @WHERE@ and none was given.
+    EmptyWhere Text
+  | -- | @findUnique@ @where_@ was not a primary key or declared unique.
+    InvalidUniqueInput Text
   | UnsupportedIncludeModifier Text
   | DatabaseError DatabaseErrorInfo
   | DriverError DriverErrorKind Text

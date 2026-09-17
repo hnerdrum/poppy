@@ -1,6 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | @where_@ on a generated query record applies only to the root model, not nested Includes.
 module Poppy.Where
   ( Where,
     eq,

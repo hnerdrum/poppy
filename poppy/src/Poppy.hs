@@ -80,6 +80,7 @@ module Poppy
     Db (..),
     DbPool (..),
     connect,
+    closePool,
     queryRaw,
     executeRaw,
     param,
@@ -90,7 +91,7 @@ where
 import Database.PostgreSQL.Simple.ToField (toField)
 import Poppy.Column
 import Poppy.Core
-import Poppy.Db (Db (..), DbPool (..), connect, runDb, transaction, withTransaction)
+import Poppy.Db (Db (..), DbPool (..), closePool, connect, runDb, transaction, withTransaction)
 import Poppy.Delete
 import Poppy.Errors
 import Poppy.Insert

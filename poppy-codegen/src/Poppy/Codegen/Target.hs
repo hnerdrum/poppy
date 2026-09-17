@@ -44,6 +44,7 @@ import Poppy.Codegen.Lookup (lookupModel)
 import Poppy.Codegen.Schema (isFullGraphInclude)
 import System.FilePath ((</>))
 
+-- | Path is relative to the process working directory.
 data GenOutput = GenOutput
   { outputPath :: FilePath,
     outputText :: Text
@@ -70,6 +71,7 @@ data TargetSchema = TargetSchema
     tsEmit :: SchemaEmit
   }
 
+-- | @EmitIncludesOnly@ is for extra Include modules on top of a full Schema emit.
 data SchemaEmit
   = EmitAll
   | EmitIncludesOnly

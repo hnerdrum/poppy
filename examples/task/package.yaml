@@ -1,0 +1,55 @@
+name: task
+version: 0.1.0.0
+license: BSD3
+author: "Henrik Nerdrum"
+maintainer: "henrik.nerdrum@gmail.com"
+copyright: "2023–2026 Henrik Nerdrum"
+category: Database
+synopsis: Poppy getting-started example
+description: A Task Schema, codegen executable, generated Client, and two queries.
+
+dependencies:
+  - base >= 4.17 && < 4.18
+  - poppy
+  - text
+  - time
+  - uuid
+
+ghc-options:
+  - -Wall
+
+library:
+  source-dirs: src
+  default-extensions:
+    - AllowAmbiguousTypes
+    - DuplicateRecordFields
+    - FlexibleContexts
+    - FlexibleInstances
+    - NamedFieldPuns
+    - NoFieldSelectors
+    - OverloadedRecordDot
+    - OverloadedStrings
+    - RecordWildCards
+    - TypeApplications
+    - TypeFamilies
+
+executables:
+  task:
+    main: Main.hs
+    source-dirs: app
+    dependencies:
+      - task
+    default-extensions:
+      - DuplicateRecordFields
+      - NamedFieldPuns
+      - OverloadedRecordDot
+      - OverloadedStrings
+  task-codegen:
+    main: Main.hs
+    source-dirs: codegen
+    dependencies:
+      - poppy-codegen
+    default-extensions:
+      - NamedFieldPuns
+      - OverloadedRecordDot
+      - OverloadedStrings

@@ -1,3 +1,4 @@
+-- | Table and column names default from Haskell names (@Task@ → @task@, @createdAt@ → @created_at@).
 module Poppy.Codegen.Schema
   ( Schema (..),
     schema,
@@ -69,6 +70,7 @@ import Poppy.Codegen.IR
 import qualified Poppy.Codegen.IR as IR
 import Poppy.Codegen.TextUtil (camelToSnake)
 
+-- | Models with relations also get a full-graph Include.
 schema :: [EnumSpec] -> [Model] -> [UniqueConstraint] -> Schema
 schema enums models uniques =
   Schema
@@ -93,6 +95,7 @@ model name fields rels =
   where
     bind rel = rel {relFromModel = name}
 
+-- | Override the Postgres table name (@model \"Task\" … & table \"tasks\"@).
 table :: Text -> Model -> Model
 table name m = m {modelTable = name}
 

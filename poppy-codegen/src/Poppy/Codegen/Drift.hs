@@ -1,6 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | Compare a Schema to live Postgres. Poppy does not generate migrations.
 module Poppy.Codegen.Drift
   ( DbCatalog (..),
     DbTable (..),
