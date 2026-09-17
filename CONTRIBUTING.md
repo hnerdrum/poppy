@@ -10,7 +10,9 @@ GHC 9.4.8 (LTS 21.22). Cabal is the source of truth; `stack.yaml` is provided fo
 cabal build all
 ```
 
-`package.yaml` is edited by hand; regenerate `.cabal` files with `hpack` in each package directory after changing it. Commit both.
+`package.yaml` is edited by hand; regenerate `.cabal` files with `hpack` in each package directory after changing it. Commit both. CI fails if they drift.
+
+CI on `main` and pull requests runs `cabal test all` (Postgres), Haddock, `cabal check`, and `cabal sdist all`.
 
 ## Test
 

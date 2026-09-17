@@ -1,5 +1,6 @@
 # Poppy
 
+[![CI](https://github.com/hnerdrum/poppy/actions/workflows/ci.yml/badge.svg)](https://github.com/hnerdrum/poppy/actions/workflows/ci.yml)
 [![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE)
 
 Postgres-first Haskell ORM: write a **Schema**, run **Codegen** to produce table types and a **Client**, then query and write through that Client at runtime.
