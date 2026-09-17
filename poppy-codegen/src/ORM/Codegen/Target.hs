@@ -9,7 +9,6 @@ module ORM.Codegen.Target
     ClientConfig (..),
     ClientLayout (..),
     SchemaEmit (..),
-    testTarget,
     targetOutputs,
     targetSchemas,
   )
@@ -43,8 +42,6 @@ import ORM.Codegen.IR
   )
 import ORM.Codegen.Lookup (lookupModel)
 import ORM.Codegen.Schema (isFullGraphInclude)
-import ORM.Codegen.Spec.Shelf (shelfSchema)
-import ORM.Codegen.Spec.Widget (widgetSchema)
 import System.FilePath ((</>))
 
 data GenOutput = GenOutput
@@ -82,17 +79,6 @@ data CodegenTarget = CodegenTarget
     ctLayout :: SchemaLayout,
     ctClients :: ClientConfig
   }
-
-testTarget :: CodegenTarget
-testTarget =
-  CodegenTarget
-    { ctSchemas =
-        [ TargetSchema widgetSchema True EmitAll,
-          TargetSchema shelfSchema True EmitAll
-        ],
-      ctLayout = SchemaLayout "Schema." "test/Schema/",
-      ctClients = NoClients
-    }
 
 targetSchemas :: [CodegenTarget] -> [Schema]
 targetSchemas targets = map (.tsSchema) (concatMap (.ctSchemas) targets)
@@ -193,7 +179,7 @@ includeClientOutput layout schema incl =
           []
 
 -- Nested writes are inferred from hasMany + child FK. Auto full-graph
--- Includes without an owned child keep a simple Client (e.g. RecipeIngredient).
+-- Includes without an owned child keep a simple Client.
 -- Explicit partial Includes still get an include-read Client.
 data IncludeClientKind = WriteIncludeClient | ReadIncludeClient | NoIncludeClient
   deriving (Eq)

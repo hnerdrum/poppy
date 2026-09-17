@@ -46,7 +46,7 @@ runCheck root targets = do
   case stale of
     [] -> exitSuccess
     paths -> do
-      TIO.putStrLn "Generated ORM files are out of date. Run `just recipes orm-gen`."
+      TIO.putStrLn "Generated ORM files are out of date. Re-run codegen without --check."
       mapM_ (TIO.putStrLn . ("  " <>)) (pack <$> paths)
       exitFailure
 

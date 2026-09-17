@@ -1,0 +1,10 @@
+cradle:
+  cabal:
+    - path: "./poppy/src"
+      component: "lib:poppy"
+    - path: "./poppy/test"
+      component: "poppy:test:poppy-test"
+    - path: "./poppy-codegen/src"
+      component: "lib:poppy-codegen"
+    - path: "./poppy-codegen/test"
+      component: "poppy-codegen:test:poppy-codegen-test"

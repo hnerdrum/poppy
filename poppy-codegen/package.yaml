@@ -10,6 +10,10 @@ category: Database
 synopsis: Schema builder and Client codegen for Poppy
 description: Codegen library for Poppy. Describe models as Haskell values, emit table types and a Client, and drift-check against live Postgres.
 
+extra-source-files:
+  - test/migrations/*.sql
+  - test/ORM/Codegen/golden/*.golden
+
 dependencies:
   - base >= 4.7 && < 5
   - containers
@@ -35,32 +39,54 @@ library:
   exposed-modules:
     - ORM.Codegen.CLI
     - ORM.Codegen.Drift
+    - ORM.Codegen.IR
+    - ORM.Codegen.Run
+    - ORM.Codegen.Schema
+    - ORM.Codegen.Target
+    - ORM.Codegen.Validate
+  other-modules:
+    - ORM.Codegen.Combinator
     - ORM.Codegen.Emit.Client
+    - ORM.Codegen.Emit.Combinator
     - ORM.Codegen.Emit.FlatRow
     - ORM.Codegen.Emit.Include
     - ORM.Codegen.Emit.Nest
     - ORM.Codegen.Emit.Schema
     - ORM.Codegen.Emit.SelectIn
+    - ORM.Codegen.EmitCommon
     - ORM.Codegen.IncludePath
-    - ORM.Codegen.IR
     - ORM.Codegen.Introspect
     - ORM.Codegen.JoinAlias
-    - ORM.Codegen.Run
-    - ORM.Codegen.Schema
-    - ORM.Codegen.Spec.Example
-    - ORM.Codegen.Spec.Flag
-    - ORM.Codegen.Spec.Shelf
-    - ORM.Codegen.Spec.ShelfDeep
-    - ORM.Codegen.Spec.Widget
-    - ORM.Codegen.Target
-    - ORM.Codegen.Validate
-  other-modules:
-    - ORM.Codegen.Combinator
-    - ORM.Codegen.Emit.Combinator
-    - ORM.Codegen.EmitCommon
     - ORM.Codegen.Lookup
     - ORM.Codegen.TextUtil
   default-extensions:
     - NamedFieldPuns
     - OverloadedRecordDot
     - OverloadedStrings
+
+# Compile library sources with the test suite so hidden Emit/JoinAlias/IncludePath
+# modules can be unit-tested without exposing them to consumers.
+tests:
+  poppy-codegen-test:
+    main: Spec.hs
+    source-dirs:
+      - test
+      - src
+    ghc-options:
+      - -threaded
+      - -rtsopts
+      - -with-rtsopts=-N
+    dependencies:
+      - poppy
+      - bytestring
+      - hspec
+      - mtl
+      - resource-pool
+      - time
+      - uuid
+    default-extensions:
+      - AllowAmbiguousTypes
+      - NamedFieldPuns
+      - OverloadedRecordDot
+      - OverloadedStrings
+      - TypeApplications

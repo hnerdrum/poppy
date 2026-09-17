@@ -1,0 +1,135 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE NoFieldSelectors #-}
+{-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE TypeApplications #-}
+
+module Schema.Tag
+  ( TagTable (..),
+    TagRow (..),
+    TagSelect (..),
+    TagPicked (..),
+    tagSelect,
+    tagSelectColumns,
+    parseTagPicked,
+    toTagPicked,
+    TagCreate (..),
+    TagUpdate (..),
+    tagId,
+    tagShelfId,
+    tagLabel
+  )
+where
+
+import Data.Text (Text)
+import Data.UUID (UUID)
+import ORM.PG (FromRow (..), RowParser, field)
+import ORM.Core
+import ORM.Select (Picked (..), picked)
+import ORM.Insert (Insertable (..), emptyInsert, set, setMaybe)
+import ORM.Update (Updatable (..), emptyUpdate, setFieldMaybe)
+
+data TagTable = TagTable
+
+type instance PrimaryKeyType TagTable = UUID
+
+instance Entity TagTable where
+  tableName = "test_tag"
+  primaryKey = tagId
+  tableColumns = ["id", "shelf_id", "label"]
+
+instance Insertable TagTable where
+  type CreateInput TagTable = TagCreate
+  toInsertBuilder input =
+    setMaybe tagId input.id $
+      set tagShelfId input.shelfId $
+      set tagLabel input.label $
+      emptyInsert @TagTable
+
+
+instance Updatable TagTable where
+  type UpdateInput TagTable = TagUpdate
+  updatedAtField = Nothing
+  toUpdateBuilder input =
+    setFieldMaybe tagShelfId input.shelfId $
+      setFieldMaybe tagLabel input.label $
+      emptyUpdate @TagTable
+
+
+data TagRow = TagRow
+  { id :: UUID,
+    shelfId :: UUID,
+    label :: Text
+  }
+  deriving (Show, Eq)
+
+
+data TagCreate = TagCreate
+  { id :: Maybe UUID,
+    shelfId :: UUID,
+    label :: Text
+  }
+  deriving (Show, Eq)
+
+
+data TagUpdate = TagUpdate
+  { shelfId :: Maybe UUID,
+    label :: Maybe Text
+  }
+  deriving (Show, Eq)
+
+
+instance FromRow TagRow where
+  fromRow = TagRow <$> field <*> field <*> field
+
+
+data TagSelect = TagSelect
+  { id :: Bool,
+    shelfId :: Bool,
+    label :: Bool
+  }
+  deriving (Show, Eq)
+data TagPicked = TagPicked
+  { id :: UUID,
+    shelfId :: Picked UUID,
+    label :: Picked Text
+  }
+  deriving (Show, Eq)
+tagSelect :: TagSelect
+tagSelect =
+  TagSelect
+    { id = False,
+      shelfId = False,
+      label = False
+    }
+tagSelectColumns :: TagSelect -> [Text]
+tagSelectColumns select_ =
+  fieldColumn tagId
+    : concat
+      [ [fieldColumn tagShelfId | select_.shelfId]
+      , [fieldColumn tagLabel | select_.label]
+      ]
+parseTagPicked :: TagSelect -> RowParser TagPicked
+parseTagPicked select_ = do
+  idVal <- field
+  shelfIdVal <- if select_.shelfId then Picked <$> field else pure Skipped
+  labelVal <- if select_.label then Picked <$> field else pure Skipped
+  pure TagPicked { id = idVal, shelfId = shelfIdVal, label = labelVal }
+toTagPicked :: TagSelect -> TagRow -> TagPicked
+toTagPicked select_ row =
+  TagPicked
+    { id = row.id,
+      shelfId = picked select_.shelfId row.shelfId,
+      label = picked select_.label row.label
+    }
+
+
+tagId :: Field TagTable UUID
+tagId = Field "id" "id"
+
+tagShelfId :: Field TagTable UUID
+tagShelfId = Field "shelfId" "shelf_id"
+
+tagLabel :: Field TagTable Text
+tagLabel = Field "label" "label"
+

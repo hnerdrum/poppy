@@ -10,6 +10,9 @@ category: Database
 synopsis: Prisma-style Schema to Client codegen runtime for Postgres
 description: Runtime library for Poppy. Write a Schema, generate a Client, then query and write through that Client.
 
+extra-source-files:
+  - test/migrations/*.sql
+
 dependencies:
   - base >= 4.7 && < 5
   - bytestring
@@ -60,3 +63,27 @@ library:
     - OverloadedRecordDot
     - OverloadedStrings
     - TypeFamilies
+
+tests:
+  poppy-test:
+    main: Spec.hs
+    source-dirs: test
+    ghc-options:
+      - -threaded
+      - -rtsopts
+      - -with-rtsopts=-N
+    dependencies:
+      - poppy
+      - directory
+      - filepath
+      - hspec
+    default-extensions:
+      - AllowAmbiguousTypes
+      - DuplicateRecordFields
+      - LambdaCase
+      - NamedFieldPuns
+      - OverloadedRecordDot
+      - OverloadedStrings
+      - ScopedTypeVariables
+      - TypeApplications
+      - TypeFamilies

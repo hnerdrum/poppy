@@ -17,6 +17,23 @@ copyright:      2023–2026 Henrik Nerdrum
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
+extra-source-files:
+    test/migrations/001-test-widget.sql
+    test/migrations/002-test-shelf-book.sql
+    test/migrations/003-test-chapter.sql
+    test/migrations/004-test-section.sql
+    test/migrations/005-test-tag.sql
+    test/ORM/Codegen/golden/Book.hs.golden
+    test/ORM/Codegen/golden/BookInclude.hs.golden
+    test/ORM/Codegen/golden/Chapter.hs.golden
+    test/ORM/Codegen/golden/ChapterInclude.hs.golden
+    test/ORM/Codegen/golden/Flag.hs.golden
+    test/ORM/Codegen/golden/Section.hs.golden
+    test/ORM/Codegen/golden/Shelf.hs.golden
+    test/ORM/Codegen/golden/ShelfInclude.hs.golden
+    test/ORM/Codegen/golden/ShelfReadClient.hs.golden
+    test/ORM/Codegen/golden/Tag.hs.golden
+    test/ORM/Codegen/golden/Widget.hs.golden
 
 source-repository head
   type: git
@@ -26,29 +43,24 @@ library
   exposed-modules:
       ORM.Codegen.CLI
       ORM.Codegen.Drift
+      ORM.Codegen.IR
+      ORM.Codegen.Run
+      ORM.Codegen.Schema
+      ORM.Codegen.Target
+      ORM.Codegen.Validate
+  other-modules:
+      ORM.Codegen.Combinator
       ORM.Codegen.Emit.Client
+      ORM.Codegen.Emit.Combinator
       ORM.Codegen.Emit.FlatRow
       ORM.Codegen.Emit.Include
       ORM.Codegen.Emit.Nest
       ORM.Codegen.Emit.Schema
       ORM.Codegen.Emit.SelectIn
+      ORM.Codegen.EmitCommon
       ORM.Codegen.IncludePath
-      ORM.Codegen.IR
       ORM.Codegen.Introspect
       ORM.Codegen.JoinAlias
-      ORM.Codegen.Run
-      ORM.Codegen.Schema
-      ORM.Codegen.Spec.Example
-      ORM.Codegen.Spec.Flag
-      ORM.Codegen.Spec.Shelf
-      ORM.Codegen.Spec.ShelfDeep
-      ORM.Codegen.Spec.Widget
-      ORM.Codegen.Target
-      ORM.Codegen.Validate
-  other-modules:
-      ORM.Codegen.Combinator
-      ORM.Codegen.Emit.Combinator
-      ORM.Codegen.EmitCommon
       ORM.Codegen.Lookup
       ORM.Codegen.TextUtil
   hs-source-dirs:
@@ -66,4 +78,74 @@ library
     , poppy
     , postgresql-simple
     , text
+  default-language: Haskell2010
+
+test-suite poppy-codegen-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      ORM.Codegen.DriftSpec
+      ORM.Codegen.EmitClientSpec
+      ORM.Codegen.EmitFlatRowSpec
+      ORM.Codegen.EmitIncludeSpec
+      ORM.Codegen.EmitSpec
+      ORM.Codegen.IncludePathSpec
+      ORM.Codegen.JoinAliasSpec
+      ORM.Codegen.SchemaSpec
+      ORM.Codegen.Spec.Example
+      ORM.Codegen.Spec.Flag
+      ORM.Codegen.Spec.Shelf
+      ORM.Codegen.Spec.ShelfDeep
+      ORM.Codegen.Spec.Widget
+      ORM.Codegen.TargetSpec
+      ORM.Codegen.TestTarget
+      ORM.Codegen.ValidateSpec
+      Support.TestDb
+      Support.TestMigrations
+      ORM.Codegen.CLI
+      ORM.Codegen.Combinator
+      ORM.Codegen.Drift
+      ORM.Codegen.Emit.Client
+      ORM.Codegen.Emit.Combinator
+      ORM.Codegen.Emit.FlatRow
+      ORM.Codegen.Emit.Include
+      ORM.Codegen.Emit.Nest
+      ORM.Codegen.Emit.Schema
+      ORM.Codegen.Emit.SelectIn
+      ORM.Codegen.EmitCommon
+      ORM.Codegen.IncludePath
+      ORM.Codegen.Introspect
+      ORM.Codegen.IR
+      ORM.Codegen.JoinAlias
+      ORM.Codegen.Lookup
+      ORM.Codegen.Run
+      ORM.Codegen.Schema
+      ORM.Codegen.Target
+      ORM.Codegen.TextUtil
+      ORM.Codegen.Validate
+      Paths_poppy_codegen
+  hs-source-dirs:
+      test
+      src
+  default-extensions:
+      AllowAmbiguousTypes
+      NamedFieldPuns
+      OverloadedRecordDot
+      OverloadedStrings
+      TypeApplications
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , bytestring
+    , containers
+    , directory
+    , filepath
+    , hspec
+    , mtl
+    , poppy
+    , postgresql-simple
+    , resource-pool
+    , text
+    , time
+    , uuid
   default-language: Haskell2010

@@ -17,6 +17,12 @@ copyright:      2023–2026 Henrik Nerdrum
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
+extra-source-files:
+    test/migrations/001-test-widget.sql
+    test/migrations/002-test-shelf-book.sql
+    test/migrations/003-test-chapter.sql
+    test/migrations/004-test-section.sql
+    test/migrations/005-test-tag.sql
 
 source-repository head
   type: git
@@ -59,6 +65,65 @@ library
     , bytestring
     , containers
     , mtl
+    , postgresql-simple
+    , resource-pool
+    , text
+    , time
+    , uuid
+  default-language: Haskell2010
+
+test-suite poppy-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      ORM.ErrorsSpec
+      ORM.GroupSpec
+      ORM.IncludeSpec
+      ORM.JoinSpec
+      ORM.NestedWriteSpec
+      ORM.OperationsSpec
+      ORM.RawSpec
+      ORM.SelectSpec
+      ORM.ShelfFixtures
+      ORM.WhereSpec
+      ORM.WidgetFixtures
+      Schema.Book
+      Schema.BookInclude
+      Schema.Chapter
+      Schema.ChapterInclude
+      Schema.Client.Shelf
+      Schema.Client.Widget
+      Schema.Section
+      Schema.Shelf
+      Schema.ShelfInclude
+      Schema.Tag
+      Schema.Widget
+      Support.Assert
+      Support.TestDb
+      Support.TestMigrations
+      Paths_poppy
+  hs-source-dirs:
+      test
+  default-extensions:
+      AllowAmbiguousTypes
+      DuplicateRecordFields
+      LambdaCase
+      NamedFieldPuns
+      OverloadedRecordDot
+      OverloadedStrings
+      ScopedTypeVariables
+      TypeApplications
+      TypeFamilies
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , bytestring
+    , containers
+    , directory
+    , filepath
+    , hspec
+    , mtl
+    , poppy
     , postgresql-simple
     , resource-pool
     , text
