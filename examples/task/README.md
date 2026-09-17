@@ -1,6 +1,6 @@
 # Task example
 
-A minimal Poppy app: one Schema, a thin codegen executable, a generated Client, and two queries.
+One Schema, a codegen executable, a generated Client, and two queries.
 
 From this directory:
 
@@ -28,4 +28,4 @@ cabal run task
 | `app/Main.hs`             | Queries                                     |
 | `migrations/001-task.sql` | Hand-written SQL (Poppy does not migrate)   |
 
-This package is not published. Path-depend on `../../poppy` and `../../poppy-codegen` via `cabal.project`. In your own app, depend on those packages from Hackage (or a git extra-dep) instead.
+This package is not on Hackage. It path-depends on `../../poppy` and `../../poppy-codegen` via `cabal.project`. In your own app, depend on those packages with a git extra-dep (or Hackage after the first release).

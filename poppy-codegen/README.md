@@ -2,7 +2,7 @@
 
 Schema builder and Client codegen for [Poppy](https://github.com/hnerdrum/poppy).
 
-Describe models as Haskell values, emit table types and a Client, and drift-check against live Postgres. Each app owns a thin executable:
+Each app has a codegen executable:
 
 ```haskell
 import Poppy.Codegen.CLI (mainWith)
@@ -18,4 +18,4 @@ main = mainWith [taskTarget] [taskTarget]
 | `--check-schema` | Compare Schema to live Postgres (`TEST_DATABASE_URL` or `DATABASE_URL`) |
 | `--list`         | Print output paths without writing                                      |
 
-The getting-started walkthrough lives in the [repository README](https://github.com/hnerdrum/poppy#readme) and [`examples/task/`](https://github.com/hnerdrum/poppy/tree/main/examples/task).
+Setup is in the [repository README](https://github.com/hnerdrum/poppy#readme) and [`examples/task/`](https://github.com/hnerdrum/poppy/tree/main/examples/task).

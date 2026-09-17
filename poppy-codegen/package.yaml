@@ -10,12 +10,8 @@ category: Database
 tested-with: GHC == 9.4.8
 synopsis: Schema builder and Client codegen for Poppy
 description: |
-  Codegen library for Poppy. Describe models as Haskell values, emit
-  table types and a Client, and drift-check against live Postgres.
-
-  Each app owns a thin executable that calls mainWith with its
-  CodegenTargets. Use --check to keep generated files fresh and
-  --check-schema to compare the Schema to Postgres.
+  Write a Schema, generate table types and a Client, and compare that
+  Schema to live Postgres.
 
 extra-source-files:
   - test/migrations/*.sql

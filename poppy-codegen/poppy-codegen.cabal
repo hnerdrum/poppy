@@ -7,12 +7,8 @@ cabal-version: 1.18
 name:           poppy-codegen
 version:        0.1.0.0
 synopsis:       Schema builder and Client codegen for Poppy
-description:    Codegen library for Poppy. Describe models as Haskell values, emit
-                table types and a Client, and drift-check against live Postgres.
-                .
-                Each app owns a thin executable that calls mainWith with its
-                CodegenTargets. Use --check to keep generated files fresh and
-                --check-schema to compare the Schema to Postgres.
+description:    Write a Schema, generate table types and a Client, and compare that
+                Schema to live Postgres.
 category:       Database
 homepage:       https://github.com/hnerdrum/poppy#readme
 bug-reports:    https://github.com/hnerdrum/poppy/issues
