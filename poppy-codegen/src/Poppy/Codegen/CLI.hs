@@ -22,7 +22,6 @@ import System.Environment (getArgs, lookupEnv)
 import System.Exit (exitFailure, exitSuccess)
 
 -- | Flags: none (write files), @--check@, @--check-schema@, @--list@.
---   @--check-migrations@ is an alias for @--check-schema@.
 mainWith :: [CodegenTarget] -> [CodegenTarget] -> IO ()
 mainWith targets schemaTargets = do
   root <- getCurrentDirectory
@@ -30,8 +29,6 @@ mainWith targets schemaTargets = do
   case args of
     ("--check" : _) -> runCheck root targets
     ("--check-schema" : _) -> runCheckSchema schemaTargets
-    ("--check-migrations" : _) -> runCheckSchema schemaTargets
-    ("check-migrations" : _) -> runCheckSchema schemaTargets
     ("--list" : _) -> runList targets
     _ -> runWrite root targets
 
