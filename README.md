@@ -4,10 +4,10 @@ Postgres-first Haskell ORM: write a **Schema**, run **Codegen** to produce table
 
 This repository contains two packages:
 
-- [`poppy`](poppy/) — runtime (`ORM.*` modules)
+- [`poppy`](poppy/) — runtime (`Poppy.*` modules)
 - [`poppy-codegen`](poppy-codegen/) — Schema builder, file generation, drift-check
 
-The library modules are still named `ORM.*`. They will be renamed to `Poppy.*` in a later pass. A generic getting-started example will follow.
+Library modules are named `Poppy.*`. A generic getting-started example will follow.
 
 ## Build
 

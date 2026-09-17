@@ -9,7 +9,7 @@ where
 
 import Control.Applicative ((<|>))
 import Control.Exception (SomeException, displayException, try)
-import ORM.Db (DbPool, closePool, connect)
+import Poppy.Db (DbPool, closePool, connect)
 import Support.TestMigrations (runTestMigrations)
 import System.Environment (lookupEnv)
 import Test.Hspec (Spec, SpecWith, afterAll, beforeAll)

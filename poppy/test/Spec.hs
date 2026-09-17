@@ -1,14 +1,14 @@
 module Main (main) where
 
-import ORM.ErrorsSpec (errorsSpec)
-import ORM.GroupSpec (groupSpec)
-import ORM.IncludeSpec (includeSpec)
-import ORM.JoinSpec (joinSpec)
-import ORM.NestedWriteSpec (nestedWriteSpec)
-import ORM.OperationsSpec (operationsSpec)
-import ORM.RawSpec (rawSpec)
-import ORM.SelectSpec (selectSpec)
-import ORM.WhereSpec (whereSpec)
+import Poppy.ErrorsSpec (errorsSpec)
+import Poppy.GroupSpec (groupSpec)
+import Poppy.IncludeSpec (includeSpec)
+import Poppy.JoinSpec (joinSpec)
+import Poppy.NestedWriteSpec (nestedWriteSpec)
+import Poppy.OperationsSpec (operationsSpec)
+import Poppy.RawSpec (rawSpec)
+import Poppy.SelectSpec (selectSpec)
+import Poppy.WhereSpec (whereSpec)
 import Support.TestDb (withTestDb)
 import Test.Hspec
 

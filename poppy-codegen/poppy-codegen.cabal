@@ -23,17 +23,17 @@ extra-source-files:
     test/migrations/003-test-chapter.sql
     test/migrations/004-test-section.sql
     test/migrations/005-test-tag.sql
-    test/ORM/Codegen/golden/Book.hs.golden
-    test/ORM/Codegen/golden/BookInclude.hs.golden
-    test/ORM/Codegen/golden/Chapter.hs.golden
-    test/ORM/Codegen/golden/ChapterInclude.hs.golden
-    test/ORM/Codegen/golden/Flag.hs.golden
-    test/ORM/Codegen/golden/Section.hs.golden
-    test/ORM/Codegen/golden/Shelf.hs.golden
-    test/ORM/Codegen/golden/ShelfInclude.hs.golden
-    test/ORM/Codegen/golden/ShelfReadClient.hs.golden
-    test/ORM/Codegen/golden/Tag.hs.golden
-    test/ORM/Codegen/golden/Widget.hs.golden
+    test/Poppy/Codegen/golden/Book.hs.golden
+    test/Poppy/Codegen/golden/BookInclude.hs.golden
+    test/Poppy/Codegen/golden/Chapter.hs.golden
+    test/Poppy/Codegen/golden/ChapterInclude.hs.golden
+    test/Poppy/Codegen/golden/Flag.hs.golden
+    test/Poppy/Codegen/golden/Section.hs.golden
+    test/Poppy/Codegen/golden/Shelf.hs.golden
+    test/Poppy/Codegen/golden/ShelfInclude.hs.golden
+    test/Poppy/Codegen/golden/ShelfReadClient.hs.golden
+    test/Poppy/Codegen/golden/Tag.hs.golden
+    test/Poppy/Codegen/golden/Widget.hs.golden
 
 source-repository head
   type: git
@@ -41,28 +41,28 @@ source-repository head
 
 library
   exposed-modules:
-      ORM.Codegen.CLI
-      ORM.Codegen.Drift
-      ORM.Codegen.IR
-      ORM.Codegen.Run
-      ORM.Codegen.Schema
-      ORM.Codegen.Target
-      ORM.Codegen.Validate
+      Poppy.Codegen.CLI
+      Poppy.Codegen.Drift
+      Poppy.Codegen.IR
+      Poppy.Codegen.Run
+      Poppy.Codegen.Schema
+      Poppy.Codegen.Target
+      Poppy.Codegen.Validate
   other-modules:
-      ORM.Codegen.Combinator
-      ORM.Codegen.Emit.Client
-      ORM.Codegen.Emit.Combinator
-      ORM.Codegen.Emit.FlatRow
-      ORM.Codegen.Emit.Include
-      ORM.Codegen.Emit.Nest
-      ORM.Codegen.Emit.Schema
-      ORM.Codegen.Emit.SelectIn
-      ORM.Codegen.EmitCommon
-      ORM.Codegen.IncludePath
-      ORM.Codegen.Introspect
-      ORM.Codegen.JoinAlias
-      ORM.Codegen.Lookup
-      ORM.Codegen.TextUtil
+      Poppy.Codegen.Combinator
+      Poppy.Codegen.Emit.Client
+      Poppy.Codegen.Emit.Combinator
+      Poppy.Codegen.Emit.FlatRow
+      Poppy.Codegen.Emit.Include
+      Poppy.Codegen.Emit.Nest
+      Poppy.Codegen.Emit.Schema
+      Poppy.Codegen.Emit.SelectIn
+      Poppy.Codegen.EmitCommon
+      Poppy.Codegen.IncludePath
+      Poppy.Codegen.Introspect
+      Poppy.Codegen.JoinAlias
+      Poppy.Codegen.Lookup
+      Poppy.Codegen.TextUtil
   hs-source-dirs:
       src
   default-extensions:
@@ -84,45 +84,45 @@ test-suite poppy-codegen-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
-      ORM.Codegen.DriftSpec
-      ORM.Codegen.EmitClientSpec
-      ORM.Codegen.EmitFlatRowSpec
-      ORM.Codegen.EmitIncludeSpec
-      ORM.Codegen.EmitSpec
-      ORM.Codegen.IncludePathSpec
-      ORM.Codegen.JoinAliasSpec
-      ORM.Codegen.SchemaSpec
-      ORM.Codegen.Spec.Example
-      ORM.Codegen.Spec.Flag
-      ORM.Codegen.Spec.Shelf
-      ORM.Codegen.Spec.ShelfDeep
-      ORM.Codegen.Spec.Widget
-      ORM.Codegen.TargetSpec
-      ORM.Codegen.TestTarget
-      ORM.Codegen.ValidateSpec
+      Poppy.Codegen.DriftSpec
+      Poppy.Codegen.EmitClientSpec
+      Poppy.Codegen.EmitFlatRowSpec
+      Poppy.Codegen.EmitIncludeSpec
+      Poppy.Codegen.EmitSpec
+      Poppy.Codegen.IncludePathSpec
+      Poppy.Codegen.JoinAliasSpec
+      Poppy.Codegen.SchemaSpec
+      Poppy.Codegen.Spec.Example
+      Poppy.Codegen.Spec.Flag
+      Poppy.Codegen.Spec.Shelf
+      Poppy.Codegen.Spec.ShelfDeep
+      Poppy.Codegen.Spec.Widget
+      Poppy.Codegen.TargetSpec
+      Poppy.Codegen.TestTarget
+      Poppy.Codegen.ValidateSpec
       Support.TestDb
       Support.TestMigrations
-      ORM.Codegen.CLI
-      ORM.Codegen.Combinator
-      ORM.Codegen.Drift
-      ORM.Codegen.Emit.Client
-      ORM.Codegen.Emit.Combinator
-      ORM.Codegen.Emit.FlatRow
-      ORM.Codegen.Emit.Include
-      ORM.Codegen.Emit.Nest
-      ORM.Codegen.Emit.Schema
-      ORM.Codegen.Emit.SelectIn
-      ORM.Codegen.EmitCommon
-      ORM.Codegen.IncludePath
-      ORM.Codegen.Introspect
-      ORM.Codegen.IR
-      ORM.Codegen.JoinAlias
-      ORM.Codegen.Lookup
-      ORM.Codegen.Run
-      ORM.Codegen.Schema
-      ORM.Codegen.Target
-      ORM.Codegen.TextUtil
-      ORM.Codegen.Validate
+      Poppy.Codegen.CLI
+      Poppy.Codegen.Combinator
+      Poppy.Codegen.Drift
+      Poppy.Codegen.Emit.Client
+      Poppy.Codegen.Emit.Combinator
+      Poppy.Codegen.Emit.FlatRow
+      Poppy.Codegen.Emit.Include
+      Poppy.Codegen.Emit.Nest
+      Poppy.Codegen.Emit.Schema
+      Poppy.Codegen.Emit.SelectIn
+      Poppy.Codegen.EmitCommon
+      Poppy.Codegen.IncludePath
+      Poppy.Codegen.Introspect
+      Poppy.Codegen.IR
+      Poppy.Codegen.JoinAlias
+      Poppy.Codegen.Lookup
+      Poppy.Codegen.Run
+      Poppy.Codegen.Schema
+      Poppy.Codegen.Target
+      Poppy.Codegen.TextUtil
+      Poppy.Codegen.Validate
       Paths_poppy_codegen
   hs-source-dirs:
       test

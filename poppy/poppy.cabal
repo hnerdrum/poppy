@@ -30,25 +30,25 @@ source-repository head
 
 library
   exposed-modules:
-      ORM
-      ORM.Column
-      ORM.Core
-      ORM.Db
-      ORM.Delete
-      ORM.Errors
-      ORM.Group
-      ORM.Include
-      ORM.Insert
-      ORM.JoinChain
-      ORM.Operations
-      ORM.PG
-      ORM.Query
-      ORM.Relation
-      ORM.Select
-      ORM.SelectIn
-      ORM.Sql
-      ORM.Update
-      ORM.Where
+      Poppy
+      Poppy.Column
+      Poppy.Core
+      Poppy.Db
+      Poppy.Delete
+      Poppy.Errors
+      Poppy.Group
+      Poppy.Include
+      Poppy.Insert
+      Poppy.JoinChain
+      Poppy.Operations
+      Poppy.PG
+      Poppy.Query
+      Poppy.Relation
+      Poppy.Select
+      Poppy.SelectIn
+      Poppy.Sql
+      Poppy.Update
+      Poppy.Where
   other-modules:
       Paths_poppy
   hs-source-dirs:
@@ -76,17 +76,17 @@ test-suite poppy-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
-      ORM.ErrorsSpec
-      ORM.GroupSpec
-      ORM.IncludeSpec
-      ORM.JoinSpec
-      ORM.NestedWriteSpec
-      ORM.OperationsSpec
-      ORM.RawSpec
-      ORM.SelectSpec
-      ORM.ShelfFixtures
-      ORM.WhereSpec
-      ORM.WidgetFixtures
+      Poppy.ErrorsSpec
+      Poppy.GroupSpec
+      Poppy.IncludeSpec
+      Poppy.JoinSpec
+      Poppy.NestedWriteSpec
+      Poppy.OperationsSpec
+      Poppy.RawSpec
+      Poppy.SelectSpec
+      Poppy.ShelfFixtures
+      Poppy.WhereSpec
+      Poppy.WidgetFixtures
       Schema.Book
       Schema.BookInclude
       Schema.Chapter

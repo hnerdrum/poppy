@@ -29,15 +29,15 @@ module Schema.Client.Widget
 where
 
 import Data.UUID (UUID)
-import ORM.Db (Db)
-import qualified ORM.Delete as Delete
-import ORM.Errors (ORMError (..), requireFound)
-import qualified ORM.Insert as Insert
-import qualified ORM.Operations as Ops
-import ORM.Query (QueryBuilder, applyQueryModifiers, matching, selectColumns)
-import ORM.Select (OmitSelect (..), Picked (..))
-import qualified ORM.Update as Update
-import ORM.Where (Where)
+import Poppy.Db (Db)
+import qualified Poppy.Delete as Delete
+import Poppy.Errors (ORMError (..), requireFound)
+import qualified Poppy.Insert as Insert
+import qualified Poppy.Operations as Ops
+import Poppy.Query (QueryBuilder, applyQueryModifiers, matching, selectColumns)
+import Poppy.Select (OmitSelect (..), Picked (..))
+import qualified Poppy.Update as Update
+import Poppy.Where (Where)
 import Schema.Widget
   ( WidgetCreate (..),
     WidgetPicked (..),

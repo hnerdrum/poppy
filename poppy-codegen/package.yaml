@@ -12,7 +12,7 @@ description: Codegen library for Poppy. Describe models as Haskell values, emit 
 
 extra-source-files:
   - test/migrations/*.sql
-  - test/ORM/Codegen/golden/*.golden
+  - test/Poppy/Codegen/golden/*.golden
 
 dependencies:
   - base >= 4.7 && < 5
@@ -37,28 +37,28 @@ ghc-options:
 library:
   source-dirs: src
   exposed-modules:
-    - ORM.Codegen.CLI
-    - ORM.Codegen.Drift
-    - ORM.Codegen.IR
-    - ORM.Codegen.Run
-    - ORM.Codegen.Schema
-    - ORM.Codegen.Target
-    - ORM.Codegen.Validate
+    - Poppy.Codegen.CLI
+    - Poppy.Codegen.Drift
+    - Poppy.Codegen.IR
+    - Poppy.Codegen.Run
+    - Poppy.Codegen.Schema
+    - Poppy.Codegen.Target
+    - Poppy.Codegen.Validate
   other-modules:
-    - ORM.Codegen.Combinator
-    - ORM.Codegen.Emit.Client
-    - ORM.Codegen.Emit.Combinator
-    - ORM.Codegen.Emit.FlatRow
-    - ORM.Codegen.Emit.Include
-    - ORM.Codegen.Emit.Nest
-    - ORM.Codegen.Emit.Schema
-    - ORM.Codegen.Emit.SelectIn
-    - ORM.Codegen.EmitCommon
-    - ORM.Codegen.IncludePath
-    - ORM.Codegen.Introspect
-    - ORM.Codegen.JoinAlias
-    - ORM.Codegen.Lookup
-    - ORM.Codegen.TextUtil
+    - Poppy.Codegen.Combinator
+    - Poppy.Codegen.Emit.Client
+    - Poppy.Codegen.Emit.Combinator
+    - Poppy.Codegen.Emit.FlatRow
+    - Poppy.Codegen.Emit.Include
+    - Poppy.Codegen.Emit.Nest
+    - Poppy.Codegen.Emit.Schema
+    - Poppy.Codegen.Emit.SelectIn
+    - Poppy.Codegen.EmitCommon
+    - Poppy.Codegen.IncludePath
+    - Poppy.Codegen.Introspect
+    - Poppy.Codegen.JoinAlias
+    - Poppy.Codegen.Lookup
+    - Poppy.Codegen.TextUtil
   default-extensions:
     - NamedFieldPuns
     - OverloadedRecordDot

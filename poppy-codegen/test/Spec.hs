@@ -1,15 +1,15 @@
 module Main (main) where
 
-import ORM.Codegen.DriftSpec (driftDbSpec, driftSpec)
-import ORM.Codegen.EmitClientSpec (emitClientSpec)
-import ORM.Codegen.EmitFlatRowSpec (emitFlatRowSpec)
-import ORM.Codegen.EmitIncludeSpec (emitIncludeSpec)
-import ORM.Codegen.EmitSpec (emitSpec)
-import ORM.Codegen.IncludePathSpec (fourLevelPathSpec, includePathSpec)
-import ORM.Codegen.JoinAliasSpec (joinAliasSpec)
-import ORM.Codegen.SchemaSpec (schemaSpec)
-import ORM.Codegen.TargetSpec (targetSpec)
-import ORM.Codegen.ValidateSpec (validateSpec)
+import Poppy.Codegen.DriftSpec (driftDbSpec, driftSpec)
+import Poppy.Codegen.EmitClientSpec (emitClientSpec)
+import Poppy.Codegen.EmitFlatRowSpec (emitFlatRowSpec)
+import Poppy.Codegen.EmitIncludeSpec (emitIncludeSpec)
+import Poppy.Codegen.EmitSpec (emitSpec)
+import Poppy.Codegen.IncludePathSpec (fourLevelPathSpec, includePathSpec)
+import Poppy.Codegen.JoinAliasSpec (joinAliasSpec)
+import Poppy.Codegen.SchemaSpec (schemaSpec)
+import Poppy.Codegen.TargetSpec (targetSpec)
+import Poppy.Codegen.ValidateSpec (validateSpec)
 import Support.TestDb (withTestDb)
 import Test.Hspec
 

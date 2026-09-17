@@ -38,25 +38,25 @@ ghc-options:
 library:
   source-dirs: src
   exposed-modules:
-    - ORM
-    - ORM.Column
-    - ORM.Core
-    - ORM.Db
-    - ORM.Delete
-    - ORM.Errors
-    - ORM.Group
-    - ORM.Include
-    - ORM.Insert
-    - ORM.JoinChain
-    - ORM.Operations
-    - ORM.PG
-    - ORM.Query
-    - ORM.Relation
-    - ORM.Select
-    - ORM.SelectIn
-    - ORM.Sql
-    - ORM.Update
-    - ORM.Where
+    - Poppy
+    - Poppy.Column
+    - Poppy.Core
+    - Poppy.Db
+    - Poppy.Delete
+    - Poppy.Errors
+    - Poppy.Group
+    - Poppy.Include
+    - Poppy.Insert
+    - Poppy.JoinChain
+    - Poppy.Operations
+    - Poppy.PG
+    - Poppy.Query
+    - Poppy.Relation
+    - Poppy.Select
+    - Poppy.SelectIn
+    - Poppy.Sql
+    - Poppy.Update
+    - Poppy.Where
   default-extensions:
     - DuplicateRecordFields
     - NamedFieldPuns
