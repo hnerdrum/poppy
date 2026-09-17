@@ -1,0 +1,69 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.35.2.
+--
+-- see: https://github.com/sol/hpack
+
+name:           poppy-codegen
+version:        0.1.0.0
+synopsis:       Schema builder and Client codegen for Poppy
+description:    Codegen library for Poppy. Describe models as Haskell values, emit table types and a Client, and drift-check against live Postgres.
+category:       Database
+homepage:       https://github.com/hnerdrum/poppy#readme
+bug-reports:    https://github.com/hnerdrum/poppy/issues
+author:         Henrik Nerdrum
+maintainer:     henrik.nerdrum@gmail.com
+copyright:      2023–2026 Henrik Nerdrum
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+
+source-repository head
+  type: git
+  location: https://github.com/hnerdrum/poppy
+
+library
+  exposed-modules:
+      ORM.Codegen.CLI
+      ORM.Codegen.Drift
+      ORM.Codegen.Emit.Client
+      ORM.Codegen.Emit.FlatRow
+      ORM.Codegen.Emit.Include
+      ORM.Codegen.Emit.Nest
+      ORM.Codegen.Emit.Schema
+      ORM.Codegen.Emit.SelectIn
+      ORM.Codegen.IncludePath
+      ORM.Codegen.IR
+      ORM.Codegen.Introspect
+      ORM.Codegen.JoinAlias
+      ORM.Codegen.Run
+      ORM.Codegen.Schema
+      ORM.Codegen.Spec.Example
+      ORM.Codegen.Spec.Flag
+      ORM.Codegen.Spec.Shelf
+      ORM.Codegen.Spec.ShelfDeep
+      ORM.Codegen.Spec.Widget
+      ORM.Codegen.Target
+      ORM.Codegen.Validate
+  other-modules:
+      ORM.Codegen.Combinator
+      ORM.Codegen.Emit.Combinator
+      ORM.Codegen.EmitCommon
+      ORM.Codegen.Lookup
+      ORM.Codegen.TextUtil
+  hs-source-dirs:
+      src
+  default-extensions:
+      NamedFieldPuns
+      OverloadedRecordDot
+      OverloadedStrings
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
+  build-depends:
+      base >=4.7 && <5
+    , containers
+    , directory
+    , filepath
+    , poppy
+    , postgresql-simple
+    , text
+  default-language: Haskell2010

@@ -1,0 +1,7 @@
+# LTS 21.22 → GHC 9.4.8, matching nrdrm/recipes so that repo can extra-dep this one.
+resolver:
+  url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/21/22.yaml
+
+packages:
+- poppy
+- poppy-codegen

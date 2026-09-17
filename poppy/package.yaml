@@ -1,0 +1,62 @@
+name: poppy
+version: 0.1.0.0
+github: "hnerdrum/poppy"
+license: BSD3
+license-file: LICENSE
+author: "Henrik Nerdrum"
+maintainer: "henrik.nerdrum@gmail.com"
+copyright: "2023–2026 Henrik Nerdrum"
+category: Database
+synopsis: Prisma-style Schema to Client codegen runtime for Postgres
+description: Runtime library for Poppy. Write a Schema, generate a Client, then query and write through that Client.
+
+dependencies:
+  - base >= 4.7 && < 5
+  - bytestring
+  - containers
+  - mtl
+  - postgresql-simple
+  - resource-pool
+  - text
+  - time
+  - uuid
+
+ghc-options:
+  - -Wall
+  - -Wcompat
+  - -Widentities
+  - -Wincomplete-record-updates
+  - -Wincomplete-uni-patterns
+  - -Wmissing-export-lists
+  - -Wmissing-home-modules
+  - -Wpartial-fields
+  - -Wredundant-constraints
+
+library:
+  source-dirs: src
+  exposed-modules:
+    - ORM
+    - ORM.Column
+    - ORM.Core
+    - ORM.Db
+    - ORM.Delete
+    - ORM.Errors
+    - ORM.Group
+    - ORM.Include
+    - ORM.Insert
+    - ORM.JoinChain
+    - ORM.Operations
+    - ORM.PG
+    - ORM.Query
+    - ORM.Relation
+    - ORM.Select
+    - ORM.SelectIn
+    - ORM.Sql
+    - ORM.Update
+    - ORM.Where
+  default-extensions:
+    - DuplicateRecordFields
+    - NamedFieldPuns
+    - OverloadedRecordDot
+    - OverloadedStrings
+    - TypeFamilies
