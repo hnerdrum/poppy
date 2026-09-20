@@ -9,9 +9,9 @@ where
 
 import Data.Text (Text, strip)
 import qualified Data.Text.IO as TIO
-import Poppy.Codegen.IR (Schema (..))
+import Poppy.Codegen.IR (Schema)
 import Poppy.Codegen.Target
-  ( CodegenTarget (..),
+  ( CodegenTarget,
     GenOutput (..),
     targetOutputs,
     targetSchemas,

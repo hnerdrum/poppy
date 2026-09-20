@@ -2,18 +2,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Poppy.Codegen.Target
-  ( GenOutput (..),
-    CodegenTarget (..),
-    TargetSchema (..),
-    SchemaLayout (..),
-    ClientConfig (..),
-    ClientLayout (..),
-    SchemaEmit (..),
+  ( simpleTarget,
+    CodegenTarget,
+    GenOutput (..),
     targetOutputs,
     targetSchemas,
   )
 where
 
+import Data.Char (isAlphaNum, isUpper)
 import Data.List (nub)
 import Data.Maybe (isJust, isNothing)
 import Data.Text (Text)
@@ -42,7 +39,7 @@ import Poppy.Codegen.IR
   )
 import Poppy.Codegen.Lookup (lookupModel)
 import Poppy.Codegen.Schema (isFullGraphInclude)
-import System.FilePath ((</>))
+import System.FilePath (dropTrailingPathSeparator, splitDirectories, (</>))
 
 -- | Path is relative to the process working directory.
 data GenOutput = GenOutput
@@ -57,98 +54,109 @@ data SchemaLayout = SchemaLayout
 
 data ClientLayout = ClientLayout
   { clModulePrefix :: Text,
-    clOutputDir :: FilePath,
-    clGolden :: Bool
+    clOutputDir :: FilePath
   }
-
-data ClientConfig
-  = NoClients
-  | DeriveClients ClientLayout
-
-data TargetSchema = TargetSchema
-  { tsSchema :: Schema,
-    tsGolden :: Bool,
-    tsEmit :: SchemaEmit
-  }
-
--- | @EmitIncludesOnly@ is for extra Include modules on top of a full Schema emit.
-data SchemaEmit
-  = EmitAll
-  | EmitIncludesOnly
 
 data CodegenTarget = CodegenTarget
-  { ctSchemas :: [TargetSchema],
+  { ctSchemas :: [Schema],
     ctLayout :: SchemaLayout,
-    ctClients :: ClientConfig
+    ctClientLayout :: ClientLayout
   }
 
+-- | Table types at @Prefix.Model@, clients at @Prefix.Client.Model@.
+--
+-- @Prefix@ is the path with non-module segments dropped (@src/Schema@ →
+-- @Schema@).
+simpleTarget :: FilePath -> Schema -> CodegenTarget
+simpleTarget dir schema =
+  let prefix = prefixFromDir dir
+   in CodegenTarget
+        { ctSchemas = [schema],
+          ctLayout = SchemaLayout (prefix <> ".") dir,
+          ctClientLayout =
+            ClientLayout
+              { clModulePrefix = prefix <> ".Client.",
+                clOutputDir = dir </> "Client"
+              }
+        }
+
+prefixFromDir :: FilePath -> Text
+prefixFromDir dir =
+  case filter isModuleSegment (map T.pack (splitDirectories (dropTrailingPathSeparator dir))) of
+    [] ->
+      error $
+        "simpleTarget: "
+          <> dir
+          <> " has no Haskell module segment (e.g. src/Schema)"
+    parts -> T.intercalate "." parts
+
+isModuleSegment :: Text -> Bool
+isModuleSegment name =
+  case T.uncons name of
+    Just (c, rest) -> isUpper c && T.all isModuleChar rest
+    Nothing -> False
+
+isModuleChar :: Char -> Bool
+isModuleChar c = isAlphaNum c || c == '_' || c == '\''
+
 targetSchemas :: [CodegenTarget] -> [Schema]
-targetSchemas targets = map (.tsSchema) (concatMap (.ctSchemas) targets)
+targetSchemas = concatMap (.ctSchemas)
 
 targetOutputs :: CodegenTarget -> [GenOutput]
 targetOutputs target =
   concatMap (schemaOutputs target) target.ctSchemas
 
-schemaOutputs :: CodegenTarget -> TargetSchema -> [GenOutput]
-schemaOutputs target TargetSchema {tsSchema = schema, tsGolden = golden, tsEmit = emit} =
-  enumOutputs target golden schema emit
-    ++ modelOutputs target golden schema emit
-    ++ includeOutputs target golden schema emit
-    ++ clientOutputs target schema emit
+schemaOutputs :: CodegenTarget -> Schema -> [GenOutput]
+schemaOutputs target schema =
+  enumOutputs target schema
+    ++ modelOutputs target schema
+    ++ includeOutputs target schema
+    ++ clientOutputs target schema
 
-enumOutputs :: CodegenTarget -> Bool -> Schema -> SchemaEmit -> [GenOutput]
-enumOutputs _ _ _ EmitIncludesOnly = []
-enumOutputs target golden schema EmitAll =
+enumOutputs :: CodegenTarget -> Schema -> [GenOutput]
+enumOutputs target schema =
   concat
-    [ enumOutput target golden schema enum
+    [ enumOutput target enum
       | enum <- schemaEnums schema,
         isNothing (enumImport enum)
     ]
 
-enumOutput :: CodegenTarget -> Bool -> Schema -> EnumSpec -> [GenOutput]
-enumOutput target golden _schema enum =
+enumOutput :: CodegenTarget -> EnumSpec -> [GenOutput]
+enumOutput target enum =
   let layout = target.ctLayout
       name = enumName enum
       moduleName = layout.slModulePrefix <> name
       path = layout.slOutputDir </> T.unpack name <> ".hs"
-      text = emitEnumModule moduleName enum
-   in withGolden golden (T.unpack name <> ".hs") path text
+   in [gen path (emitEnumModule moduleName enum)]
 
-modelOutputs :: CodegenTarget -> Bool -> Schema -> SchemaEmit -> [GenOutput]
-modelOutputs _ _ _ EmitIncludesOnly = []
-modelOutputs target golden schema EmitAll =
-  concatMap (modelOutput target golden schema) (schemaModels schema)
+modelOutputs :: CodegenTarget -> Schema -> [GenOutput]
+modelOutputs target schema =
+  concatMap (modelOutput target schema) (schemaModels schema)
 
-modelOutput :: CodegenTarget -> Bool -> Schema -> Model -> [GenOutput]
-modelOutput target golden schema model =
+modelOutput :: CodegenTarget -> Schema -> Model -> [GenOutput]
+modelOutput target schema model =
   let layout = target.ctLayout
       name = modelName model
       moduleName = layout.slModulePrefix <> name
       path = layout.slOutputDir </> T.unpack name <> ".hs"
-      text = emitModelModule moduleName schema model
-   in withGolden golden (T.unpack name <> ".hs") path text
+   in [gen path (emitModelModule moduleName schema model)]
 
-includeOutputs :: CodegenTarget -> Bool -> Schema -> SchemaEmit -> [GenOutput]
-includeOutputs target golden schema _ =
-  concatMap (includeOutput target golden schema) (schemaIncludes schema)
+includeOutputs :: CodegenTarget -> Schema -> [GenOutput]
+includeOutputs target schema =
+  concatMap (includeOutput target schema) (schemaIncludes schema)
 
-includeOutput :: CodegenTarget -> Bool -> Schema -> ModelInclude -> [GenOutput]
-includeOutput target golden schema incl =
+includeOutput :: CodegenTarget -> Schema -> ModelInclude -> [GenOutput]
+includeOutput target schema incl =
   let layout = target.ctLayout
       name = includeName incl
       moduleName = layout.slModulePrefix <> name
       path = layout.slOutputDir </> T.unpack name <> ".hs"
-      text = emitIncludeModule moduleName schema incl
-   in withGolden golden (T.unpack name <> ".hs") path text
+   in [gen path (emitIncludeModule moduleName schema incl)]
 
-clientOutputs :: CodegenTarget -> Schema -> SchemaEmit -> [GenOutput]
-clientOutputs _ _ EmitIncludesOnly = []
-clientOutputs target schema EmitAll =
-  case target.ctClients of
-    NoClients -> []
-    DeriveClients layout ->
-      simpleClientOutputs layout schema
-        ++ includeClientOutputs layout schema
+clientOutputs :: CodegenTarget -> Schema -> [GenOutput]
+clientOutputs target schema =
+  simpleClientOutputs target.ctClientLayout schema
+    ++ includeClientOutputs target.ctClientLayout schema
 
 simpleClientOutputs :: ClientLayout -> Schema -> [GenOutput]
 simpleClientOutputs layout schema =
@@ -160,7 +168,7 @@ simpleClientOutput layout model =
       moduleName = layout.clModulePrefix <> name
       path = layout.clOutputDir </> T.unpack name <> ".hs"
       text = emitSimpleClientModule moduleName model
-   in withGolden layout.clGolden (T.unpack name <> "Client.hs") path text
+   in [gen path text]
 
 includeClientOutputs :: ClientLayout -> Schema -> [GenOutput]
 includeClientOutputs layout schema =
@@ -174,9 +182,9 @@ includeClientOutput layout schema incl =
       path = layout.clOutputDir </> T.unpack rootName <> ".hs"
    in case includeClientKind schema root incl of
         WriteIncludeClient ->
-          withGolden layout.clGolden (T.unpack rootName <> "Client.hs") path (emitWriteClientModule moduleName schema incl)
+          [gen path (emitWriteClientModule moduleName schema incl)]
         ReadIncludeClient ->
-          withGolden layout.clGolden (T.unpack rootName <> "Client.hs") path (emitIncludeReadClientModule moduleName schema incl)
+          [gen path (emitIncludeReadClientModule moduleName schema incl)]
         NoIncludeClient ->
           []
 
@@ -206,17 +214,5 @@ includeClientRootModels schema =
         includeClientKind schema root incl /= NoIncludeClient
     ]
 
-withGolden :: Bool -> FilePath -> FilePath -> Text -> [GenOutput]
-withGolden golden goldenFile path text =
-  gen path text
-    : ([genGolden goldenFile text | golden])
-
 gen :: FilePath -> Text -> GenOutput
 gen path text = GenOutput {outputPath = path, outputText = text}
-
-genGolden :: FilePath -> Text -> GenOutput
-genGolden file text =
-  GenOutput
-    { outputPath = "test/Poppy/Codegen/golden/" <> file <> ".golden",
-      outputText = text
-    }

@@ -13,13 +13,27 @@ import Poppy.Codegen.Spec.Widget (widgetSchema)
 import Poppy.Codegen.Target
   ( CodegenTarget,
     GenOutput (..),
+    simpleTarget,
     targetOutputs,
   )
-import Poppy.Codegen.TestTarget (testTarget)
+import Poppy.Codegen.TestTarget (testTargets)
 import Test.Hspec
 
 allTargets :: [CodegenTarget]
-allTargets = [testTarget]
+allTargets = testTargets
+
+schemaGoldenNames :: [FilePath]
+schemaGoldenNames =
+  [ "Book",
+    "BookInclude",
+    "Chapter",
+    "ChapterInclude",
+    "Section",
+    "Shelf",
+    "ShelfInclude",
+    "Tag",
+    "Widget"
+  ]
 
 targetSpec :: Spec
 targetSpec =
@@ -30,24 +44,11 @@ targetSpec =
                             shelfSchema
                           ]
 
-    it "derives 18 outputs across the test target" $ do
-      length (concatMap targetOutputs allTargets) `shouldBe` 18
-      length (allOutputs allTargets) `shouldBe` 18
-
-    it "derives expected output paths" $ do
+    it "writes table types under the output dir and clients under Client/" $ do
       let paths = sort (nub (map outputPath (allOutputs allTargets)))
-      paths
+      filter (not . isClientPath) paths
         `shouldBe` sort
-          [ "test/Poppy/Codegen/golden/Book.hs.golden",
-            "test/Poppy/Codegen/golden/BookInclude.hs.golden",
-            "test/Poppy/Codegen/golden/Chapter.hs.golden",
-            "test/Poppy/Codegen/golden/ChapterInclude.hs.golden",
-            "test/Poppy/Codegen/golden/Section.hs.golden",
-            "test/Poppy/Codegen/golden/Shelf.hs.golden",
-            "test/Poppy/Codegen/golden/ShelfInclude.hs.golden",
-            "test/Poppy/Codegen/golden/Tag.hs.golden",
-            "test/Poppy/Codegen/golden/Widget.hs.golden",
-            "test/Schema/Book.hs",
+          [ "test/Schema/Book.hs",
             "test/Schema/BookInclude.hs",
             "test/Schema/Chapter.hs",
             "test/Schema/ChapterInclude.hs",
@@ -57,23 +58,52 @@ targetSpec =
             "test/Schema/Tag.hs",
             "test/Schema/Widget.hs"
           ]
+      filter isClientPath paths
+        `shouldNotBe` []
 
-    it "keeps generated text byte-stable for golden outputs" $ do
-      mapM_ assertGoldenStable goldenOutputPaths
+    it "keeps generated schema modules byte-stable" $ do
+      mapM_ assertGoldenStable schemaGoldenNames
+
+    it "nests clients under the module prefix" $ do
+      let target = simpleTarget "src/Schema" widgetSchema
+      outputPaths target
+        `shouldMatchList` [ "src/Schema/Widget.hs",
+                            "src/Schema/Client/Widget.hs"
+                          ]
+      outputTextFor "src/Schema/Widget.hs" target
+        `shouldSatisfy` ("module Schema.Widget" `T.isInfixOf`)
+      outputTextFor "src/Schema/Client/Widget.hs" target
+        `shouldSatisfy` ("module Schema.Client.Widget" `T.isInfixOf`)
+
+    it "keeps nested module prefixes from the path" $ do
+      outputPaths (simpleTarget "src/MyApp/Schema" widgetSchema)
+        `shouldMatchList` [ "src/MyApp/Schema/Widget.hs",
+                            "src/MyApp/Schema/Client/Widget.hs"
+                          ]
+      outputTextFor "src/MyApp/Schema/Widget.hs" (simpleTarget "src/MyApp/Schema" widgetSchema)
+        `shouldSatisfy` ("module MyApp.Schema.Widget" `T.isInfixOf`)
   where
-    goldenOutputPaths =
-      map outputPath (filter isGoldenOutput (allOutputs allTargets))
+    isClientPath path = "/Client/" `T.isInfixOf` T.pack path
 
-    isGoldenOutput output =
-      "test/Poppy/Codegen/golden/" `T.isPrefixOf` T.pack (outputPath output)
-
-    assertGoldenStable path = do
-      expected <- readFile path
-      let output =
-            head
-              [ out
-                | out <- allOutputs allTargets,
-                  outputPath out == path
-              ]
-          actual = T.unpack (outputText output)
+    assertGoldenStable name = do
+      expected <- readFile ("test/Poppy/Codegen/golden/" <> name <> ".hs.golden")
+      let path = "test/Schema/" <> name <> ".hs"
+          actual =
+            T.unpack $
+              outputText $
+                head
+                  [ out
+                    | out <- allOutputs allTargets,
+                      outputPath out == path
+                  ]
       actual `shouldBe` expected
+
+    outputPaths target = map outputPath (targetOutputs target)
+
+    outputTextFor path target =
+      outputText $
+        head
+          [ out
+            | out <- targetOutputs target,
+              outputPath out == path
+          ]

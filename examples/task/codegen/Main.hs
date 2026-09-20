@@ -1,7 +1,7 @@
 module Main (main) where
 
-import Poppy.Codegen.CLI (mainWith)
-import TaskTarget (taskTarget)
+import Poppy.Codegen.CLI (generate)
+import TaskSchema (taskSchema)
 
 main :: IO ()
-main = mainWith [taskTarget] [taskTarget]
+main = generate "src/Schema" taskSchema

@@ -69,7 +69,6 @@ executable task-codegen
   main-is: Main.hs
   other-modules:
       TaskSchema
-      TaskTarget
       Paths_task
   hs-source-dirs:
       codegen

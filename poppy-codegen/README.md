@@ -5,11 +5,14 @@ Schema builder and Client codegen for [Poppy](https://github.com/hnerdrum/poppy)
 Each app has a codegen executable:
 
 ```haskell
-import Poppy.Codegen.CLI (mainWith)
+import Poppy.Codegen.CLI (generate)
+import TaskSchema (taskSchema)
 
 main :: IO ()
-main = mainWith [taskTarget] [taskTarget]
+main = generate "src/Schema" taskSchema
 ```
+
+The module prefix follows the output path (`src/Schema` → `Schema`). Clients are written to `<dir>/Client`.
 
 | Flag             | Purpose                                                                 |
 | ---------------- | ----------------------------------------------------------------------- |

@@ -1,9 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
--- | The first list is written and checked with @--check@.
---   The second is compared to live Postgres with @--check-schema@.
 module Poppy.Codegen.CLI
-  ( mainWith,
+  ( generate,
+    mainWith,
   )
 where
 
@@ -14,21 +13,29 @@ import Poppy.Codegen.Drift (checkSchema, formatDriftError)
 import Poppy.Codegen.IR (Schema (..))
 import Poppy.Codegen.Introspect (introspectCatalog)
 import Poppy.Codegen.Run (GenOutput (..), allOutputs, checkOutputs, schemasForTargets, writeOutputs)
-import Poppy.Codegen.Target (CodegenTarget, targetSchemas)
+import Poppy.Codegen.Target
+  ( CodegenTarget,
+    simpleTarget,
+    targetSchemas,
+  )
 import Poppy.Codegen.Validate (ValidationError (..), validateSchema)
 import Poppy.Db (closePool, connect, withConn)
 import System.Directory (getCurrentDirectory)
 import System.Environment (getArgs, lookupEnv)
 import System.Exit (exitFailure, exitSuccess)
 
+-- | Write table types and a Client under @dir@.
+generate :: FilePath -> Schema -> IO ()
+generate dir schema = mainWith [simpleTarget dir schema]
+
 -- | Flags: none (write files), @--check@, @--check-schema@, @--list@.
-mainWith :: [CodegenTarget] -> [CodegenTarget] -> IO ()
-mainWith targets schemaTargets = do
+mainWith :: [CodegenTarget] -> IO ()
+mainWith targets = do
   root <- getCurrentDirectory
   args <- getArgs
   case args of
     ("--check" : _) -> runCheck root targets
-    ("--check-schema" : _) -> runCheckSchema schemaTargets
+    ("--check-schema" : _) -> runCheckSchema targets
     ("--list" : _) -> runList targets
     _ -> runWrite root targets
 

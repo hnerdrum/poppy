@@ -1,27 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Poppy.Codegen.TestTarget
-  ( testTarget,
+  ( testTargets,
   )
 where
 
 import Poppy.Codegen.Spec.Shelf (shelfSchema)
 import Poppy.Codegen.Spec.Widget (widgetSchema)
-import Poppy.Codegen.Target
-  ( ClientConfig (..),
-    CodegenTarget (..),
-    SchemaEmit (..),
-    SchemaLayout (..),
-    TargetSchema (..),
-  )
+import Poppy.Codegen.Target (CodegenTarget, simpleTarget)
 
-testTarget :: CodegenTarget
-testTarget =
-  CodegenTarget
-    { ctSchemas =
-        [ TargetSchema widgetSchema True EmitAll,
-          TargetSchema shelfSchema True EmitAll
-        ],
-      ctLayout = SchemaLayout "Schema." "test/Schema/",
-      ctClients = NoClients
-    }
+testTargets :: [CodegenTarget]
+testTargets =
+  [ simpleTarget "test/Schema" widgetSchema,
+    simpleTarget "test/Schema" shelfSchema
+  ]

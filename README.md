@@ -48,39 +48,25 @@ taskModel =
 
 Table and column names default from the model and field names (`Task` → `task`, `createdAt` → `created_at`). Override with `& table "…"` or `& column "…"` when needed.
 
-### 2. Codegen executable
+### 2. Generate
 
-A `CodegenTarget` and `mainWith`:
+A small executable:
 
 ```haskell
 module Main (main) where
 
-import Poppy.Codegen.CLI (mainWith)
-import TaskTarget (taskTarget)
+import Poppy.Codegen.CLI (generate)
+import TaskSchema (taskSchema)
 
 main :: IO ()
-main = mainWith [taskTarget] [taskTarget]
-```
-
-```haskell
-taskTarget :: CodegenTarget
-taskTarget =
-  CodegenTarget
-    { ctSchemas = [TargetSchema taskSchema False EmitAll],
-      ctLayout = SchemaLayout "Schema." "src/Schema/",
-      ctClients =
-        DeriveClients
-          ClientLayout
-            { clModulePrefix = "Schema.Client.",
-              clOutputDir = "src/Schema/Client/",
-              clGolden = False
-            }
-    }
+main = generate "src/Schema" taskSchema
 ```
 
 ```bash
 cabal run task-codegen
 ```
+
+That writes `Schema.Task` and `Schema.Client.Task` under `src/Schema/`. The module prefix is the output path with source-dir segments dropped (`src/Schema` → `Schema`).
 
 | Flag             | Purpose                                                                 |
 | ---------------- | ----------------------------------------------------------------------- |
