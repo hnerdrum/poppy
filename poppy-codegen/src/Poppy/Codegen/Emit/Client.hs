@@ -371,10 +371,12 @@ emitNestedWriteHelpers schema root child rel =
       applyWrite <> " parentId write =",
       "  case write of",
       "    Set items -> do",
-      "      _ <-",
+      "      result <-",
       "        Delete.deleteWhere $",
       "          Delete.whereDelete (fieldColumn " <> fkBinder <> " <> \" = ?\") [toField parentId] (Delete.emptyDelete @" <> childTable <> ")",
-      "      insertNestedCreates parentId items",
+      "      case result of",
+      "        Left err -> pure (Left err)",
+      "        Right _ -> insertNestedCreates parentId items",
       "    Ops ops -> " <> applyOps <> " parentId ops",
       "",
       "insertNestedCreates :: UUID -> [" <> nestedCreateTypeName child <> "] -> Db (Either ORMError ())",
@@ -1156,7 +1158,7 @@ emitQueryType model =
 emitDeleteFn :: Model -> Text
 emitDeleteFn model =
   T.unlines
-    [ "delete :: UUID -> Db Int",
+    [ "delete :: UUID -> Db (Either ORMError Int)",
       "delete = Ops.delete @" <> tableTypeName model
     ]
 

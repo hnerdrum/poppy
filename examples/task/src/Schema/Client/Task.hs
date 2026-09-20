@@ -112,7 +112,7 @@ applyQuery TaskQuery {where_, orderBy_, limit_, offset_} =
   applyQueryModifiers where_ orderBy_ limit_ offset_
 
 
-delete :: UUID -> Db Int
+delete :: UUID -> Db (Either ORMError Int)
 delete = Ops.delete @TaskTable
 
 

@@ -144,7 +144,7 @@ delete ::
   forall table.
   (Entity table, ToField (PrimaryKeyType table)) =>
   PrimaryKeyType table ->
-  Db Int
+  Db (Either ORMError Int)
 delete pkValue =
   let (sql, params) = compileWhere (eq (primaryKey @table) pkValue)
       builder = Delete.whereDelete sql params (Delete.emptyDelete @table)

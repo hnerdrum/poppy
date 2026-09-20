@@ -65,7 +65,7 @@ nestedWriteSpec =
       shelf <- ShelfFixtures.insertShelf pool "fiction"
       dune <- ShelfFixtures.insertBook pool shelf.id "Dune"
       _ <- ShelfFixtures.insertBook pool shelf.id "Neuromancer"
-      deleted <- runDb pool (Ops.delete @BookTable dune.id)
+      deleted <- runDb pool (Ops.delete @BookTable dune.id) >>= assertRight
       deleted `shouldBe` 1
       remaining <- runDb pool (Ops.findMany @BookTable @BookRow id)
       map (.title) remaining `shouldBe` ["Neuromancer"]

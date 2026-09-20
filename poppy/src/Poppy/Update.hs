@@ -21,7 +21,6 @@ module Poppy.Update
   )
 where
 
-import Control.Exception (throwIO)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as TE
@@ -32,7 +31,7 @@ import Database.PostgreSQL.Simple.FromRow (FromRow, fromRow)
 import Database.PostgreSQL.Simple.ToField (Action, ToField, toField)
 import Database.PostgreSQL.Simple.Types (Query (..))
 import Poppy.Core (Entity (..), Field (..), NullableValue (..), PrimaryKeyType)
-import Poppy.Db (Db (..), liftIO)
+import Poppy.Db (Db (..))
 import Poppy.Errors (ORMError (..), parseSingleton)
 import qualified Poppy.Operations as Ops
 import Poppy.Query (buildWhereClause)
@@ -150,11 +149,11 @@ updateReturning ::
   forall table result.
   (Entity table, FromRow result) =>
   UpdateBuilder table ->
-  Db [result]
+  Db (Either ORMError [result])
 updateReturning builder
   | null (ubWhere builder) =
-      liftIO $ throwIO (EmptyWhere "UPDATE requires a WHERE clause")
-  | otherwise = Db (`runUpdateReturning` builder)
+      pure (Left (EmptyWhere "UPDATE requires a WHERE clause"))
+  | otherwise = Db $ \conn -> catchSql (runUpdateReturning conn builder)
 
 liftCurrentTime :: Db UTCTime
 liftCurrentTime = Db (const getCurrentTime)

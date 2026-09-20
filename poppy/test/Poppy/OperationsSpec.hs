@@ -236,14 +236,46 @@ operationsSpec =
 
     it "delete removes a widget by id" $ \TestEnv {envPool = pool} -> do
       widget <- WidgetFixtures.insertWidget pool "doomed"
-      deleted <- runDb pool (Ops.delete @WidgetTable widget.id)
+      deleted <- runDb pool (Ops.delete @WidgetTable widget.id) >>= assertRight
       deleted `shouldBe` 1
       found <- runDb pool (Ops.findUnique @WidgetTable @WidgetRow widget.id)
       found `shouldBe` Nothing
 
     it "delete returns 0 when no row matches" $ \TestEnv {envPool = pool} -> do
-      deleted <- runDb pool (Ops.delete @WidgetTable (nil :: UUID))
+      deleted <- runDb pool (Ops.delete @WidgetTable (nil :: UUID)) >>= assertRight
       deleted `shouldBe` 0
+
+    it "deleteWhere without WHERE returns EmptyWhere" $ \TestEnv {envPool = pool} -> do
+      result <- runDb pool (Delete.deleteWhere (Delete.emptyDelete @WidgetTable))
+      result
+        `shouldSatisfy` ( \case
+                            Left (EmptyWhere _) -> True
+                            _ -> False
+                        )
+
+    it "deleteReturning without WHERE returns EmptyWhere" $ \TestEnv {envPool = pool} -> do
+      result <-
+        runDb
+          pool
+          (Delete.deleteReturning @WidgetTable @WidgetRow (Delete.emptyDelete @WidgetTable))
+      result
+        `shouldSatisfy` ( \case
+                            Left (EmptyWhere _) -> True
+                            _ -> False
+                        )
+
+    it "updateReturning without WHERE returns EmptyWhere" $ \TestEnv {envPool = pool} -> do
+      result <-
+        runDb
+          pool
+          ( Update.updateReturning @WidgetTable @WidgetRow $
+              Update.setField widgetName "x" (Update.emptyUpdate @WidgetTable)
+          )
+      result
+        `shouldSatisfy` ( \case
+                            Left (EmptyWhere _) -> True
+                            _ -> False
+                        )
 
     it "deleteMany removes rows matching a Where predicate" $ \TestEnv {envPool = pool} -> do
       _ <- WidgetFixtures.insertWidget pool "doomed"

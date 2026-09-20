@@ -14,7 +14,6 @@ module Poppy.Delete
   )
 where
 
-import Control.Exception (throwIO)
 import Data.Text (Text)
 import qualified Data.Text.Encoding as TE
 import Database.PostgreSQL.Simple (Connection)
@@ -23,10 +22,10 @@ import Database.PostgreSQL.Simple.FromRow (FromRow, fromRow)
 import Database.PostgreSQL.Simple.ToField (Action)
 import Database.PostgreSQL.Simple.Types (Query (..))
 import Poppy.Core (Entity (..))
-import Poppy.Db (Db (..), liftIO)
+import Poppy.Db (Db (..))
 import Poppy.Errors (ORMError (..))
 import Poppy.Query (buildWhereClause)
-import Poppy.Sql (quoteIdent)
+import Poppy.Sql (catchSql, quoteIdent)
 import Poppy.Where (Where, compileWhere)
 
 data DeleteBuilder table = DeleteBuilder
@@ -54,11 +53,11 @@ deleteWhere ::
   forall table.
   (Entity table) =>
   DeleteBuilder table ->
-  Db Int
+  Db (Either ORMError Int)
 deleteWhere builder
   | null (dbWhere builder) =
-      liftIO $ throwIO (EmptyWhere "DELETE requires a WHERE clause")
-  | otherwise = Db (`runDeleteWhere` builder)
+      pure (Left (EmptyWhere "DELETE requires a WHERE clause"))
+  | otherwise = Db $ \conn -> catchSql (runDeleteWhere conn builder)
 
 deleteMany ::
   forall table.
@@ -68,17 +67,17 @@ deleteMany ::
 deleteMany clause =
   let (sql, params) = compileWhere clause
       builder = whereDelete sql params (emptyDelete @table)
-   in Right <$> deleteWhere builder
+   in deleteWhere builder
 
 deleteReturning ::
   forall table result.
   (Entity table, FromRow result) =>
   DeleteBuilder table ->
-  Db [result]
+  Db (Either ORMError [result])
 deleteReturning builder
   | null (dbWhere builder) =
-      liftIO $ throwIO (EmptyWhere "DELETE requires a WHERE clause")
-  | otherwise = Db (`runDeleteReturning` builder)
+      pure (Left (EmptyWhere "DELETE requires a WHERE clause"))
+  | otherwise = Db $ \conn -> catchSql (runDeleteReturning conn builder)
 
 runDeleteWhere ::
   Connection ->
