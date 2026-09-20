@@ -35,7 +35,7 @@ import Poppy.Errors (ORMError (..), requireFound)
 import qualified Poppy.Delete as Delete
 import qualified Poppy.Insert as Insert
 import qualified Poppy.Operations as Ops
-import Poppy.Query (QueryBuilder, applyQueryModifiers, matching, selectColumns)
+import Poppy.Query (OrderBy, QueryBuilder, applyQueryModifiers, matching, selectColumns)
 import Poppy.Select (OmitSelect (..), Picked (..))
 import Poppy.Where (Where)
 import Schema.Task (TaskCreate (..), TaskRow (..), TaskSelect (..), TaskPicked (..), taskSelect, taskSelectColumns, parseTaskPicked, TaskTable, TaskUpdate (..), taskId)
@@ -52,7 +52,7 @@ update = Update.update @TaskTable @TaskRow
 data TaskQuery select = TaskQuery
   { select_ :: select
   , where_ :: Maybe (Where TaskTable)
-  , orderBy_ :: Maybe (QueryBuilder TaskTable -> QueryBuilder TaskTable)
+  , orderBy_ :: [OrderBy TaskTable]
   , limit_ :: Maybe Int
   , offset_ :: Maybe Int
   }
@@ -60,7 +60,7 @@ data TaskQuery select = TaskQuery
 
 emptyQuery :: TaskQuery OmitSelect
 emptyQuery =
-  TaskQuery {select_ = OmitSelect, where_ = Nothing, orderBy_ = Nothing, limit_ = Nothing, offset_ = Nothing}
+  TaskQuery {select_ = OmitSelect, where_ = Nothing, orderBy_ = [], limit_ = Nothing, offset_ = Nothing}
 
 
 type family ResolveSelect select

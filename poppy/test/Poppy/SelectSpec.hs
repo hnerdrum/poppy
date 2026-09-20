@@ -6,7 +6,7 @@ module Poppy.SelectSpec
   )
 where
 
-import Poppy (ORMError (..), Picked (..), runDb)
+import Poppy (ORMError (..), Picked (..), asc, desc, runDb)
 import qualified Poppy.Operations as Ops
 import Poppy.Query (selectColumns)
 import Poppy.Select (picked)
@@ -24,6 +24,7 @@ import Schema.Widget
     WidgetSelect (..),
     WidgetTable,
     parseWidgetPicked,
+    widgetCreatedAt,
     widgetName,
     widgetSelectColumns,
   )
@@ -118,7 +119,7 @@ selectSpec = do
             Widget.WidgetQuery
               { select_ = sel,
                 where_ = Nothing,
-                orderBy_ = Nothing,
+                orderBy_ = [],
                 limit_ = Nothing,
                 offset_ = Nothing
               }
@@ -127,6 +128,28 @@ selectSpec = do
       row.name `shouldBe` Picked "pepper"
       row.createdAt `shouldBe` Skipped
       row.updatedAt `shouldBe` Skipped
+
+    it "findMany orderBy_ sorts by listed fields" $ \TestEnv {envPool = pool} -> do
+      _ <- WidgetFixtures.insertWidget pool "beta"
+      _ <- WidgetFixtures.insertWidget pool "alpha"
+      _ <- WidgetFixtures.insertWidget pool "gamma"
+      ascending <-
+        runDb
+          pool
+          (Widget.findMany Widget.emptyQuery {Widget.orderBy_ = [asc widgetName]})
+      descending <-
+        runDb
+          pool
+          (Widget.findMany Widget.emptyQuery {Widget.orderBy_ = [desc widgetName]})
+      multi <-
+        runDb
+          pool
+          ( Widget.findMany
+              Widget.emptyQuery {Widget.orderBy_ = [asc widgetName, desc widgetCreatedAt]}
+          )
+      map (.name) ascending `shouldBe` ["alpha", "beta", "gamma"]
+      map (.name) descending `shouldBe` ["gamma", "beta", "alpha"]
+      map (.name) multi `shouldBe` ["alpha", "beta", "gamma"]
 
   describe "select_ + include" $ do
     it "projects shelf scalars and keeps nested books" $ \TestEnv {envPool = pool} -> do
@@ -142,7 +165,7 @@ selectSpec = do
               { include_ = Shelf.withBooksTags,
                 select_ = sel,
                 where_ = Just (eq shelfName "fiction"),
-                orderBy_ = Nothing,
+                orderBy_ = [],
                 limit_ = Nothing,
                 offset_ = Nothing
               }

@@ -34,7 +34,7 @@ import qualified Poppy.Delete as Delete
 import Poppy.Errors (ORMError (..), requireFound)
 import qualified Poppy.Insert as Insert
 import qualified Poppy.Operations as Ops
-import Poppy.Query (QueryBuilder, applyQueryModifiers, matching, selectColumns)
+import Poppy.Query (OrderBy, QueryBuilder, applyQueryModifiers, matching, selectColumns)
 import Poppy.Select (OmitSelect (..), Picked (..))
 import qualified Poppy.Update as Update
 import Poppy.Where (Where)
@@ -60,14 +60,14 @@ update = Update.update @WidgetTable @WidgetRow
 data WidgetQuery select = WidgetQuery
   { select_ :: select,
     where_ :: Maybe (Where WidgetTable),
-    orderBy_ :: Maybe (QueryBuilder WidgetTable -> QueryBuilder WidgetTable),
+    orderBy_ :: [OrderBy WidgetTable],
     limit_ :: Maybe Int,
     offset_ :: Maybe Int
   }
 
 emptyQuery :: WidgetQuery OmitSelect
 emptyQuery =
-  WidgetQuery {select_ = OmitSelect, where_ = Nothing, orderBy_ = Nothing, limit_ = Nothing, offset_ = Nothing}
+  WidgetQuery {select_ = OmitSelect, where_ = Nothing, orderBy_ = [], limit_ = Nothing, offset_ = Nothing}
 
 type family ResolveSelect select
 

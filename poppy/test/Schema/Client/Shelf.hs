@@ -31,7 +31,7 @@ import Poppy.Db (Db)
 import Poppy.Errors (ORMError (..), requireFound)
 import qualified Poppy.Include as Include
 import qualified Poppy.Operations as Ops
-import Poppy.Query (QueryBuilder, applyQueryModifiers, matching, selectColumns)
+import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)
 import Poppy.Select (OmitSelect (..), Picked (..))
 import Poppy.Where (Where)
 import Schema.Shelf (ShelfPicked (..), ShelfRow, ShelfSelect (..), ShelfTable, parseShelfPicked, shelfSelect, shelfSelectColumns, toShelfPicked)
@@ -64,14 +64,14 @@ data ShelfQuery include select = ShelfQuery
   { include_ :: include,
     select_ :: select,
     where_ :: Maybe (Where ShelfTable),
-    orderBy_ :: Maybe (QueryBuilder ShelfTable -> QueryBuilder ShelfTable),
+    orderBy_ :: [OrderBy ShelfTable],
     limit_ :: Maybe Int,
     offset_ :: Maybe Int
   }
 
 emptyQuery :: ShelfQuery NoInclude OmitSelect
 emptyQuery =
-  ShelfQuery {include_ = noInclude, select_ = OmitSelect, where_ = Nothing, orderBy_ = Nothing, limit_ = Nothing, offset_ = Nothing}
+  ShelfQuery {include_ = noInclude, select_ = OmitSelect, where_ = Nothing, orderBy_ = [], limit_ = Nothing, offset_ = Nothing}
 
 type instance ResolveInclude (ShelfQuery WithBooksTags OmitSelect) = ShelfWithBooksTags
 

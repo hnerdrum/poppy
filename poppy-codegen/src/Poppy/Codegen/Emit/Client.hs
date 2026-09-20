@@ -64,7 +64,7 @@ emitSimpleClientModule moduleName model =
       "import qualified Poppy.Delete as Delete",
       "import qualified Poppy.Insert as Insert",
       "import qualified Poppy.Operations as Ops",
-      "import Poppy.Query (QueryBuilder, applyQueryModifiers, matching, selectColumns)",
+      "import Poppy.Query (OrderBy, QueryBuilder, applyQueryModifiers, matching, selectColumns)",
       "import Poppy.Select (OmitSelect (..), Picked (..))",
       "import Poppy.Where (Where)",
       "import "
@@ -220,7 +220,7 @@ emitWriteClientModule moduleName schema incl =
                <> fieldBinder child (lookupField child (relForeignField rel))
                <> ")",
              "import qualified Poppy.Operations as Ops",
-             "import Poppy.Query (QueryBuilder, applyQueryModifiers, matching, selectColumns)",
+             "import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)",
              "import Poppy.Select (OmitSelect (..), Picked (..))",
              "import Poppy.Where (Where, and_, eq, in_)",
              "import qualified Poppy.Update as Update"
@@ -809,7 +809,7 @@ includeReadImportLines moduleName schema incl =
     "import Poppy.Errors (ORMError (..), requireFound)",
     "import qualified Poppy.Include as Include",
     "import qualified Poppy.Operations as Ops",
-    "import Poppy.Query (QueryBuilder, applyQueryModifiers, matching, selectColumns)",
+    "import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)",
     "import Poppy.Select (OmitSelect (..), Picked (..))",
     "import Poppy.Where (Where)",
     "import "
@@ -1140,7 +1140,7 @@ emitEmptyQueryFn model =
   T.unlines
     [ "emptyQuery :: " <> queryTypeName model <> " OmitSelect",
       "emptyQuery =",
-      "  " <> queryTypeName model <> " {select_ = OmitSelect, where_ = Nothing, orderBy_ = Nothing, limit_ = Nothing, offset_ = Nothing}"
+      "  " <> queryTypeName model <> " {select_ = OmitSelect, where_ = Nothing, orderBy_ = [], limit_ = Nothing, offset_ = Nothing}"
     ]
 
 emitQueryType :: Model -> Text
@@ -1149,7 +1149,7 @@ emitQueryType model =
     [ "data " <> queryTypeName model <> " select = " <> queryTypeName model,
       "  { select_ :: select",
       "  , where_ :: Maybe (Where " <> tableTypeName model <> ")",
-      "  , orderBy_ :: Maybe (QueryBuilder " <> tableTypeName model <> " -> QueryBuilder " <> tableTypeName model <> ")",
+      "  , orderBy_ :: [OrderBy " <> tableTypeName model <> "]",
       "  , limit_ :: Maybe Int",
       "  , offset_ :: Maybe Int",
       "  }"
@@ -1219,7 +1219,7 @@ emitIncludeQueryType model _incl =
       "  { include_ :: include",
       "  , select_ :: select",
       "  , where_ :: Maybe (Where " <> tableTypeName model <> ")",
-      "  , orderBy_ :: Maybe (QueryBuilder " <> tableTypeName model <> " -> QueryBuilder " <> tableTypeName model <> ")",
+      "  , orderBy_ :: [OrderBy " <> tableTypeName model <> "]",
       "  , limit_ :: Maybe Int",
       "  , offset_ :: Maybe Int",
       "  }"
@@ -1230,7 +1230,7 @@ emitIncludeEmptyQueryFn model =
   T.unlines
     [ "emptyQuery :: " <> queryTypeName model <> " NoInclude OmitSelect",
       "emptyQuery =",
-      "  " <> queryTypeName model <> " {include_ = noInclude, select_ = OmitSelect, where_ = Nothing, orderBy_ = Nothing, limit_ = Nothing, offset_ = Nothing}"
+      "  " <> queryTypeName model <> " {include_ = noInclude, select_ = OmitSelect, where_ = Nothing, orderBy_ = [], limit_ = Nothing, offset_ = Nothing}"
     ]
 
 emitIncludeFindManyClass :: Model -> ModelInclude -> Text

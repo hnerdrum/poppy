@@ -88,5 +88,5 @@ defaultPkOrder ::
   QueryBuilder table
 defaultPkOrder qb =
   case queryOrderBy qb of
-    Just _ -> qb
-    Nothing -> orderBy (primaryKey @table) Asc qb
+    [] -> orderBy (primaryKey @table) Asc qb
+    _ -> qb

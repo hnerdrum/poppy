@@ -15,9 +15,12 @@ module Poppy.Query
     selectColumns,
     matching,
     orderBy,
+    asc,
+    desc,
     limit,
     offset,
     applyQueryModifiers,
+    OrderBy (..),
     OrderDirection (..),
     buildWhereClause,
     runQuery,
@@ -28,7 +31,6 @@ module Poppy.Query
 where
 
 import Data.Int (Int64)
-import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -46,12 +48,22 @@ data QueryBuilder table = QueryBuilder
   { qbTable :: Text,
     qbColumns :: [Text],
     qbWhere :: [Where table],
-    qbOrderBy :: Maybe (Text, OrderDirection),
+    qbOrderBy :: [OrderBy table],
     qbLimit :: Maybe Int,
     qbOffset :: Maybe Int
   }
 
 data OrderDirection = Asc | Desc
+  deriving (Show, Eq)
+
+data OrderBy table = OrderBy Text OrderDirection
+  deriving (Show, Eq)
+
+asc :: Field table a -> OrderBy table
+asc field = OrderBy (fieldColumn field) Asc
+
+desc :: Field table a -> OrderBy table
+desc field = OrderBy (fieldColumn field) Desc
 
 selectAll :: forall table. (Entity table) => QueryBuilder table
 selectAll =
@@ -59,7 +71,7 @@ selectAll =
     { qbTable = tableName @table,
       qbColumns = tableColumns @table,
       qbWhere = [],
-      qbOrderBy = Nothing,
+      qbOrderBy = [],
       qbLimit = Nothing,
       qbOffset = Nothing
     }
@@ -76,7 +88,7 @@ matching clause qb =
 
 orderBy :: Field table a -> OrderDirection -> QueryBuilder table -> QueryBuilder table
 orderBy field dir qb =
-  qb {qbOrderBy = Just (fieldColumn field, dir)}
+  qb {qbOrderBy = qbOrderBy qb ++ [OrderBy (fieldColumn field) dir]}
 
 limit :: Int -> QueryBuilder table -> QueryBuilder table
 limit n qb = qb {qbLimit = Just n}
@@ -100,21 +112,24 @@ queryLimit = qbLimit
 queryOffset :: QueryBuilder table -> Maybe Int
 queryOffset = qbOffset
 
-queryOrderBy :: QueryBuilder table -> Maybe (Text, OrderDirection)
+queryOrderBy :: QueryBuilder table -> [OrderBy table]
 queryOrderBy = qbOrderBy
 
 applyQueryModifiers ::
   Maybe (Where table) ->
-  Maybe (QueryBuilder table -> QueryBuilder table) ->
+  [OrderBy table] ->
   Maybe Int ->
   Maybe Int ->
   QueryBuilder table ->
   QueryBuilder table
-applyQueryModifiers mWhere mOrder mLimit mOffset =
+applyQueryModifiers mWhere orders mLimit mOffset =
   maybe id matching mWhere
-    . fromMaybe id mOrder
+    . setOrderBy orders
     . maybe id limit mLimit
     . maybe id offset mOffset
+
+setOrderBy :: [OrderBy table] -> QueryBuilder table -> QueryBuilder table
+setOrderBy orders qb = qb {qbOrderBy = orders}
 
 buildQuery :: QueryBuilder table -> (Query, [Action])
 buildQuery qb =
@@ -140,12 +155,15 @@ buildWhereClause :: [Text] -> Text
 buildWhereClause [] = ""
 buildWhereClause conditions = " WHERE " <> T.intercalate " AND " conditions
 
-buildOrderClause :: Maybe (Text, OrderDirection) -> Text
-buildOrderClause Nothing = ""
-buildOrderClause (Just (col, dir)) =
-  " ORDER BY " <> quoteIdent col <> case dir of
-    Asc -> " ASC"
-    Desc -> " DESC"
+buildOrderClause :: [OrderBy table] -> Text
+buildOrderClause [] = ""
+buildOrderClause terms =
+  " ORDER BY " <> T.intercalate ", " (map termSql terms)
+  where
+    termSql (OrderBy col dir) =
+      quoteIdent col <> case dir of
+        Asc -> " ASC"
+        Desc -> " DESC"
 
 buildLimitClause :: Maybe Int -> Text
 buildLimitClause Nothing = ""
