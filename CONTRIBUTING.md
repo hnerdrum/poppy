@@ -10,7 +10,7 @@ GHC 9.4.8–9.10.3. Build with Cabal; `stack.yaml` is LTS 21.22 (GHC 9.4.8) for 
 cabal build all
 ```
 
-Edit `package.yaml` by hand, then run `hpack` in each package directory and commit both files. CI fails if they drift.
+Edit `package.yaml` by hand, then run `hpack` 0.38.3 in each package directory and commit both files. CI fails if they drift.
 
 CI on `main` and pull requests runs `cabal test all` (Postgres), Haddock, `cabal check`, and `cabal sdist all`.
 

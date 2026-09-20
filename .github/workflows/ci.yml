@@ -54,7 +54,7 @@ jobs:
 
       - name: Check hpack is in sync
         run: |
-          cabal install hpack-0.35.2 --overwrite-policy=always --install-method=copy --installdir="$HOME/.local/bin"
+          cabal install hpack-0.38.3 --overwrite-policy=always --install-method=copy --installdir="$HOME/.local/bin"
           export PATH="$HOME/.local/bin:$PATH"
           (cd poppy && hpack)
           (cd poppy-codegen && hpack)
