@@ -1,4 +1,5 @@
-# LTS 21.22 → GHC 9.4.8, matching nrdrm/recipes so that repo can extra-dep this one.
+# LTS 21.22 → GHC 9.4.8, the recipes extra-dep snapshot.
+# Cabal accepts GHC 9.4.8–9.10.3 (base 4.17–4.20).
 resolver:
   url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/21/22.yaml
 

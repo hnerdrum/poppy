@@ -2,5 +2,3 @@ packages:
   .
   ../../poppy
   ../../poppy-codegen
-
-with-compiler: ghc-9.4.8

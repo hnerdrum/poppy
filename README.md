@@ -14,7 +14,7 @@ Snippets below are from [`examples/task/`](examples/task/).
 
 ## Getting started
 
-Depend on `poppy` and `poppy-codegen` (path deps in this repo; Hackage after the first release). GHC 9.4.8.
+Depend on `poppy` and `poppy-codegen` (path deps in this repo; Hackage after the first release). GHC 9.4.8–9.10.3.
 
 ### 1. Write a Schema
 
@@ -116,7 +116,7 @@ Codegen does not run migrations.
 
 ## Build and test
 
-Build with Cabal. `stack.yaml` is pinned to LTS 21.22 (GHC 9.4.8) for Stack.
+Build with Cabal and whatever GHC is on `PATH` (9.4.8–9.10.3). `stack.yaml` is LTS 21.22 (GHC 9.4.8).
 
 ```bash
 cabal build all

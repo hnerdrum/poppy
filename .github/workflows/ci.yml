@@ -7,8 +7,12 @@ on:
 
 jobs:
   ci:
-    name: CI
+    name: CI (GHC ${{ matrix.ghc }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ghc: ["9.4.8", "9.10.3"]
     timeout-minutes: 45
     env:
       TEST_DATABASE_URL: postgres://poppy:poppy@127.0.0.1:5432/poppy_test
@@ -29,11 +33,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up GHC 9.4.8
+      - name: Set up GHC
         uses: haskell-actions/setup@v2
         id: setup
         with:
-          ghc-version: "9.4.8"
+          ghc-version: ${{ matrix.ghc }}
           cabal-version: latest
           cabal-update: true
 

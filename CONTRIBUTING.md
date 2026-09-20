@@ -4,7 +4,7 @@ Poppy is two Cabal packages in one repo: `poppy` (runtime) and `poppy-codegen` (
 
 ## Build
 
-GHC 9.4.8 (LTS 21.22). Build with Cabal; `stack.yaml` is for Stack.
+GHC 9.4.8–9.10.3. Build with Cabal; `stack.yaml` is LTS 21.22 (GHC 9.4.8) for Stack.
 
 ```bash
 cabal build all

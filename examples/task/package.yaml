@@ -9,7 +9,7 @@ synopsis: Poppy getting-started example
 description: A Task Schema, codegen executable, generated Client, and two queries.
 
 dependencies:
-  - base >= 4.17 && < 4.18
+  - base >= 4.17 && < 4.21
   - poppy
   - text
   - time
