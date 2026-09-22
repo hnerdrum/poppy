@@ -10,6 +10,9 @@ module Schema.Client.Task
     findMany,
     findUnique,
     findUniqueOrFail,
+    findFirst,
+    findFirstOrFail,
+    count,
     delete,
     deleteMany,
     TaskCreate (..),
@@ -72,6 +75,8 @@ class ReadTask select where
   findMany :: TaskQuery select -> Db [ResolveSelect select]
   findUnique :: TaskQuery select -> Db (Either ORMError (Maybe (ResolveSelect select)))
   findUniqueOrFail :: TaskQuery select -> Db (Either ORMError (ResolveSelect select))
+  findFirst :: TaskQuery select -> Db (Maybe (ResolveSelect select))
+  findFirstOrFail :: TaskQuery select -> Db (Either ORMError (ResolveSelect select))
 
 instance ReadTask OmitSelect where
   findMany q =
@@ -83,6 +88,11 @@ instance ReadTask OmitSelect where
     case result of
       Left err -> pure (Left err)
       Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findFirst q =
+    Ops.findFirst @TaskTable @TaskRow (applyQuery q)
+  findFirstOrFail q = do
+    result <- findFirst q
+    pure $ requireFound result (RecordNotFound "No record found matching query")
 
 instance ReadTask TaskSelect where
   findMany q@TaskQuery {select_} =
@@ -106,10 +116,21 @@ instance ReadTask TaskSelect where
     case result of
       Left err -> pure (Left err)
       Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findFirst q@TaskQuery {select_} =
+    Ops.findFirstWith
+      (parseTaskPicked select_)
+      (selectColumns (taskSelectColumns select_) . applyQuery q)
+  findFirstOrFail q = do
+    result <- findFirst q
+    pure $ requireFound result (RecordNotFound "No record found matching query")
 
 applyQuery :: TaskQuery select -> QueryBuilder TaskTable -> QueryBuilder TaskTable
 applyQuery TaskQuery {where_, orderBy_, limit_, offset_} =
   applyQueryModifiers where_ orderBy_ limit_ offset_
+
+
+count :: TaskQuery select -> Db Int
+count q = Ops.count @TaskTable (applyQuery q)
 
 
 delete :: UUID -> Db (Either ORMError Int)

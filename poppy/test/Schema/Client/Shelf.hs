@@ -7,9 +7,12 @@
 {-# LANGUAGE TypeFamilies #-}
 
 module Schema.Client.Shelf
-  ( findMany,
+  (     findMany,
     findUnique,
     findUniqueOrFail,
+    findFirst,
+    findFirstOrFail,
+    count,
     withBooksTags,
     noInclude,
     WithBooksTags (..),
@@ -85,6 +88,8 @@ class ReadShelf include select where
   findMany :: ShelfQuery include select -> Db [ResolveInclude (ShelfQuery include select)]
   findUnique :: ShelfQuery include select -> Db (Either ORMError (Maybe (ResolveInclude (ShelfQuery include select))))
   findUniqueOrFail :: ShelfQuery include select -> Db (Either ORMError (ResolveInclude (ShelfQuery include select)))
+  findFirst :: ShelfQuery include select -> Db (Maybe (ResolveInclude (ShelfQuery include select)))
+  findFirstOrFail :: ShelfQuery include select -> Db (Either ORMError (ResolveInclude (ShelfQuery include select)))
 
 instance ReadShelf WithBooksTags OmitSelect where
   findMany ShelfQuery {include_, where_, orderBy_, limit_, offset_} =
@@ -103,6 +108,14 @@ instance ReadShelf WithBooksTags OmitSelect where
     case result of
       Left err -> pure (Left err)
       Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findFirst ShelfQuery {include_, where_, orderBy_, offset_} = do
+    rows <- Include.findMany @ShelfTable (unwrapWithBooksTags include_) (applyQueryModifiers where_ orderBy_ (Just 1) offset_)
+    pure $ case rows of
+      [] -> Nothing
+      (row : _) -> Just row
+  findFirstOrFail q = do
+    result <- findFirst q
+    pure $ requireFound result (RecordNotFound "No record found matching query")
 
 instance ReadShelf NoInclude OmitSelect where
   findMany ShelfQuery {where_, orderBy_, limit_, offset_} =
@@ -114,6 +127,11 @@ instance ReadShelf NoInclude OmitSelect where
     case result of
       Left err -> pure (Left err)
       Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findFirst ShelfQuery {where_, orderBy_, limit_, offset_} =
+    Ops.findFirst @ShelfTable @ShelfRow (applyQueryModifiers where_ orderBy_ limit_ offset_)
+  findFirstOrFail q = do
+    result <- findFirst q
+    pure $ requireFound result (RecordNotFound "No record found matching query")
 
 instance ReadShelf WithBooksTags ShelfSelect where
   findMany ShelfQuery {include_, select_, where_, orderBy_, limit_, offset_} = do
@@ -134,6 +152,14 @@ instance ReadShelf WithBooksTags ShelfSelect where
     case result of
       Left err -> pure (Left err)
       Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findFirst ShelfQuery {select_, include_, where_, orderBy_, offset_} = do
+    rows <- Include.findMany @ShelfTable (unwrapWithBooksTags include_) (applyQueryModifiers where_ orderBy_ (Just 1) offset_)
+    pure $ case rows of
+      [] -> Nothing
+      (row : _) -> Just (toShelfWithBooksTagsPicked select_ row)
+  findFirstOrFail q = do
+    result <- findFirst q
+    pure $ requireFound result (RecordNotFound "No record found matching query")
 
 instance ReadShelf NoInclude ShelfSelect where
   findMany ShelfQuery {select_, where_, orderBy_, limit_, offset_} =
@@ -157,3 +183,14 @@ instance ReadShelf NoInclude ShelfSelect where
     case result of
       Left err -> pure (Left err)
       Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findFirst ShelfQuery {select_, where_, orderBy_, limit_, offset_} =
+    Ops.findFirstWith
+      (parseShelfPicked select_)
+      (selectColumns (shelfSelectColumns select_) . applyQueryModifiers where_ orderBy_ limit_ offset_)
+  findFirstOrFail q = do
+    result <- findFirst q
+    pure $ requireFound result (RecordNotFound "No record found matching query")
+
+count :: ShelfQuery include select -> Db Int
+count ShelfQuery {where_, orderBy_, limit_, offset_} =
+  Ops.count @ShelfTable (applyQueryModifiers where_ orderBy_ limit_ offset_)

@@ -151,6 +151,30 @@ selectSpec = do
       map (.name) descending `shouldBe` ["gamma", "beta", "alpha"]
       map (.name) multi `shouldBe` ["alpha", "beta", "gamma"]
 
+    it "count and findFirst use the generated Client" $ \TestEnv {envPool = pool} -> do
+      _ <- WidgetFixtures.insertWidget pool "beta"
+      alpha <- WidgetFixtures.insertWidget pool "alpha"
+      n <- runDb pool (Widget.count Widget.emptyQuery {Widget.where_ = Just (eq widgetName "alpha")})
+      n `shouldBe` 1
+      firstAsc <-
+        runDb
+          pool
+          ( Widget.findFirst
+              Widget.emptyQuery {Widget.orderBy_ = [asc widgetName]}
+          )
+      firstAsc `shouldBe` Just alpha
+      missing <-
+        runDb
+          pool
+          ( Widget.findFirstOrFail
+              Widget.emptyQuery {Widget.where_ = Just (eq widgetName "missing")}
+          )
+      missing
+        `shouldSatisfy` ( \case
+                            Left (RecordNotFound _) -> True
+                            _ -> False
+                        )
+
   describe "select_ + include" $ do
     it "projects shelf scalars and keeps nested books" $ \TestEnv {envPool = pool} -> do
       shelf <- ShelfFixtures.insertShelf pool "fiction"

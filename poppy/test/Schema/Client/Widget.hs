@@ -10,6 +10,9 @@ module Schema.Client.Widget
     findMany,
     findUnique,
     findUniqueOrFail,
+    findFirst,
+    findFirstOrFail,
+    count,
     delete,
     deleteMany,
     WidgetCreate (..),
@@ -79,6 +82,8 @@ class ReadWidget select where
   findMany :: WidgetQuery select -> Db [ResolveSelect select]
   findUnique :: WidgetQuery select -> Db (Either ORMError (Maybe (ResolveSelect select)))
   findUniqueOrFail :: WidgetQuery select -> Db (Either ORMError (ResolveSelect select))
+  findFirst :: WidgetQuery select -> Db (Maybe (ResolveSelect select))
+  findFirstOrFail :: WidgetQuery select -> Db (Either ORMError (ResolveSelect select))
 
 instance ReadWidget OmitSelect where
   findMany q =
@@ -90,6 +95,11 @@ instance ReadWidget OmitSelect where
     case result of
       Left err -> pure (Left err)
       Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findFirst q =
+    Ops.findFirst @WidgetTable @WidgetRow (applyQuery q)
+  findFirstOrFail q = do
+    result <- findFirst q
+    pure $ requireFound result (RecordNotFound "No record found matching query")
 
 instance ReadWidget WidgetSelect where
   findMany q@WidgetQuery {select_} =
@@ -113,10 +123,20 @@ instance ReadWidget WidgetSelect where
     case result of
       Left err -> pure (Left err)
       Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findFirst q@WidgetQuery {select_} =
+    Ops.findFirstWith
+      (parseWidgetPicked select_)
+      (selectColumns (widgetSelectColumns select_) . applyQuery q)
+  findFirstOrFail q = do
+    result <- findFirst q
+    pure $ requireFound result (RecordNotFound "No record found matching query")
 
 applyQuery :: WidgetQuery select -> QueryBuilder WidgetTable -> QueryBuilder WidgetTable
 applyQuery WidgetQuery {where_, orderBy_, limit_, offset_} =
   applyQueryModifiers where_ orderBy_ limit_ offset_
+
+count :: WidgetQuery select -> Db Int
+count q = Ops.count @WidgetTable (applyQuery q)
 
 delete :: UUID -> Db (Either ORMError Int)
 delete = Ops.delete @WidgetTable

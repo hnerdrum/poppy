@@ -25,6 +25,8 @@ emitClientSpec =
       let actual = emitSimpleClientModule "Poppy.Client.Task" taskModel
       actual `shouldSatisfy` T.isInfixOf "data TaskQuery"
       actual `shouldSatisfy` T.isInfixOf "findMany :: TaskQuery"
+      actual `shouldSatisfy` T.isInfixOf "findFirst :: TaskQuery"
+      actual `shouldSatisfy` T.isInfixOf "count :: TaskQuery"
       actual `shouldSatisfy` T.isInfixOf "emptyQuery"
 
     it "emits Shelf read Client with include helpers" $ do

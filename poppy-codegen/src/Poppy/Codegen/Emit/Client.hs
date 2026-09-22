@@ -104,6 +104,8 @@ emitSimpleClientModule moduleName model =
       "",
       emitFindManyFn model,
       "",
+      emitCountFn model,
+      "",
       emitDeleteFn model,
       "",
       emitDeleteManyFn model
@@ -662,6 +664,9 @@ emitSimpleExports model =
       "    findMany,",
       "    findUnique,",
       "    findUniqueOrFail,",
+      "    findFirst,",
+      "    findFirstOrFail,",
+      "    count,",
       "    delete,",
       "    deleteMany,",
       "    " <> createTypeName model <> " (..),",
@@ -709,7 +714,10 @@ includeReadFunctionExportItems :: [Text]
 includeReadFunctionExportItems =
   [ "findMany,",
     "findUnique,",
-    "findUniqueOrFail,"
+    "findUniqueOrFail,",
+    "findFirst,",
+    "findFirstOrFail,",
+    "count,"
   ]
 
 includeReadPresetExportItems :: Schema -> ModelInclude -> [Text]
@@ -915,7 +923,8 @@ emitIncludeReadDefinitions schema incl emitCombinators =
              emitIncludeEmptyQueryFn root,
              emitIncludeQueryResolveInstances schema root incl emitCombinators,
              emitIncludeFindManyClass root incl,
-             emitIncludeFindManyInstances schema root incl emitCombinators
+             emitIncludeFindManyInstances schema root incl emitCombinators,
+             emitIncludeCountFn root
            ]
 
 emitClientTokenBindings :: Schema -> ModelInclude -> Text
@@ -1074,6 +1083,8 @@ emitFindManyFn model =
       "  findMany :: " <> queryTypeName model <> " select -> Db [ResolveSelect select]",
       "  findUnique :: " <> queryTypeName model <> " select -> Db (Either ORMError (Maybe (ResolveSelect select)))",
       "  findUniqueOrFail :: " <> queryTypeName model <> " select -> Db (Either ORMError (ResolveSelect select))",
+      "  findFirst :: " <> queryTypeName model <> " select -> Db (Maybe (ResolveSelect select))",
+      "  findFirstOrFail :: " <> queryTypeName model <> " select -> Db (Either ORMError (ResolveSelect select))",
       "",
       "instance Read" <> modelName model <> " OmitSelect where",
       "  findMany q =",
@@ -1082,6 +1093,10 @@ emitFindManyFn model =
       "    Ops.findUniqueWhere @" <> tableTypeName model <> " @" <> rowTypeName model <> " where_"
     ]
       ++ emitFindUniqueOrFailLines
+      ++ [ "  findFirst q =",
+           "    Ops.findFirst @" <> tableTypeName model <> " @" <> rowTypeName model <> " (applyQuery q)"
+         ]
+      ++ emitFindFirstOrFailLines
       ++ [ "",
            "instance Read" <> modelName model <> " " <> selectTypeName model <> " where",
            "  findMany q@" <> queryTypeName model <> " {select_} =",
@@ -1098,6 +1113,12 @@ emitFindManyFn model =
           "    (selectColumns (" <> selectColumnsFnName model <> " select_) . matching w)"
         ]
       ++ emitFindUniqueOrFailLines
+      ++ [ "  findFirst q@" <> queryTypeName model <> " {select_} =",
+           "    Ops.findFirstWith",
+           "      (" <> parsePickedName model <> " select_)",
+           "      (selectColumns (" <> selectColumnsFnName model <> " select_) . applyQuery q)"
+         ]
+      ++ emitFindFirstOrFailLines
       ++ [ "",
            "applyQuery :: " <> queryTypeName model <> " select -> QueryBuilder " <> tableTypeName model <> " -> QueryBuilder " <> tableTypeName model,
            "applyQuery " <> queryTypeName model <> " {where_, orderBy_, limit_, offset_} =",
@@ -1112,6 +1133,39 @@ emitFindUniqueOrFailLines =
     "      Left err -> pure (Left err)",
     "      Right found -> pure $ requireFound found (RecordNotFound \"No record found matching query\")"
   ]
+
+emitFindFirstOrFailLines :: [Text]
+emitFindFirstOrFailLines =
+  [ "  findFirstOrFail q = do",
+    "    result <- findFirst q",
+    "    pure $ requireFound result (RecordNotFound \"No record found matching query\")"
+  ]
+
+emitFindFirstFromIncludeLines :: Text -> Text -> Text -> Text -> [Text] -> [Text]
+emitFindFirstFromIncludeLines table query includeExpr toRow extraFields =
+  [ "  findFirst " <> query <> " {" <> T.intercalate ", " fields <> "} = do",
+    "    rows <- Include.findMany @" <> table <> " " <> includeExpr <> " (applyQueryModifiers where_ orderBy_ (Just 1) offset_)",
+    "    pure $ case rows of",
+    "      [] -> Nothing",
+    "      (row : _) -> Just " <> toRow
+  ]
+  where
+    fields = extraFields ++ ["include_", "where_", "orderBy_", "offset_"]
+
+emitCountFn :: Model -> Text
+emitCountFn model =
+  T.unlines
+    [ "count :: " <> queryTypeName model <> " select -> Db Int",
+      "count q = Ops.count @" <> tableTypeName model <> " (applyQuery q)"
+    ]
+
+emitIncludeCountFn :: Model -> Text
+emitIncludeCountFn model =
+  T.unlines
+    [ "count :: " <> queryTypeName model <> " include select -> Db Int",
+      "count " <> queryTypeName model <> " {where_, orderBy_, limit_, offset_} =",
+      "  Ops.count @" <> tableTypeName model <> " (applyQueryModifiers where_ orderBy_ limit_ offset_)"
+    ]
 
 emitFindUniqueByRowsLines :: Text -> Text -> [Text] -> [Text]
 emitFindUniqueByRowsLines table binding rowLines =
@@ -1240,7 +1294,9 @@ emitIncludeFindManyClass model _incl =
         [ "class Read" <> modelName model <> " include select where",
           "  findMany :: " <> query <> " include select -> Db [ResolveInclude (" <> query <> " include select)]",
           "  findUnique :: " <> query <> " include select -> Db (Either ORMError (Maybe (ResolveInclude (" <> query <> " include select))))",
-          "  findUniqueOrFail :: " <> query <> " include select -> Db (Either ORMError (ResolveInclude (" <> query <> " include select)))"
+          "  findUniqueOrFail :: " <> query <> " include select -> Db (Either ORMError (ResolveInclude (" <> query <> " include select)))",
+          "  findFirst :: " <> query <> " include select -> Db (Maybe (ResolveInclude (" <> query <> " include select)))",
+          "  findFirstOrFail :: " <> query <> " include select -> Db (Either ORMError (ResolveInclude (" <> query <> " include select)))"
         ]
 
 emitIncludeFindManyInstances :: Schema -> Model -> ModelInclude -> Bool -> Text
@@ -1262,11 +1318,17 @@ emitIncludeFindManyInstances schema model incl emitCombinators =
           [ "rows <- Include.findMany @" <> table <> " (" <> unwrapFn <> " include_) (matching w)"
           ]
           ++ emitFindUniqueOrFailLines
+          ++ emitFindFirstFromIncludeLines table query ("(" <> unwrapFn <> " include_)") "row" []
+          ++ emitFindFirstOrFailLines
       uniqueFromWhere =
         [ "  findUnique " <> query <> " {where_} =",
           "    Ops.findUniqueWhere @" <> table <> " @" <> row <> " where_"
         ]
           ++ emitFindUniqueOrFailLines
+          ++ [ "  findFirst " <> query <> " {where_, orderBy_, limit_, offset_} =",
+               "    Ops.findFirst @" <> table <> " @" <> row <> " (applyQueryModifiers where_ orderBy_ limit_ offset_)"
+             ]
+          ++ emitFindFirstOrFailLines
       uniqueFromSelect =
         emitFindUniqueByRowsLines
           table
@@ -1277,6 +1339,12 @@ emitIncludeFindManyInstances schema model incl emitCombinators =
             "    (selectColumns (" <> colsFn <> " select_) . matching w)"
           ]
           ++ emitFindUniqueOrFailLines
+          ++ [ "  findFirst " <> query <> " {select_, where_, orderBy_, limit_, offset_} =",
+               "    Ops.findFirstWith",
+               "      (" <> parseFn <> " select_)",
+               "      (selectColumns (" <> colsFn <> " select_) . applyQueryModifiers where_ orderBy_ limit_ offset_)"
+             ]
+          ++ emitFindFirstOrFailLines
       uniqueFromIncludeSelect =
         emitFindUniqueByRowsLines
           table
@@ -1285,6 +1353,8 @@ emitIncludeFindManyInstances schema model incl emitCombinators =
             "let rows = map (" <> toPickedIncl <> " select_) nested"
           ]
           ++ emitFindUniqueOrFailLines
+          ++ emitFindFirstFromIncludeLines table query ("(" <> unwrapFn <> " include_)") ("(" <> toPickedIncl <> " select_ row)") ["select_"]
+          ++ emitFindFirstOrFailLines
    in T.unlines $
         [ "instance Read" <> modelNm <> " " <> withPreset <> " OmitSelect where",
           "  findMany " <> query <> " {include_, where_, orderBy_, limit_, offset_} =",
@@ -1334,6 +1404,8 @@ treeReadInstances schema model tree =
           [ "rows <- Include.findMany @" <> table <> " include_ (matching w)"
           ]
           ++ emitFindUniqueOrFailLines
+          ++ emitFindFirstFromIncludeLines table query "include_" "row" []
+          ++ emitFindFirstOrFailLines
       uniqueLeafSelect =
         emitFindUniqueByRowsLines
           table
@@ -1342,6 +1414,8 @@ treeReadInstances schema model tree =
             "let rows = map (" <> toPickedFn <> " select_) nested"
           ]
           ++ emitFindUniqueOrFailLines
+          ++ emitFindFirstFromIncludeLines table query "include_" ("(" <> toPickedFn <> " select_ row)") ["select_"]
+          ++ emitFindFirstOrFailLines
    in [ "",
         "instance Read" <> modelNm <> " " <> tag <> " OmitSelect where",
         "  findMany " <> query <> " {include_, where_, orderBy_, limit_, offset_} =",

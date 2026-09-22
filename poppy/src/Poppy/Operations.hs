@@ -12,6 +12,7 @@ module Poppy.Operations
     findUniqueWhere,
     requireUniqueWhere,
     findFirst,
+    findFirstWith,
     findFirstOrFail,
     count,
     delete,
@@ -30,6 +31,7 @@ import Poppy.Errors (ORMError (..), requireFound)
 import Poppy.Query
   ( QueryBuilder,
     matching,
+    limit,
     runCountQuery,
     runQuery,
     runQueryOne,
@@ -121,6 +123,18 @@ findFirst ::
   (QueryBuilder table -> QueryBuilder table) ->
   Db (Maybe result)
 findFirst modifier = runQueryOne (modifier (selectAll @table))
+
+findFirstWith ::
+  forall table result.
+  (Entity table) =>
+  RowParser result ->
+  (QueryBuilder table -> QueryBuilder table) ->
+  Db (Maybe result)
+findFirstWith parser modifier = do
+  results <- runQueryWith parser (limit 1 (modifier (selectAll @table)))
+  pure $ case results of
+    [] -> Nothing
+    (row : _) -> Just row
 
 findFirstOrFail ::
   forall table result.
