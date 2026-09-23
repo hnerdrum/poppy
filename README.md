@@ -110,7 +110,7 @@ Codegen does not run migrations.
 
 - Postgres only
 - `where_` applies to the root model, not nested relations
-- Include combinators select whole relations, not subsets
+- Include records load whole relations (N+1), not filtered subsets
 - Queries are assembled as text with bound parameters
 - Scalars: uuid, text, int, bool, timestamptz, and Schema-defined enums
 

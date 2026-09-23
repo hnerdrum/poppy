@@ -52,9 +52,7 @@ library:
     - Poppy.Codegen.Target
     - Poppy.Codegen.Validate
   other-modules:
-    - Poppy.Codegen.Combinator
     - Poppy.Codegen.Emit.Client
-    - Poppy.Codegen.Emit.Combinator
     - Poppy.Codegen.Emit.FlatRow
     - Poppy.Codegen.Emit.Include
     - Poppy.Codegen.Emit.Nest

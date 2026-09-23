@@ -55,9 +55,7 @@ library
       Poppy.Codegen.Target
       Poppy.Codegen.Validate
   other-modules:
-      Poppy.Codegen.Combinator
       Poppy.Codegen.Emit.Client
-      Poppy.Codegen.Emit.Combinator
       Poppy.Codegen.Emit.FlatRow
       Poppy.Codegen.Emit.Include
       Poppy.Codegen.Emit.Nest
@@ -109,10 +107,8 @@ test-suite poppy-codegen-test
       Support.TestDb
       Support.TestMigrations
       Poppy.Codegen.CLI
-      Poppy.Codegen.Combinator
       Poppy.Codegen.Drift
       Poppy.Codegen.Emit.Client
-      Poppy.Codegen.Emit.Combinator
       Poppy.Codegen.Emit.FlatRow
       Poppy.Codegen.Emit.Include
       Poppy.Codegen.Emit.Nest

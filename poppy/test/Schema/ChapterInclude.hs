@@ -1,4 +1,3 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -7,18 +6,13 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE UndecidableInstances #-}
 
 module Schema.ChapterInclude
   ( ChapterInclude (..),
     NoInclude (..),
     ResolveInclude,
     unwrapNoInclude,
-    WithSections (..),
-    unwrapWithSections,
-    ChapterWithSections (..),
-    IncludeSections (..)
+    ChapterWithSections (..)
   )
 where
 
@@ -52,15 +46,9 @@ data ChapterWithSections = ChapterWithSections
   }
   deriving (Show, Eq)
 
-newtype WithSections = WithSections ChapterInclude
-  deriving (Show, Eq)
-
-unwrapWithSections :: WithSections -> ChapterInclude
-unwrapWithSections (WithSections include) = include
-
 type family ResolveInclude preset :: Type
 type instance ResolveInclude NoInclude = ChapterRow
-type instance ResolveInclude WithSections = ChapterWithSections
+type instance ResolveInclude ChapterInclude = ChapterWithSections
 
 newtype NoInclude = NoInclude ChapterInclude
   deriving (Show, Eq)
@@ -90,20 +78,8 @@ loadChapterInclude include roots = do
     | root <- roots
     ]
 
-
 instance {-# OVERLAPPING #-} ExecuteInclude ChapterTable ChapterInclude ChapterWithSections where
   executeInclude include modifier = do
     roots <- findMany @ChapterTable @ChapterRow (prepareIncludeRootQuery @ChapterTable modifier)
     loadChapterInclude include roots
-
-instance {-# OVERLAPPING #-} ExecuteInclude ChapterTable WithSections ChapterWithSections where
-  executeInclude (WithSections include) modifier = executeInclude include modifier
-
-class IncludeSections include where
-  sections :: include
-
-instance IncludeSections WithSections where
-  sections =
-    WithSections ChapterInclude {sections = True}
-
 

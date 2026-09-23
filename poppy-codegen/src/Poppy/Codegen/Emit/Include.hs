@@ -14,16 +14,6 @@ where
 import Data.List (nubBy)
 import Data.Text (Text)
 import qualified Data.Text as T
-import Poppy.Codegen.Combinator (combinePairs)
-import Poppy.Codegen.Emit.Combinator
-  ( emitCombinatorAPI,
-    emitCombinatorExecute,
-    emitCombinatorExports,
-    emitCombinatorLoaders,
-    emitCombinatorResolveLines,
-    emitCombinatorResultADTs,
-    emitCombinatorTags,
-  )
 import Poppy.Codegen.Emit.SelectIn (emitExecuteInclude, emitLoadHelpers)
 import Poppy.Codegen.EmitCommon
   ( includeFieldName,
@@ -103,18 +93,18 @@ emitIncludePresetTypes schema incl =
   let root = lookupModel schema (includeRootModel incl)
       inclName = includeName incl
       rootRow = modelName root <> "Row"
-   in T.unlines $
+      resultName = resultTypeName schema root (includeTree incl)
+   in T.unlines
         [ "type family ResolveInclude preset :: Type",
-          "type instance ResolveInclude NoInclude = " <> rootRow
+          "type instance ResolveInclude NoInclude = " <> rootRow,
+          "type instance ResolveInclude " <> inclName <> " = " <> resultName,
+          "",
+          "newtype NoInclude = NoInclude " <> inclName,
+          "  deriving (Show, Eq)",
+          "",
+          "unwrapNoInclude :: NoInclude -> " <> inclName,
+          "unwrapNoInclude (NoInclude include) = include"
         ]
-          ++ emitCombinatorResolveLines schema incl
-          ++ [ "",
-               "newtype NoInclude = NoInclude " <> inclName,
-               "  deriving (Show, Eq)",
-               "",
-               "unwrapNoInclude :: NoInclude -> " <> inclName,
-               "unwrapNoInclude (NoInclude include) = include"
-             ]
 
 emitIncludeModule :: Text -> Schema -> ModelInclude -> Text
 emitIncludeModule moduleName schema incl =
@@ -124,30 +114,23 @@ emitIncludeModule moduleName schema incl =
         [ "module " <> moduleName,
           emitIncludeExports schema incl,
           "where",
+          "",
+          emitIncludeImports moduleName schema incl,
           ""
-        ]
-          ++ includePrelude schema incl
-          ++ [ emitIncludeImports moduleName schema incl,
-               ""
-             ],
+        ],
         [ emitIncludeADTs schema incl,
-          emitCombinatorResultADTs schema incl,
-          emitCombinatorTags schema incl,
+          emitResultADTs schema incl,
           emitIncludePresetTypes schema incl,
           emitIncludesJoin schema incl,
           emitNestInclude schema incl,
           emitLoadHelpers schema incl,
-          emitCombinatorLoaders schema incl,
-          emitExecuteInclude schema incl,
-          emitCombinatorExecute schema incl,
-          emitCombinatorAPI schema incl
+          emitExecuteInclude schema incl
         ]
       ]
 
 includePragmas :: [Text]
 includePragmas =
-  [ "{-# LANGUAGE AllowAmbiguousTypes #-}",
-    "{-# LANGUAGE DuplicateRecordFields #-}",
+  [ "{-# LANGUAGE DuplicateRecordFields #-}",
     "{-# LANGUAGE FlexibleContexts #-}",
     "{-# LANGUAGE FlexibleInstances #-}",
     "{-# LANGUAGE MultiParamTypeClasses #-}",
@@ -155,15 +138,8 @@ includePragmas =
     "{-# LANGUAGE OverloadedRecordDot #-}",
     "{-# LANGUAGE TypeApplications #-}",
     "{-# LANGUAGE TypeFamilies #-}",
-    "{-# LANGUAGE TypeOperators #-}",
-    "{-# LANGUAGE UndecidableInstances #-}",
     ""
   ]
-
-includePrelude :: Schema -> ModelInclude -> [Text]
-includePrelude schema incl =
-  let root = lookupModel schema (includeRootModel incl)
-   in ["import Prelude hiding ((<>))" | not (null (combinePairs schema root))]
 
 emitIncludeExports :: Schema -> ModelInclude -> Text
 emitIncludeExports schema incl =
@@ -171,20 +147,17 @@ emitIncludeExports schema incl =
     <> T.intercalate ",\n    " items
     <> "\n  )"
   where
-    nestedExport =
-      [ itdName d <> " (..)"
-        | d <- collectIncludeTypes schema incl,
-          itdName d /= includeName incl
-      ]
-    combinatorExports = emitCombinatorExports schema incl
     items =
       [includeName incl <> " (..)"]
-        ++ presetExportItems schema incl
-        ++ combinatorExports
-        ++ nestedExport
+        ++ presetExportItems
+        ++ map (\d -> itdName d <> " (..)") (collectResultTypes schema incl)
+        ++ [ itdName d <> " (..)"
+             | d <- collectIncludeTypes schema incl,
+               itdName d /= includeName incl
+           ]
 
-presetExportItems :: Schema -> ModelInclude -> [Text]
-presetExportItems _schema _incl =
+presetExportItems :: [Text]
+presetExportItems =
   [ "NoInclude (..)",
     "ResolveInclude",
     "unwrapNoInclude"

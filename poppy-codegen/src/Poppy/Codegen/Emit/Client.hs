@@ -8,26 +8,15 @@ module Poppy.Codegen.Emit.Client
   )
 where
 
-import Data.List (nub)
 import Data.Maybe (isNothing)
 import Data.Text (Text)
 import qualified Data.Text as T
-import Poppy.Codegen.Combinator
-  ( CombinatorTree (..),
-    includeRecordValue,
-    isFullGraphTree,
-    nestTokens,
-    resultADTName,
-    tagTypeName,
-  )
-import Poppy.Codegen.Emit.Combinator (combinatorImportItems, rootCombinatorTrees)
 import Poppy.Codegen.EmitCommon
   ( createTypeName,
     fieldBinder,
     hsType,
     includeFieldName,
-    leafResultTypeName,
-    leafTagTypeName,
+    includeRecordValue,
     parsePickedName,
     pickedTypeName,
     primaryKeyField,
@@ -36,7 +25,6 @@ import Poppy.Codegen.EmitCommon
     selectColumnsFnName,
     selectDefaultName,
     selectTypeName,
-    singlePrefixEdge,
     tableTypeName,
     toPickedName,
     updateTypeName,
@@ -162,7 +150,8 @@ emitWriteClientModule moduleName schema incl =
                      nestedOpsTypeName child <> " (..),",
                      emptyNestedOpsName child <> ","
                    ]
-                ++ includeCombinatorExportItems schema incl
+                ++ includeReadPresetExportItems schema incl
+                ++ includeRecordExportItems schema incl
                 ++ [ "ResolveInclude,",
                      queryTypeName root <> " (..),",
                      "emptyQuery,",
@@ -205,7 +194,7 @@ emitWriteClientModule moduleName schema incl =
                <> " (..), "
                <> fieldBinder root (primaryKeyField root)
                <> ")",
-             includeModuleImportLine moduleName schema incl True,
+             includeModuleImportLine moduleName schema incl,
              "import "
                <> schemaModule moduleName child
                <> " ( "
@@ -697,8 +686,8 @@ includeReadExportItems schema incl =
   let root = lookupModel schema (includeRootModel incl)
    in includeReadFunctionExportItems
         ++ includeReadPresetExportItems schema incl
-        ++ [ presetTypeName schema incl <> " (..),",
-             "NoInclude (..),",
+        ++ includeRecordExportItems schema incl
+        ++ [ "NoInclude (..),",
              "ResolveInclude,",
              queryTypeName root <> " (..),",
              "emptyQuery,",
@@ -726,22 +715,10 @@ includeReadPresetExportItems schema incl =
     "noInclude,"
   ]
 
-includeCombinatorExportItems :: Schema -> ModelInclude -> [Text]
-includeCombinatorExportItems schema incl =
-  [ item <> ","
-    | item <- combinatorImportItems schema incl
-  ]
-    ++ [ name <> ","
-         | (name, _) <- clientTokenValues schema incl
-       ]
-
-clientTokenValues :: Schema -> ModelInclude -> [(Text, Text)]
-clientTokenValues schema incl =
-  nub
-    [ token
-      | tree <- rootCombinatorTrees schema incl,
-        token <- nestTokens schema tree
-    ]
+includeRecordExportItems :: Schema -> ModelInclude -> [Text]
+includeRecordExportItems schema incl =
+  [includeName incl <> " (..),"]
+    ++ [name <> " (..)," | name <- nestedIncludeTypeNames schema incl]
 
 writeClientTypeReexportItems :: Schema -> Model -> ModelInclude -> [Text]
 writeClientTypeReexportItems schema root incl =
@@ -757,7 +734,6 @@ writeClientTypeReexportItems schema root incl =
       updateTypeName root <> " (..),",
       includeResultName root incl <> " (..),"
     ]
-      ++ prefixResultExportItems schema root incl
       ++ concatMap (includeNestedTypeReexports schema root) (includeTree incl)
       ++ inlineEnumReexportItems schema
 
@@ -784,36 +760,9 @@ nubExportItems = foldr go []
     go item acc | item `elem` acc = acc
     go item acc = item : acc
 
-writePrefixEdge :: Schema -> Model -> ModelInclude -> Maybe IncludeTree
-writePrefixEdge schema root incl = do
-  edge <- singlePrefixEdge incl
-  _ <- singleNestCombinator schema incl
-  _ <- nestedWriteRelation schema root incl
-  pure edge
-
-prefixResultExportItems :: Schema -> Model -> ModelInclude -> [Text]
-prefixResultExportItems schema root incl =
-  case writePrefixEdge schema root incl of
-    Just edge ->
-      let result = leafResultTypeName schema root edge
-       in [result <> " (..),", result <> "Picked (..),"]
-    Nothing ->
-      []
-
-prefixIncludeImportItems :: Schema -> Model -> ModelInclude -> [Text]
-prefixIncludeImportItems schema root incl =
-  case writePrefixEdge schema root incl of
-    Just edge ->
-      let tag = leafTagTypeName root edge
-          result = leafResultTypeName schema root edge
-       in [tag <> " (..)", result <> " (..)"]
-    Nothing ->
-      []
-
 includeReadImportLines :: Text -> Schema -> ModelInclude -> [Text]
 includeReadImportLines moduleName schema incl =
-  [ "import Data.UUID (UUID)",
-    "import Poppy.Db (Db)",
+  [ "import Poppy.Db (Db)",
     "import Poppy.Errors (ORMError (..), requireFound)",
     "import qualified Poppy.Include as Include",
     "import qualified Poppy.Operations as Ops",
@@ -839,26 +788,38 @@ includeReadImportLines moduleName schema incl =
       <> ", "
       <> toPickedName root
       <> ")",
-    includeModuleImportLine moduleName schema incl False
+    includeModuleImportLine moduleName schema incl
   ]
+    ++ includeLeafRowImportLines moduleName schema root incl
   where
     root = lookupModel schema (includeRootModel incl)
 
-includeModuleImportLine :: Text -> Schema -> ModelInclude -> Bool -> Text
-includeModuleImportLine moduleName schema incl withPrefix =
+includeLeafRowImportLines :: Text -> Schema -> Model -> ModelInclude -> [Text]
+includeLeafRowImportLines moduleName schema root incl =
+  [ "import "
+      <> schemaModule moduleName model
+      <> " ("
+      <> rowTypeName model
+      <> " (..))"
+    | model <- leafRowModels schema root (includeTree incl)
+  ]
+
+leafRowModels :: Schema -> Model -> [IncludeTree] -> [Model]
+leafRowModels schema parent edges =
+  [ lookupModel schema (relToModel (lookupRelation parent (includeRelation edge)))
+    | edge <- edges,
+      null (includeChildren edge)
+  ]
+
+includeModuleImportLine :: Text -> Schema -> ModelInclude -> Text
+includeModuleImportLine moduleName schema incl =
   let root = lookupModel schema (includeRootModel incl)
-      typeExports = nestedIncludeTypeExports schema incl
-      withPreset = presetTypeName schema incl
-      nestedWithImports = nestedWithTypeImportNames schema root (includeTree incl)
       includeTypes =
-        nub $
-          [includeName incl <> " (..)"]
-            ++ [item | not withPrefix, item <- typeExports]
-            ++ [resultTypeName schema root (includeTree incl) <> " (..)"]
-            ++ nestedWithImports
-            ++ [withPreset <> " (..)", "NoInclude (..)", "ResolveInclude", "unwrap" <> withPreset]
-            ++ [item | withPrefix, item <- prefixIncludeImportItems schema root incl]
-            ++ combinatorImportItems schema incl
+        [includeName incl <> " (..)"]
+          ++ [name <> " (..)" | name <- nestedIncludeTypeNames schema incl]
+          ++ [resultTypeName schema root (includeTree incl) <> " (..)"]
+          ++ nestedWithTypeImportNames schema root (includeTree incl)
+          ++ ["NoInclude (..)", "ResolveInclude"]
    in "import "
         <> includeModule moduleName incl
         <> " ( "
@@ -866,18 +827,14 @@ includeModuleImportLine moduleName schema incl withPrefix =
         <> ")"
 
 nestedWithTypeImportNames :: Schema -> Model -> [IncludeTree] -> [Text]
-nestedWithTypeImportNames schema parent =
-  concatMap (nestedWithTypeImportNamesForEdge schema parent)
-
-nestedWithTypeImportNamesForEdge :: Schema -> Model -> IncludeTree -> [Text]
-nestedWithTypeImportNamesForEdge schema parent edge =
-  let rel = lookupRelation parent (includeRelation edge)
-      child = lookupModel schema (relToModel rel)
-      kids = includeChildren edge
-      withType
-        | not (null kids) = [resultTypeName schema child kids <> " (..)"]
-        | otherwise = []
-   in withType ++ nestedWithTypeImportNames schema child kids
+nestedWithTypeImportNames schema parent edges =
+  [ resultTypeName schema child kids <> " (..)"
+    | edge <- edges,
+      let rel = lookupRelation parent (includeRelation edge),
+      let child = lookupModel schema (relToModel rel),
+      let kids = includeChildren edge,
+      not (null kids)
+  ]
 
 writeClientRelatedRowImportLines :: Text -> Schema -> Model -> Model -> ModelInclude -> [Text]
 writeClientRelatedRowImportLines moduleName schema root child incl =
@@ -900,43 +857,35 @@ includeEdgeModels schema parent edge =
       child = lookupModel schema (relToModel rel)
    in child : includeTreeModels schema child (includeChildren edge)
 
-nestedIncludeTypeExports :: Schema -> ModelInclude -> [Text]
-nestedIncludeTypeExports schema incl =
+nestedIncludeTypeNames :: Schema -> ModelInclude -> [Text]
+nestedIncludeTypeNames schema incl =
   let root = lookupModel schema (includeRootModel incl)
-   in [ modelName nested <> "Include (..)"
-        | edge <- includeTree incl,
-          let rel = lookupRelation root (includeRelation edge),
-          let nested = lookupModel schema (relToModel rel),
-          not (null (includeChildren edge))
-      ]
+   in collectNestedIncludeNames schema root (includeTree incl)
+
+collectNestedIncludeNames :: Schema -> Model -> [IncludeTree] -> [Text]
+collectNestedIncludeNames schema current =
+  concatMap go
+  where
+    go edge =
+      let rel = lookupRelation current (includeRelation edge)
+          child = lookupModel schema (relToModel rel)
+          kids = includeChildren edge
+       in [modelName child <> "Include" | not (null kids)]
+            ++ collectNestedIncludeNames schema child kids
 
 emitIncludeReadDefinitions :: Schema -> ModelInclude -> Bool -> [Text]
-emitIncludeReadDefinitions schema incl emitCombinators =
+emitIncludeReadDefinitions schema incl useRecordDot =
   let root = lookupModel schema (includeRootModel incl)
-   in [emitFullIncludePreset schema incl | not emitCombinators]
-        ++ [emitNoIncludePreset schema incl]
-        ++ [ emitPickedIncludeType schema root incl emitCombinators
-           ]
-        ++ [emitPrefixPickedIncludeType schema root incl | emitCombinators]
-        ++ [emitClientTokenBindings schema incl | emitCombinators]
-        ++ [ emitIncludeQueryType root incl,
-             emitIncludeEmptyQueryFn root,
-             emitIncludeQueryResolveInstances schema root incl emitCombinators,
-             emitIncludeFindManyClass root incl,
-             emitIncludeFindManyInstances schema root incl emitCombinators,
-             emitIncludeCountFn root
-           ]
-
-emitClientTokenBindings :: Schema -> ModelInclude -> Text
-emitClientTokenBindings schema incl =
-  T.intercalate "\n" $
-    map emitToken (clientTokenValues schema incl)
-  where
-    emitToken (name, ty) =
-      T.unlines
-        [ name <> " :: " <> ty,
-          name <> " = " <> ty
-        ]
+   in [ emitFullIncludePreset schema incl,
+        emitNoIncludePreset schema incl,
+        emitPickedIncludeType schema root incl useRecordDot,
+        emitIncludeQueryType root incl,
+        emitIncludeEmptyQueryFn root,
+        emitIncludeQueryResolveInstances schema root incl,
+        emitIncludeFindManyClass root incl,
+        emitIncludeFindManyInstances schema root incl,
+        emitIncludeCountFn root
+      ]
 
 emitPickedIncludeType :: Schema -> Model -> ModelInclude -> Bool -> Text
 emitPickedIncludeType schema model incl useRecordDot =
@@ -998,65 +947,20 @@ pickedIncludeTypeName model incl = includeResultName model incl <> "Picked"
 toPickedIncludeFnName :: Model -> ModelInclude -> Text
 toPickedIncludeFnName model incl = "to" <> includeResultName model incl <> "Picked"
 
-emitPrefixPickedIncludeType :: Schema -> Model -> ModelInclude -> Text
-emitPrefixPickedIncludeType schema model incl =
-  case singlePrefixEdge incl of
-    Nothing -> ""
-    Just edge ->
-      let result = leafResultTypeName schema model edge
-          pickedName = result <> "Picked"
-          toPickedFn = "to" <> pickedName
-          rootVar = lowerFirst (modelName model)
-          relName = includeRelName schema model edge
-          child = lookupModel schema (relToModel (lookupRelation model (includeRelation edge)))
-       in T.unlines
-            [ "data " <> pickedName <> " = " <> pickedName,
-              "  { " <> rootVar <> " :: " <> pickedTypeName model <> ",",
-              "    " <> relName <> " :: [" <> modelName child <> "Row]",
-              "  }",
-              "  deriving (Show, Eq)",
-              "",
-              toPickedFn <> " :: " <> selectTypeName model <> " -> " <> result <> " -> " <> pickedName,
-              toPickedFn <> " select_ nested =",
-              "  " <> pickedName,
-              "    { " <> rootVar <> " = " <> toPickedName model <> " select_ nested." <> rootVar,
-              "    , " <> relName <> " = nested." <> relName,
-              "    }"
-            ]
-
-emitIncludeQueryResolveInstances :: Schema -> Model -> ModelInclude -> Bool -> Text
-emitIncludeQueryResolveInstances schema model incl emitCombinators =
-  let withPreset = presetTypeName schema incl
+emitIncludeQueryResolveInstances :: Schema -> Model -> ModelInclude -> Text
+emitIncludeQueryResolveInstances _schema model incl =
+  let includeTy = includeName incl
       nested = includeResultName model incl
       nestedPicked = pickedIncludeTypeName model incl
       row = rowTypeName model
       picked = pickedTypeName model
       query = queryTypeName model
-   in T.unlines $
-        [ "type instance ResolveInclude (" <> query <> " " <> withPreset <> " OmitSelect) = " <> nested,
+   in T.unlines
+        [ "type instance ResolveInclude (" <> query <> " " <> includeTy <> " OmitSelect) = " <> nested,
           "type instance ResolveInclude (" <> query <> " NoInclude OmitSelect) = " <> row,
-          "type instance ResolveInclude (" <> query <> " " <> withPreset <> " " <> selectTypeName model <> ") = " <> nestedPicked,
+          "type instance ResolveInclude (" <> query <> " " <> includeTy <> " " <> selectTypeName model <> ") = " <> nestedPicked,
           "type instance ResolveInclude (" <> query <> " NoInclude " <> selectTypeName model <> ") = " <> picked
         ]
-          ++ [line | emitCombinators, line <- combinatorQueryResolveLines schema model incl query]
-
-combinatorQueryResolveLines :: Schema -> Model -> ModelInclude -> Text -> [Text]
-combinatorQueryResolveLines schema model incl query =
-  concatMap (treeQueryResolve schema model query) (partialClientTrees schema incl)
-
-partialClientTrees :: Schema -> ModelInclude -> [CombinatorTree]
-partialClientTrees schema incl =
-  filter (not . isFullGraphTree schema) (rootCombinatorTrees schema incl)
-
-treeQueryResolve :: Schema -> Model -> Text -> CombinatorTree -> [Text]
-treeQueryResolve schema model query tree =
-  let tag = tagTypeName schema tree
-      result = resultADTName schema tree
-      pickedName = result <> "Picked"
-      selectTy = selectTypeName model
-   in [ "type instance ResolveInclude (" <> query <> " " <> tag <> " OmitSelect) = " <> result,
-        "type instance ResolveInclude (" <> query <> " " <> tag <> " " <> selectTy <> ") = " <> pickedName
-      ]
 
 intercalateSections :: [Text] -> Text
 intercalateSections sections =
@@ -1225,12 +1129,11 @@ emitDeleteManyFn model =
 
 emitFullIncludePreset :: Schema -> ModelInclude -> Text
 emitFullIncludePreset schema incl =
-  let withPreset = presetTypeName schema incl
-   in T.unlines
-        [ fullPresetName schema incl <> " :: " <> withPreset,
-          fullPresetName schema incl <> " =",
-          "  " <> withPreset <> " " <> fullIncludeValue schema incl
-        ]
+  T.unlines
+    [ fullPresetName schema incl <> " :: " <> includeName incl,
+      fullPresetName schema incl <> " =",
+      "  " <> fullIncludeValue schema incl
+    ]
 
 emitNoIncludePreset :: Schema -> ModelInclude -> Text
 emitNoIncludePreset schema incl =
@@ -1238,33 +1141,6 @@ emitNoIncludePreset schema incl =
     [ "noInclude :: NoInclude",
       "noInclude = NoInclude " <> noIncludeValue schema incl
     ]
-
-data AppliedCombinator = AppliedCombinator
-  { acParentName :: Text,
-    acChildName :: Text,
-    acTokenType :: Text
-  }
-
-singleNestCombinator :: Schema -> ModelInclude -> Maybe AppliedCombinator
-singleNestCombinator schema incl =
-  case includeTree incl of
-    [parentEdge] ->
-      case includeChildren parentEdge of
-        [childEdge]
-          | null (includeChildren childEdge) ->
-              let root = lookupModel schema (includeRootModel incl)
-                  parentRel = lookupRelation root (includeRelation parentEdge)
-                  childModel = lookupModel schema (relToModel parentRel)
-                  childRel = lookupRelation childModel (includeRelation childEdge)
-                  childName = includeFieldName childModel childRel
-               in Just
-                    AppliedCombinator
-                      { acParentName = includeFieldName root parentRel,
-                        acChildName = childName,
-                        acTokenType = upperFirst childName
-                      }
-        _ -> Nothing
-    _ -> Nothing
 
 emitIncludeQueryType :: Model -> ModelInclude -> Text
 emitIncludeQueryType model _incl =
@@ -1299,12 +1175,11 @@ emitIncludeFindManyClass model _incl =
           "  findFirstOrFail :: " <> query <> " include select -> Db (Either ORMError (ResolveInclude (" <> query <> " include select)))"
         ]
 
-emitIncludeFindManyInstances :: Schema -> Model -> ModelInclude -> Bool -> Text
-emitIncludeFindManyInstances schema model incl emitCombinators =
+emitIncludeFindManyInstances :: Schema -> Model -> ModelInclude -> Text
+emitIncludeFindManyInstances _schema model incl =
   let table = tableTypeName model
       row = rowTypeName model
-      withPreset = presetTypeName schema incl
-      unwrapFn = "unwrap" <> withPreset
+      includeTy = includeName incl
       query = queryTypeName model
       selectTy = selectTypeName model
       parseFn = parsePickedName model
@@ -1315,10 +1190,10 @@ emitIncludeFindManyInstances schema model incl emitCombinators =
         emitFindUniqueByRowsLines
           table
           (query <> " {include_, where_}")
-          [ "rows <- Include.findMany @" <> table <> " (" <> unwrapFn <> " include_) (matching w)"
+          [ "rows <- Include.findMany @" <> table <> " include_ (matching w)"
           ]
           ++ emitFindUniqueOrFailLines
-          ++ emitFindFirstFromIncludeLines table query ("(" <> unwrapFn <> " include_)") "row" []
+          ++ emitFindFirstFromIncludeLines table query "include_" "row" []
           ++ emitFindFirstOrFailLines
       uniqueFromWhere =
         [ "  findUnique " <> query <> " {where_} =",
@@ -1349,16 +1224,16 @@ emitIncludeFindManyInstances schema model incl emitCombinators =
         emitFindUniqueByRowsLines
           table
           (query <> " {include_, select_, where_}")
-          [ "nested <- Include.findMany @" <> table <> " (" <> unwrapFn <> " include_) (matching w)",
+          [ "nested <- Include.findMany @" <> table <> " include_ (matching w)",
             "let rows = map (" <> toPickedIncl <> " select_) nested"
           ]
           ++ emitFindUniqueOrFailLines
-          ++ emitFindFirstFromIncludeLines table query ("(" <> unwrapFn <> " include_)") ("(" <> toPickedIncl <> " select_ row)") ["select_"]
+          ++ emitFindFirstFromIncludeLines table query "include_" ("(" <> toPickedIncl <> " select_ row)") ["select_"]
           ++ emitFindFirstOrFailLines
    in T.unlines $
-        [ "instance Read" <> modelNm <> " " <> withPreset <> " OmitSelect where",
+        [ "instance Read" <> modelNm <> " " <> includeTy <> " OmitSelect where",
           "  findMany " <> query <> " {include_, where_, orderBy_, limit_, offset_} =",
-          "    Include.findMany @" <> table <> " (" <> unwrapFn <> " include_) (applyQueryModifiers where_ orderBy_ limit_ offset_)"
+          "    Include.findMany @" <> table <> " include_ (applyQueryModifiers where_ orderBy_ limit_ offset_)"
         ]
           ++ uniqueFromInclude
           ++ [ "",
@@ -1368,9 +1243,9 @@ emitIncludeFindManyInstances schema model incl emitCombinators =
              ]
           ++ uniqueFromWhere
           ++ [ "",
-               "instance Read" <> modelNm <> " " <> withPreset <> " " <> selectTy <> " where",
+               "instance Read" <> modelNm <> " " <> includeTy <> " " <> selectTy <> " where",
                "  findMany " <> query <> " {include_, select_, where_, orderBy_, limit_, offset_} = do",
-               "    rows <- Include.findMany @" <> table <> " (" <> unwrapFn <> " include_) (applyQueryModifiers where_ orderBy_ limit_ offset_)",
+               "    rows <- Include.findMany @" <> table <> " include_ (applyQueryModifiers where_ orderBy_ limit_ offset_)",
                "    pure $ map (" <> toPickedIncl <> " select_) rows"
              ]
           ++ uniqueFromIncludeSelect
@@ -1382,59 +1257,6 @@ emitIncludeFindManyInstances schema model incl emitCombinators =
                "      (selectColumns (" <> colsFn <> " select_) . applyQueryModifiers where_ orderBy_ limit_ offset_)"
              ]
           ++ uniqueFromSelect
-          ++ [inst | emitCombinators, inst <- combinatorReadInstances schema model incl]
-
-combinatorReadInstances :: Schema -> Model -> ModelInclude -> [Text]
-combinatorReadInstances schema model incl =
-  concatMap (treeReadInstances schema model) (partialClientTrees schema incl)
-
-treeReadInstances :: Schema -> Model -> CombinatorTree -> [Text]
-treeReadInstances schema model tree =
-  let table = tableTypeName model
-      query = queryTypeName model
-      tag = tagTypeName schema tree
-      selectTy = selectTypeName model
-      result = resultADTName schema tree
-      toPickedFn = "to" <> result <> "Picked"
-      modelNm = modelName model
-      uniqueLeaf =
-        emitFindUniqueByRowsLines
-          table
-          (query <> " {include_, where_}")
-          [ "rows <- Include.findMany @" <> table <> " include_ (matching w)"
-          ]
-          ++ emitFindUniqueOrFailLines
-          ++ emitFindFirstFromIncludeLines table query "include_" "row" []
-          ++ emitFindFirstOrFailLines
-      uniqueLeafSelect =
-        emitFindUniqueByRowsLines
-          table
-          (query <> " {include_, select_, where_}")
-          [ "nested <- Include.findMany @" <> table <> " include_ (matching w)",
-            "let rows = map (" <> toPickedFn <> " select_) nested"
-          ]
-          ++ emitFindUniqueOrFailLines
-          ++ emitFindFirstFromIncludeLines table query "include_" ("(" <> toPickedFn <> " select_ row)") ["select_"]
-          ++ emitFindFirstOrFailLines
-   in [ "",
-        "instance Read" <> modelNm <> " " <> tag <> " OmitSelect where",
-        "  findMany " <> query <> " {include_, where_, orderBy_, limit_, offset_} =",
-        "    Include.findMany @" <> table <> " include_ (applyQueryModifiers where_ orderBy_ limit_ offset_)"
-      ]
-        ++ uniqueLeaf
-        ++ [ "",
-             "instance Read" <> modelNm <> " " <> tag <> " " <> selectTy <> " where",
-             "  findMany " <> query <> " {include_, select_, where_, orderBy_, limit_, offset_} = do",
-             "    rows <- Include.findMany @" <> table <> " include_ (applyQueryModifiers where_ orderBy_ limit_ offset_)",
-             "    pure $ map (" <> toPickedFn <> " select_) rows"
-           ]
-        ++ uniqueLeafSelect
-
-presetTypeName :: Schema -> ModelInclude -> Text
-presetTypeName schema incl =
-  case T.stripPrefix "with" (fullPresetName schema incl) of
-    Just rest -> "With" <> rest
-    Nothing -> "With" <> upperFirst (fullPresetName schema incl)
 
 queryTypeName :: Model -> Text
 queryTypeName model = modelName model <> "Query"
@@ -1447,13 +1269,13 @@ includeResultName model incl =
 
 fullIncludeValue :: Schema -> ModelInclude -> Text
 fullIncludeValue schema incl =
-  includeRecordValue schema (CombinatorTree root (includeTree incl))
+  includeRecordValue schema root (includeTree incl)
   where
     root = lookupModel schema (includeRootModel incl)
 
 noIncludeValue :: Schema -> ModelInclude -> Text
 noIncludeValue schema incl =
-  includeRecordValue schema (CombinatorTree root [])
+  includeRecordValue schema root []
   where
     root = lookupModel schema (includeRootModel incl)
 

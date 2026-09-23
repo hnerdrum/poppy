@@ -15,7 +15,9 @@ module Schema.Client.Shelf
     count,
     withBooksTags,
     noInclude,
-    WithBooksTags (..),
+    ShelfInclude (..),
+    BookInclude (..),
+    ChapterInclude (..),
     NoInclude (..),
     ResolveInclude,
     ShelfQuery (..),
@@ -29,7 +31,6 @@ module Schema.Client.Shelf
   )
 where
 
-import Data.UUID (UUID)
 import Poppy.Db (Db)
 import Poppy.Errors (ORMError (..), requireFound)
 import qualified Poppy.Include as Include
@@ -38,11 +39,12 @@ import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)
 import Poppy.Select (OmitSelect (..), Picked (..))
 import Poppy.Where (Where)
 import Schema.Shelf (ShelfTable, ShelfRow, ShelfSelect (..), ShelfPicked (..), shelfSelect, shelfSelectColumns, parseShelfPicked, toShelfPicked)
-import Schema.ShelfInclude ( ShelfInclude (..), BookInclude (..), ShelfWithBooksTags (..), BookWithChapters (..), ChapterWithSections (..), WithBooksTags (..), NoInclude (..), ResolveInclude, unwrapWithBooksTags, IncludeTags (..), IncludeBooks (..), IncludeChapters (..), Chapters (..), ChaptersSections (..), Sections (..), CombineInclude (..), Tags (..), unwrapTags, Books (..), unwrapBooks, BooksTags (..), unwrapBooksTags, BooksChapters (..), unwrapBooksChapters, BooksChaptersTags (..), unwrapBooksChaptersTags, BooksChaptersSections (..), unwrapBooksChaptersSections, ShelfWithTag (..), ShelfWithBook (..), ShelfWithBookTag (..), ShelfWithBooksChapter (..), BookWithChapter (..), ShelfWithBooksChapterTag (..), ShelfWithBooksChaptersSection (..))
+import Schema.ShelfInclude ( ShelfInclude (..), BookInclude (..), ChapterInclude (..), ShelfWithBooksTags (..), BookWithChapters (..), NoInclude (..), ResolveInclude)
+import Schema.Tag (TagRow (..))
 
-withBooksTags :: WithBooksTags
+withBooksTags :: ShelfInclude
 withBooksTags =
-  WithBooksTags ShelfInclude {books = Just (BookInclude {chapters = Just (ChapterInclude {sections = True})}), tags = True}
+  ShelfInclude {books = Just (BookInclude {chapters = Just (ChapterInclude {sections = True})}), tags = True}
 
 noInclude :: NoInclude
 noInclude = NoInclude ShelfInclude {books = Nothing, tags = False}
@@ -75,9 +77,9 @@ emptyQuery :: ShelfQuery NoInclude OmitSelect
 emptyQuery =
   ShelfQuery {include_ = noInclude, select_ = OmitSelect, where_ = Nothing, orderBy_ = [], limit_ = Nothing, offset_ = Nothing}
 
-type instance ResolveInclude (ShelfQuery WithBooksTags OmitSelect) = ShelfWithBooksTags
+type instance ResolveInclude (ShelfQuery ShelfInclude OmitSelect) = ShelfWithBooksTags
 type instance ResolveInclude (ShelfQuery NoInclude OmitSelect) = ShelfRow
-type instance ResolveInclude (ShelfQuery WithBooksTags ShelfSelect) = ShelfWithBooksTagsPicked
+type instance ResolveInclude (ShelfQuery ShelfInclude ShelfSelect) = ShelfWithBooksTagsPicked
 type instance ResolveInclude (ShelfQuery NoInclude ShelfSelect) = ShelfPicked
 
 class ReadShelf include select where
@@ -87,14 +89,14 @@ class ReadShelf include select where
   findFirst :: ShelfQuery include select -> Db (Maybe (ResolveInclude (ShelfQuery include select)))
   findFirstOrFail :: ShelfQuery include select -> Db (Either ORMError (ResolveInclude (ShelfQuery include select)))
 
-instance ReadShelf WithBooksTags OmitSelect where
+instance ReadShelf ShelfInclude OmitSelect where
   findMany ShelfQuery {include_, where_, orderBy_, limit_, offset_} =
-    Include.findMany @ShelfTable (unwrapWithBooksTags include_) (applyQueryModifiers where_ orderBy_ limit_ offset_)
+    Include.findMany @ShelfTable include_ (applyQueryModifiers where_ orderBy_ limit_ offset_)
   findUnique ShelfQuery {include_, where_} =
     case Ops.requireUniqueWhere @ShelfTable where_ of
       Left err -> pure (Left err)
       Right w -> do
-        rows <- Include.findMany @ShelfTable (unwrapWithBooksTags include_) (matching w)
+        rows <- Include.findMany @ShelfTable include_ (matching w)
         pure $ case rows of
           [] -> Right Nothing
           [row] -> Right (Just row)
@@ -105,7 +107,7 @@ instance ReadShelf WithBooksTags OmitSelect where
       Left err -> pure (Left err)
       Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
   findFirst ShelfQuery {include_, where_, orderBy_, offset_} = do
-    rows <- Include.findMany @ShelfTable (unwrapWithBooksTags include_) (applyQueryModifiers where_ orderBy_ (Just 1) offset_)
+    rows <- Include.findMany @ShelfTable include_ (applyQueryModifiers where_ orderBy_ (Just 1) offset_)
     pure $ case rows of
       [] -> Nothing
       (row : _) -> Just row
@@ -129,15 +131,15 @@ instance ReadShelf NoInclude OmitSelect where
     result <- findFirst q
     pure $ requireFound result (RecordNotFound "No record found matching query")
 
-instance ReadShelf WithBooksTags ShelfSelect where
+instance ReadShelf ShelfInclude ShelfSelect where
   findMany ShelfQuery {include_, select_, where_, orderBy_, limit_, offset_} = do
-    rows <- Include.findMany @ShelfTable (unwrapWithBooksTags include_) (applyQueryModifiers where_ orderBy_ limit_ offset_)
+    rows <- Include.findMany @ShelfTable include_ (applyQueryModifiers where_ orderBy_ limit_ offset_)
     pure $ map (toShelfWithBooksTagsPicked select_) rows
   findUnique ShelfQuery {include_, select_, where_} =
     case Ops.requireUniqueWhere @ShelfTable where_ of
       Left err -> pure (Left err)
       Right w -> do
-        nested <- Include.findMany @ShelfTable (unwrapWithBooksTags include_) (matching w)
+        nested <- Include.findMany @ShelfTable include_ (matching w)
         let rows = map (toShelfWithBooksTagsPicked select_) nested
         pure $ case rows of
           [] -> Right Nothing
@@ -149,7 +151,7 @@ instance ReadShelf WithBooksTags ShelfSelect where
       Left err -> pure (Left err)
       Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
   findFirst ShelfQuery {select_, include_, where_, orderBy_, offset_} = do
-    rows <- Include.findMany @ShelfTable (unwrapWithBooksTags include_) (applyQueryModifiers where_ orderBy_ (Just 1) offset_)
+    rows <- Include.findMany @ShelfTable include_ (applyQueryModifiers where_ orderBy_ (Just 1) offset_)
     pure $ case rows of
       [] -> Nothing
       (row : _) -> Just (toShelfWithBooksTagsPicked select_ row)

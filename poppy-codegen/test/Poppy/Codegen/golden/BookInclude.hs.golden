@@ -1,4 +1,3 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -7,23 +6,14 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE UndecidableInstances #-}
 
 module Schema.BookInclude
   ( BookInclude (..),
     NoInclude (..),
     ResolveInclude,
     unwrapNoInclude,
-    Chapters (..),
-    unwrapChapters,
-    WithChapters (..),
-    unwrapWithChapters,
-    BookWithChapter (..),
-    BookWithChapters (..),
     ChapterWithSections (..),
-    IncludeChapters (..),
-    Sections (..),
+    BookWithChapters (..),
     ChapterInclude (..)
   )
 where
@@ -60,9 +50,9 @@ newtype BookInclude = BookInclude
   }
   deriving (Show, Eq)
 
-data BookWithChapter = BookWithChapter
-  { book :: BookRow,
-    chapters :: [ChapterRow]
+data ChapterWithSections = ChapterWithSections
+  { chapter :: ChapterRow,
+    sections :: [SectionRow]
   }
   deriving (Show, Eq)
 
@@ -72,28 +62,9 @@ data BookWithChapters = BookWithChapters
   }
   deriving (Show, Eq)
 
-data ChapterWithSections = ChapterWithSections
-  { chapter :: ChapterRow,
-    sections :: [SectionRow]
-  }
-  deriving (Show, Eq)
-
-newtype Chapters = Chapters BookInclude
-  deriving (Show, Eq)
-
-unwrapChapters :: Chapters -> BookInclude
-unwrapChapters (Chapters include) = include
-
-newtype WithChapters = WithChapters BookInclude
-  deriving (Show, Eq)
-
-unwrapWithChapters :: WithChapters -> BookInclude
-unwrapWithChapters (WithChapters include) = include
-
 type family ResolveInclude preset :: Type
 type instance ResolveInclude NoInclude = BookRow
-type instance ResolveInclude Chapters = BookWithChapter
-type instance ResolveInclude WithChapters = BookWithChapters
+type instance ResolveInclude BookInclude = BookWithChapters
 
 newtype NoInclude = NoInclude BookInclude
   deriving (Show, Eq)
@@ -140,43 +111,8 @@ loadBookInclude include roots = do
     | root <- roots
     ]
 
-loadBookWithChapter :: BookInclude -> [BookRow] -> Db [BookWithChapter]
-loadBookWithChapter _include roots = do
-  chaptersMap <-
-    indexHasMany (.bookRef) <$> findByIn @ChapterTable @ChapterRow Chapter.chapterBookRef (map (.id) roots)
-  pure
-    [
-      BookWithChapter {
-        book = root,
-        chapters = lookupGroups root.id chaptersMap
-      }
-    | root <- roots
-    ]
-
 instance {-# OVERLAPPING #-} ExecuteInclude BookTable BookInclude BookWithChapters where
   executeInclude include modifier = do
     roots <- findMany @BookTable @BookRow (prepareIncludeRootQuery @BookTable modifier)
     loadBookInclude include roots
-
-instance {-# OVERLAPPING #-} ExecuteInclude BookTable Chapters BookWithChapter where
-  executeInclude (Chapters include) modifier = do
-    roots <- findMany @BookTable @BookRow (prepareIncludeRootQuery @BookTable modifier)
-    loadBookWithChapter include roots
-
-instance {-# OVERLAPPING #-} ExecuteInclude BookTable WithChapters BookWithChapters where
-  executeInclude (WithChapters include) modifier = executeInclude include modifier
-
-data Sections = Sections
-
-class IncludeChapters include where
-  chapters :: include
-
-instance IncludeChapters Chapters where
-  chapters =
-    Chapters BookInclude {chapters = Just (ChapterInclude {sections = False})}
-
-instance (include ~ WithChapters) => IncludeChapters (Sections -> include) where
-  chapters Sections =
-    WithChapters BookInclude {chapters = Just (ChapterInclude {sections = True})}
-
 
