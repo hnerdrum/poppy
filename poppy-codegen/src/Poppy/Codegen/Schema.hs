@@ -65,10 +65,17 @@ import Poppy.Codegen.IR
     updatedAt,
     variant,
     variantMap,
-    withDefault,
   )
 import qualified Poppy.Codegen.IR as IR
 import Poppy.Codegen.TextUtil (camelToSnake)
+
+-- | Application-side default (@Maybe@ on create) and a drift requirement:
+-- the SQL migration must set the matching column @DEFAULT@.
+--
+-- * 'DefaultUuidV4' → @uuid_generate_v4()@ or @gen_random_uuid()@
+-- * 'DefaultNow' → @now()@ or @CURRENT_TIMESTAMP@
+withDefault :: FieldDefault -> FieldSpec -> FieldSpec
+withDefault = IR.withDefault
 
 -- | Models with relations also get a full-graph Include.
 schema :: [EnumSpec] -> [Model] -> [UniqueConstraint] -> Schema

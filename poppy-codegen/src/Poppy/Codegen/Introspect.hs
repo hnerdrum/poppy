@@ -15,9 +15,9 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import Database.PostgreSQL.Simple (Connection, query_)
 import Database.PostgreSQL.Simple.Types (Query)
-import Poppy.Codegen.Drift (DbCatalog (..), DbColumn (..), DbTable (..), emptyCatalog)
+import Poppy.Codegen.Drift (DbCatalog (..), DbColumn (..), DbForeignKey (..), DbTable (..), emptyCatalog)
 
-type ColumnRow = (Text, Text, Text, Text, Text)
+type ColumnRow = (Text, Text, Text, Text, Text, Maybe Text)
 
 type PkRow = (Text, Text, Int32)
 
@@ -25,16 +25,20 @@ type UniqueRow = (Text, Text, Text, Int32)
 
 type EnumRow = (Text, Text)
 
+type FkRow = (Text, Text, Text, Text)
+
 introspectCatalog :: Connection -> IO DbCatalog
 introspectCatalog conn = do
   columns <- query_ conn columnSql
   pks <- query_ conn pkSql
   uniques <- query_ conn uniqueSql
   enums <- query_ conn enumSql
+  fks <- query_ conn fkSql
   pure $
     emptyCatalog
       { dbTables = buildTables columns pks uniques,
-        dbEnums = buildEnums enums
+        dbEnums = buildEnums enums,
+        dbForeignKeys = buildForeignKeys fks
       }
 
 canonicalizeColumnType :: Text -> Text -> Text
@@ -64,14 +68,15 @@ buildTables columns pks uniques =
     uniqueMap = uniqueSets uniques
 
 addColumn :: Map Text DbTable -> ColumnRow -> Map Text DbTable
-addColumn acc (table, col, nullable, dataType, udtName) =
+addColumn acc (table, col, nullable, dataType, udtName, columnDefault) =
   Map.alter upsert table acc
   where
     column =
       DbColumn
         { dbColName = col,
           dbColType = canonicalizeColumnType dataType udtName,
-          dbColNullable = nullable == "YES"
+          dbColNullable = nullable == "YES",
+          dbColDefault = columnDefault
         }
     upsert Nothing =
       Just
@@ -112,9 +117,21 @@ buildEnums :: [EnumRow] -> Map Text [Text]
 buildEnums rows =
   Map.fromListWith (flip (++)) [(name, [label]) | (name, label) <- rows]
 
+buildForeignKeys :: [FkRow] -> [DbForeignKey]
+buildForeignKeys =
+  map
+    ( \(fromTable, fromCol, toTable, toCol) ->
+        DbForeignKey
+          { dbFkFromTable = fromTable,
+            dbFkFromColumn = fromCol,
+            dbFkToTable = toTable,
+            dbFkToColumn = toCol
+          }
+    )
+
 columnSql :: Query
 columnSql =
-  "SELECT table_name, column_name, is_nullable, data_type, udt_name\
+  "SELECT table_name, column_name, is_nullable, data_type, udt_name, column_default\
   \ FROM information_schema.columns\
   \ WHERE table_schema = 'public'"
 
@@ -146,3 +163,16 @@ enumSql =
   \ FROM pg_type t\
   \ JOIN pg_enum e ON t.oid = e.enumtypid\
   \ ORDER BY t.typname, e.enumsortorder"
+
+fkSql :: Query
+fkSql =
+  "SELECT kcu.table_name, kcu.column_name, ccu.table_name, ccu.column_name\
+  \ FROM information_schema.table_constraints tc\
+  \ JOIN information_schema.key_column_usage kcu\
+  \   ON tc.constraint_name = kcu.constraint_name\
+  \  AND tc.table_schema = kcu.table_schema\
+  \ JOIN information_schema.constraint_column_usage ccu\
+  \   ON ccu.constraint_name = tc.constraint_name\
+  \  AND ccu.constraint_schema = tc.table_schema\
+  \ WHERE tc.table_schema = 'public'\
+  \   AND tc.constraint_type = 'FOREIGN KEY'"
