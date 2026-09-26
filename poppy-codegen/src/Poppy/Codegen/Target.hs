@@ -11,15 +11,11 @@ module Poppy.Codegen.Target
 where
 
 import Data.Char (isAlphaNum, isUpper)
-import Data.List (nub)
-import Data.Maybe (isJust, isNothing)
+import Data.Maybe (isNothing)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Poppy.Codegen.Emit.Client
-  ( emitIncludeReadClientModule,
-    emitSimpleClientModule,
-    emitWriteClientModule,
-    nestedWriteRelation,
+  ( emitClientModule,
   )
 import Poppy.Codegen.Emit.Include (emitIncludeModule)
 import Poppy.Codegen.Emit.Schema (emitEnumModule, emitModelModule)
@@ -31,14 +27,11 @@ import Poppy.Codegen.IR
     enumImport,
     enumName,
     includeName,
-    includeRootModel,
     modelName,
     schemaEnums,
     schemaIncludes,
     schemaModels,
   )
-import Poppy.Codegen.Lookup (lookupModel)
-import Poppy.Codegen.Schema (isFullGraphInclude)
 import System.FilePath (dropTrailingPathSeparator, splitDirectories, (</>))
 
 -- | Path is relative to the process working directory.
@@ -155,64 +148,14 @@ includeOutput target schema incl =
 
 clientOutputs :: CodegenTarget -> Schema -> [GenOutput]
 clientOutputs target schema =
-  simpleClientOutputs target.ctClientLayout schema
-    ++ includeClientOutputs target.ctClientLayout schema
+  concatMap (clientOutput target.ctClientLayout schema) (schemaModels schema)
 
-simpleClientOutputs :: ClientLayout -> Schema -> [GenOutput]
-simpleClientOutputs layout schema =
-  concatMap (simpleClientOutput layout) (simpleClientModels schema)
-
-simpleClientOutput :: ClientLayout -> Model -> [GenOutput]
-simpleClientOutput layout model =
+clientOutput :: ClientLayout -> Schema -> Model -> [GenOutput]
+clientOutput layout schema model =
   let name = modelName model
       moduleName = layout.clModulePrefix <> name
       path = layout.clOutputDir </> T.unpack name <> ".hs"
-      text = emitSimpleClientModule moduleName model
-   in [gen path text]
-
-includeClientOutputs :: ClientLayout -> Schema -> [GenOutput]
-includeClientOutputs layout schema =
-  concatMap (includeClientOutput layout schema) (schemaIncludes schema)
-
-includeClientOutput :: ClientLayout -> Schema -> ModelInclude -> [GenOutput]
-includeClientOutput layout schema incl =
-  let rootName = includeRootModel incl
-      root = lookupModel schema rootName
-      moduleName = layout.clModulePrefix <> rootName
-      path = layout.clOutputDir </> T.unpack rootName <> ".hs"
-   in case includeClientKind schema root incl of
-        WriteIncludeClient ->
-          [gen path (emitWriteClientModule moduleName schema incl)]
-        ReadIncludeClient ->
-          [gen path (emitIncludeReadClientModule moduleName schema incl)]
-        NoIncludeClient ->
-          []
-
--- Nested writes are inferred from hasMany + child FK. Auto full-graph
--- Includes without an owned child keep a simple Client.
--- Explicit partial Includes still get an include-read Client.
-data IncludeClientKind = WriteIncludeClient | ReadIncludeClient | NoIncludeClient
-  deriving (Eq)
-
-includeClientKind :: Schema -> Model -> ModelInclude -> IncludeClientKind
-includeClientKind schema root incl
-  | isJust (nestedWriteRelation schema root incl) = WriteIncludeClient
-  | isFullGraphInclude (schemaModels schema) incl = NoIncludeClient
-  | otherwise = ReadIncludeClient
-
-simpleClientModels :: Schema -> [Model]
-simpleClientModels schema =
-  let skip = includeClientRootModels schema
-   in filter (\model -> modelName model `notElem` skip) (schemaModels schema)
-
-includeClientRootModels :: Schema -> [Text]
-includeClientRootModels schema =
-  nub
-    [ includeRootModel incl
-      | incl <- schemaIncludes schema,
-        let root = lookupModel schema (includeRootModel incl),
-        includeClientKind schema root incl /= NoIncludeClient
-    ]
+   in [gen path (emitClientModule moduleName schema model)]
 
 gen :: FilePath -> Text -> GenOutput
 gen path text = GenOutput {outputPath = path, outputText = text}

@@ -13,6 +13,10 @@ module Schema.Client.Shelf
     findFirst,
     findFirstOrFail,
     count,
+    create,
+    update,
+    delete,
+    deleteMany,
     withBooksTags,
     noInclude,
     ShelfInclude (..),
@@ -24,23 +28,38 @@ module Schema.Client.Shelf
     emptyQuery,
     OmitSelect (..),
     Picked (..),
+    ShelfCreate (..),
+    ShelfRow (..),
     ShelfSelect (..),
     ShelfPicked (..),
     shelfSelect,
+    ShelfUpdate (..),
+    ShelfTable,
+    shelfId,
     ShelfWithBooksTagsPicked (..)
   )
 where
 
+import Data.UUID (UUID)
 import Poppy.Db (Db)
+import qualified Poppy.Delete as Delete
 import Poppy.Errors (ORMError (..), requireFound)
 import qualified Poppy.Include as Include
+import qualified Poppy.Insert as Insert
 import qualified Poppy.Operations as Ops
 import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)
 import Poppy.Select (OmitSelect (..), Picked (..))
+import qualified Poppy.Update as Update
 import Poppy.Where (Where)
-import Schema.Shelf (ShelfTable, ShelfRow, ShelfSelect (..), ShelfPicked (..), shelfSelect, shelfSelectColumns, parseShelfPicked, toShelfPicked)
+import Schema.Shelf (ShelfCreate (..), ShelfRow (..), ShelfSelect (..), ShelfPicked (..), shelfSelect, shelfSelectColumns, parseShelfPicked, toShelfPicked, ShelfTable, ShelfUpdate (..), shelfId)
 import Schema.ShelfInclude ( ShelfInclude (..), BookInclude (..), ChapterInclude (..), ShelfWithBooksTags (..), BookWithChapters (..), NoInclude (..), ResolveInclude)
 import Schema.Tag (TagRow (..))
+
+create :: ShelfCreate -> Db (Either ORMError ShelfRow)
+create = Insert.insert @ShelfTable @ShelfRow
+
+update :: UUID -> ShelfUpdate -> Db (Either ORMError ShelfRow)
+update = Update.update @ShelfTable @ShelfRow
 
 withBooksTags :: ShelfInclude
 withBooksTags =
@@ -192,3 +211,9 @@ instance ReadShelf NoInclude ShelfSelect where
 count :: ShelfQuery include select -> Db Int
 count ShelfQuery {where_, orderBy_, limit_, offset_} =
   Ops.count @ShelfTable (applyQueryModifiers where_ orderBy_ limit_ offset_)
+
+delete :: UUID -> Db (Either ORMError Int)
+delete = Ops.delete @ShelfTable
+
+deleteMany :: Where ShelfTable -> Db (Either ORMError Int)
+deleteMany = Delete.deleteMany @ShelfTable

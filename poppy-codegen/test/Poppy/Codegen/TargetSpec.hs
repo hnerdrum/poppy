@@ -64,6 +64,23 @@ targetSpec =
     it "keeps generated schema modules byte-stable" $ do
       mapM_ assertGoldenStable schemaGoldenNames
 
+    it "emits one Client per model" $ do
+      outputPaths (simpleTarget "src/Schema" shelfSchema)
+        `shouldMatchList` [ "src/Schema/Book.hs",
+                            "src/Schema/BookInclude.hs",
+                            "src/Schema/Chapter.hs",
+                            "src/Schema/ChapterInclude.hs",
+                            "src/Schema/Section.hs",
+                            "src/Schema/Shelf.hs",
+                            "src/Schema/ShelfInclude.hs",
+                            "src/Schema/Tag.hs",
+                            "src/Schema/Client/Book.hs",
+                            "src/Schema/Client/Chapter.hs",
+                            "src/Schema/Client/Section.hs",
+                            "src/Schema/Client/Shelf.hs",
+                            "src/Schema/Client/Tag.hs"
+                          ]
+
     it "nests clients under the module prefix" $ do
       let target = simpleTarget "src/Schema" widgetSchema
       outputPaths target

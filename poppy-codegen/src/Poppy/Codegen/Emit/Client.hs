@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Poppy.Codegen.Emit.Client
-  ( emitSimpleClientModule,
-    emitIncludeReadClientModule,
+  ( emitClientModule,
+    emitSimpleClientModule,
     emitWriteClientModule,
     nestedWriteRelation,
   )
@@ -32,6 +32,18 @@ import Poppy.Codegen.EmitCommon
 import Poppy.Codegen.IR
 import Poppy.Codegen.Lookup (lookupField, lookupModel, lookupRelation, lookupUniques)
 import Poppy.Codegen.TextUtil (lowerFirst, upperFirst)
+
+emitClientModule :: Text -> Schema -> Model -> Text
+emitClientModule moduleName schema model =
+  case lookupModelInclude schema model of
+    Just incl -> emitIncludeClientModule moduleName schema incl
+    Nothing -> emitSimpleClientModule moduleName model
+
+lookupModelInclude :: Schema -> Model -> Maybe ModelInclude
+lookupModelInclude schema model =
+  case [incl | incl <- schemaIncludes schema, includeRootModel incl == modelName model] of
+    (incl : _) -> Just incl
+    [] -> Nothing
 
 emitSimpleClientModule :: Text -> Model -> Text
 emitSimpleClientModule moduleName model =
@@ -99,8 +111,8 @@ emitSimpleClientModule moduleName model =
       emitDeleteManyFn model
     ]
 
-emitIncludeReadClientModule :: Text -> Schema -> ModelInclude -> Text
-emitIncludeReadClientModule moduleName schema incl =
+emitIncludeClientModule :: Text -> Schema -> ModelInclude -> Text
+emitIncludeClientModule moduleName schema incl =
   T.unlines
     ( [ "{-# LANGUAGE FlexibleContexts #-}",
         "{-# LANGUAGE FlexibleInstances #-}",
@@ -112,12 +124,22 @@ emitIncludeReadClientModule moduleName schema incl =
         "",
         "module " <> moduleName
       ]
-        ++ exportLinesFromItems (includeReadExportItems schema incl)
+        ++ exportLinesFromItems (includeClientExportItems schema incl)
         ++ ["where", ""]
-        ++ includeReadImportLines moduleName schema incl
+        ++ includeClientImportLines moduleName schema incl
     )
     <> "\n"
-    <> intercalateSections (emitIncludeReadDefinitions schema incl False)
+    <> intercalateSections
+      ( [ emitCreateFn root,
+          emitUpdateFn root
+        ]
+          ++ emitIncludeReadDefinitions schema incl False
+          ++ [ emitDeleteFn root,
+               emitDeleteManyFn root
+             ]
+      )
+  where
+    root = lookupModel schema (includeRootModel incl)
 
 emitWriteClientModule :: Text -> Schema -> ModelInclude -> Text
 emitWriteClientModule moduleName schema incl =
@@ -681,10 +703,15 @@ exportLinesFromItems items =
     (first : rest) ->
       ("  ( " <> first) : map ("    " <>) rest ++ ["  )"]
 
-includeReadExportItems :: Schema -> ModelInclude -> [Text]
-includeReadExportItems schema incl =
+includeClientExportItems :: Schema -> ModelInclude -> [Text]
+includeClientExportItems schema incl =
   let root = lookupModel schema (includeRootModel incl)
    in includeReadFunctionExportItems
+        ++ [ "create,",
+             "update,",
+             "delete,",
+             "deleteMany,"
+           ]
         ++ includeReadPresetExportItems schema incl
         ++ includeRecordExportItems schema incl
         ++ [ "NoInclude (..),",
@@ -693,9 +720,14 @@ includeReadExportItems schema incl =
              "emptyQuery,",
              "OmitSelect (..),",
              "Picked (..),",
+             createTypeName root <> " (..),",
+             rowTypeName root <> " (..),",
              selectTypeName root <> " (..),",
              pickedTypeName root <> " (..),",
              selectDefaultName root <> ",",
+             updateTypeName root <> " (..),",
+             tableTypeName root <> ",",
+             fieldBinder root (primaryKeyField root) <> ",",
              pickedIncludeTypeName root incl <> " (..)"
            ]
 
@@ -717,8 +749,7 @@ includeReadPresetExportItems schema incl =
 
 includeRecordExportItems :: Schema -> ModelInclude -> [Text]
 includeRecordExportItems schema incl =
-  [includeName incl <> " (..),"]
-    ++ [name <> " (..)," | name <- nestedIncludeTypeNames schema incl]
+  (includeName incl <> " (..),") : [name <> " (..)," | name <- nestedIncludeTypeNames schema incl]
 
 writeClientTypeReexportItems :: Schema -> Model -> ModelInclude -> [Text]
 writeClientTypeReexportItems schema root incl =
@@ -760,22 +791,26 @@ nubExportItems = foldr go []
     go item acc | item `elem` acc = acc
     go item acc = item : acc
 
-includeReadImportLines :: Text -> Schema -> ModelInclude -> [Text]
-includeReadImportLines moduleName schema incl =
-  [ "import Poppy.Db (Db)",
+includeClientImportLines :: Text -> Schema -> ModelInclude -> [Text]
+includeClientImportLines moduleName schema incl =
+  [ "import Data.UUID (UUID)",
+    "import Poppy.Db (Db)",
+    "import qualified Poppy.Delete as Delete",
     "import Poppy.Errors (ORMError (..), requireFound)",
     "import qualified Poppy.Include as Include",
+    "import qualified Poppy.Insert as Insert",
     "import qualified Poppy.Operations as Ops",
     "import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)",
     "import Poppy.Select (OmitSelect (..), Picked (..))",
+    "import qualified Poppy.Update as Update",
     "import Poppy.Where (Where)",
     "import "
       <> schemaModule moduleName root
       <> " ("
-      <> tableTypeName root
-      <> ", "
+      <> createTypeName root
+      <> " (..), "
       <> rowTypeName root
-      <> ", "
+      <> " (..), "
       <> selectTypeName root
       <> " (..), "
       <> pickedTypeName root
@@ -787,6 +822,12 @@ includeReadImportLines moduleName schema incl =
       <> parsePickedName root
       <> ", "
       <> toPickedName root
+      <> ", "
+      <> tableTypeName root
+      <> ", "
+      <> updateTypeName root
+      <> " (..), "
+      <> fieldBinder root (primaryKeyField root)
       <> ")",
     includeModuleImportLine moduleName schema incl
   ]

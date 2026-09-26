@@ -228,3 +228,19 @@ selectSpec = do
           >>= assertRight
       fmap (.shelf.name) found `shouldBe` Just "Omelette"
       fmap (length . (.books)) found `shouldBe` Just 1
+
+    it "create and findMany share Schema.Client.Shelf" $ \TestEnv {envPool = pool} -> do
+      created <-
+        runDb pool (Shelf.create (Shelf.ShelfCreate {id = Nothing, name = "Pantry"}))
+          >>= assertRight
+      rows <-
+        runDb
+          pool
+          ( Shelf.findMany
+              Shelf.emptyQuery
+                { Shelf.include_ = Shelf.withBooksTags,
+                  Shelf.where_ = Just (eq shelfId created.id)
+                }
+          )
+      map ((.name) . (.shelf)) rows `shouldBe` ["Pantry"]
+      map ((.id) . (.shelf)) rows `shouldBe` [created.id]
