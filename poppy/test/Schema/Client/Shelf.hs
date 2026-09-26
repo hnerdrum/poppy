@@ -1,11 +1,21 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE NoFieldSelectors #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
+{- | Generated Client. Do not edit.
+
+Nested writes ('createNested' / 'updateNested'):
+  Set xs  — replace all children with xs
+  Ops o   — create, connect, disconnect, delete, update, upsert
+-}
 module Schema.Client.Shelf
   ( findMany,
     findUnique,
@@ -17,6 +27,14 @@ module Schema.Client.Shelf
     update,
     delete,
     deleteMany,
+    createNested,
+    updateNested,
+    ShelfWriteCreate (..),
+    ShelfWriteUpdate (..),
+    BookNestedCreate (..),
+    BooksWrite (..),
+    BookNestedOps (..),
+    emptyBookNestedOps,
     withBooksTags,
     noInclude,
     ShelfInclude (..),
@@ -40,8 +58,12 @@ module Schema.Client.Shelf
   )
 where
 
+import Data.Text (Text)
 import Data.UUID (UUID)
-import Poppy.Db (Db)
+import qualified Data.UUID.V4 as V4
+import Poppy.Core (fieldColumn)
+import Poppy.PG (toField)
+import Poppy.Db (Db, liftIO, transactionEither)
 import qualified Poppy.Delete as Delete
 import Poppy.Errors (ORMError (..), requireFound)
 import qualified Poppy.Include as Include
@@ -50,9 +72,10 @@ import qualified Poppy.Operations as Ops
 import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)
 import Poppy.Select (OmitSelect (..), Picked (..))
 import qualified Poppy.Update as Update
-import Poppy.Where (Where)
+import Poppy.Where (Where, and_, eq, in_)
 import Schema.Shelf (ShelfCreate (..), ShelfRow (..), ShelfSelect (..), ShelfPicked (..), shelfSelect, shelfSelectColumns, parseShelfPicked, toShelfPicked, ShelfTable, ShelfUpdate (..), shelfId)
 import Schema.ShelfInclude ( ShelfInclude (..), BookInclude (..), ChapterInclude (..), ShelfWithBooksTags (..), BookWithChapters (..), NoInclude (..), ResolveInclude)
+import Schema.Book (BookCreate (..), BookRow (..), BookUpdate (..), BookTable, bookId, bookShelfId)
 import Schema.Tag (TagRow (..))
 
 create :: ShelfCreate -> Db (Either ORMError ShelfRow)
@@ -60,6 +83,206 @@ create = Insert.insert @ShelfTable @ShelfRow
 
 update :: UUID -> ShelfUpdate -> Db (Either ORMError ShelfRow)
 update = Update.update @ShelfTable @ShelfRow
+
+data BookNestedCreate = BookNestedCreate
+  { id :: Maybe UUID, title :: Text
+  }
+  deriving (Show, Eq)
+
+data BookNestedOps = BookNestedOps
+  { create :: [BookNestedCreate]
+  , createMany :: [BookNestedCreate]
+  , connect :: [UUID]
+  , disconnect :: [UUID]
+  , delete :: [UUID]
+  , update :: [(UUID, BookNestedCreate)]
+  , upsert :: [BookNestedCreate]
+  }
+  deriving (Show, Eq)
+
+data BooksWrite = Set [BookNestedCreate] | Ops BookNestedOps
+  deriving (Show, Eq)
+
+emptyBookNestedOps :: BookNestedOps
+emptyBookNestedOps =
+  BookNestedOps
+    { create = []
+    , createMany = []
+    , connect = []
+    , disconnect = []
+    , delete = []
+    , update = []
+    , upsert = []
+    }
+
+data ShelfWriteCreate = ShelfWriteCreate
+  { root :: ShelfCreate
+  , books :: BooksWrite
+  }
+  deriving (Show, Eq)
+
+data ShelfWriteUpdate = ShelfWriteUpdate
+  { root :: ShelfUpdate
+  , books :: Maybe BooksWrite
+  }
+  deriving (Show, Eq)
+
+toBookCreate :: UUID -> BookNestedCreate -> BookCreate
+toBookCreate parentId nested =
+  BookCreate
+    { id = nested.id,
+      title = nested.title,
+      shelfId = parentId
+    }
+
+toBookUpdate :: BookNestedCreate -> BookUpdate
+toBookUpdate nested =
+  BookUpdate
+    { shelfId = Nothing,
+      title = Just nested.title
+    }
+
+sequenceNested :: [Db (Either ORMError ())] -> Db (Either ORMError ())
+sequenceNested [] = pure (Right ())
+sequenceNested (action : rest) = do
+  result <- action
+  case result of
+    Left err -> pure (Left err)
+    Right () -> sequenceNested rest
+
+applyBooksWrite :: UUID -> BooksWrite -> Db (Either ORMError ())
+applyBooksWrite parentId write =
+  case write of
+    Set items -> do
+      result <-
+        Delete.deleteWhere $
+          Delete.whereDelete (fieldColumn bookShelfId <> " = ?") [toField parentId] (Delete.emptyDelete @BookTable)
+      case result of
+        Left err -> pure (Left err)
+        Right _ -> insertNestedCreates parentId items
+    Ops ops -> applyBookNestedOps parentId ops
+
+insertNestedCreates :: UUID -> [BookNestedCreate] -> Db (Either ORMError ())
+insertNestedCreates parentId = go
+  where
+    go [] = pure (Right ())
+    go (nested : rest) = do
+      result <- Insert.insert @BookTable @BookRow (toBookCreate parentId nested)
+      case result of
+        Left err -> pure (Left err)
+        Right _ -> go rest
+
+applyBookNestedOps :: UUID -> BookNestedOps -> Db (Either ORMError ())
+applyBookNestedOps parentId ops =
+  sequenceNested
+    [ deleteNested parentId ops.delete
+    , deleteNested parentId ops.disconnect
+    , updateChildRows parentId ops.update
+    , upsertNested parentId ops.upsert
+    , insertNestedCreates parentId ops.create
+    , insertNestedCreateMany parentId ops.createMany
+    , connectNested parentId ops.connect
+    ]
+
+deleteNested :: UUID -> [UUID] -> Db (Either ORMError ())
+deleteNested _ [] = pure (Right ())
+deleteNested parentId ids = do
+  result <- Delete.deleteMany @BookTable (in_ bookId ids `and_` eq bookShelfId parentId)
+  pure $ case result of
+    Left err -> Left err
+    Right _ -> Right ()
+
+updateChildRows :: UUID -> [(UUID, BookNestedCreate)] -> Db (Either ORMError ())
+updateChildRows parentId = go
+  where
+    go [] = pure (Right ())
+    go ((childId, nested) : rest) = do
+      result <-
+        Update.updateBuilder @BookTable @BookRow $
+          Update.whereUpdate (fieldColumn bookId <> " = ?") [toField childId] $
+            Update.whereUpdate (fieldColumn bookShelfId <> " = ?") [toField parentId] $
+              Update.toUpdateBuilder @BookTable (toBookUpdate nested)
+      case result of
+        Left err -> pure (Left err)
+        Right _ -> go rest
+
+upsertNested :: UUID -> [BookNestedCreate] -> Db (Either ORMError ())
+upsertNested parentId = go
+  where
+    go [] = pure (Right ())
+    go (nested : rest) = do
+      result <-
+        Insert.insertBuilder @BookTable @BookRow $
+          Prelude.id $
+          Insert.toInsertBuilder @BookTable (toBookCreate parentId nested)
+      case result of
+        Left err -> pure (Left err)
+        Right _ -> go rest
+
+insertNestedCreateMany :: UUID -> [BookNestedCreate] -> Db (Either ORMError ())
+insertNestedCreateMany parentId = go
+  where
+    go [] = pure (Right ())
+    go (nested : rest) = do
+      result <-
+        Insert.tryExecuteInsert $
+          Prelude.id $
+          Insert.toInsertBuilder @BookTable (toBookCreate parentId nested)
+      case result of
+        Left err -> pure (Left err)
+        Right () -> go rest
+
+connectNested :: UUID -> [UUID] -> Db (Either ORMError ())
+connectNested parentId = go
+  where
+    go [] = pure (Right ())
+    go (childId : rest) = do
+      result <-
+        Update.updateBuilder @BookTable @BookRow $
+          Update.setField bookShelfId parentId $
+            Update.whereUpdate (fieldColumn bookId <> " = ?") [toField childId] $
+              Update.emptyUpdate @BookTable
+      case result of
+        Left err -> pure (Left err)
+        Right _ -> go rest
+
+createNested ::
+  (Include.ExecuteInclude ShelfTable include result) =>
+  include ->
+  ShelfWriteCreate ->
+  Db (Either ORMError result)
+createNested include input = transactionEither $ do
+  rootId <- liftIO $ maybe V4.nextRandom pure input.root.id
+  let rootInput =
+        ShelfCreate { id = Just rootId, name = input.root.name }
+  rootResult <-
+    Insert.insert @ShelfTable @ShelfRow rootInput
+  case rootResult of
+    Left err -> pure (Left err)
+    Right _ -> do
+      nestedResult <- applyBooksWrite rootId input.books
+      case nestedResult of
+        Left err -> pure (Left err)
+        Right () -> Include.findUniqueOrFail @ShelfTable include rootId
+
+updateNested ::
+  (Include.ExecuteInclude ShelfTable include result) =>
+  include ->
+  UUID ->
+  ShelfWriteUpdate ->
+  Db (Either ORMError result)
+updateNested include rootId input = transactionEither $ do
+  updateResult <-
+    Update.update @ShelfTable @ShelfRow rootId input.root
+  case updateResult of
+    Left err -> pure (Left err)
+    Right _ -> do
+      nestedResult <- case input.books of
+        Nothing -> pure (Right ())
+        Just write -> applyBooksWrite rootId write
+      case nestedResult of
+        Left err -> pure (Left err)
+        Right () -> Include.findUniqueOrFail @ShelfTable include rootId
 
 withBooksTags :: ShelfInclude
 withBooksTags =

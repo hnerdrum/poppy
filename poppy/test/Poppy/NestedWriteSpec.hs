@@ -1,3 +1,4 @@
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -6,82 +7,175 @@ module Poppy.NestedWriteSpec
   )
 where
 
-import Control.Exception (ErrorCall (..), throwIO, try)
 import Data.List (sort)
-import Poppy (runDb, transaction)
-import Poppy.Db (liftIO)
-import qualified Poppy.Delete as Delete
-import qualified Poppy.Insert as Insert
+import qualified Data.UUID.V4 as V4
+import Poppy (ORMError (..), runDb)
 import qualified Poppy.Operations as Ops
-import qualified Poppy.ShelfFixtures as ShelfFixtures
-import Poppy.Where (eq)
-import Schema.Book (BookCreate (..), BookRow (..), BookTable, bookShelfId)
-import Schema.Shelf (ShelfCreate (..), ShelfRow (..), ShelfTable)
+import Schema.Book (BookRow (..), BookTable)
+import qualified Schema.Client.Shelf as Shelf
+import Schema.Shelf (ShelfRow (..), ShelfTable)
+import Schema.ShelfInclude (BookWithChapters (..), ShelfWithBooksTags (..))
 import Support.Assert (assertRight)
 import Support.TestDb (TestEnv (..))
-import Test.Hspec (SpecWith, describe, it, shouldBe)
+import Test.Hspec (SpecWith, describe, expectationFailure, it, shouldBe)
 
 nestedWriteSpec :: SpecWith TestEnv
 nestedWriteSpec =
   describe "nested writes" $ do
-    it "create inserts a parent and children in one transaction" $ \TestEnv {envPool = pool} -> do
-      (shelf, books) <-
-        runDb pool $
-          transaction $ do
-            created <-
-              Insert.insert @ShelfTable @ShelfRow (ShelfCreate {id = Nothing, name = "fiction"})
-                >>= either (liftIO . fail . show) pure
-            dune <-
-              Insert.insert @BookTable @BookRow (BookCreate {id = Nothing, shelfId = created.id, title = "Dune"})
-                >>= either (liftIO . fail . show) pure
-            neuro <-
-              Insert.insert @BookTable @BookRow (BookCreate {id = Nothing, shelfId = created.id, title = "Neuromancer"})
-                >>= either (liftIO . fail . show) pure
-            pure (created, [dune, neuro])
-      shelf.name `shouldBe` "fiction"
-      sort (map (.title) books) `shouldBe` ["Dune", "Neuromancer"]
+    it "createNested inserts a parent and children in one transaction" $ \TestEnv {envPool = pool} -> do
+      result <-
+        runDb
+          pool
+          ( Shelf.createNested
+              Shelf.withBooksTags
+              Shelf.ShelfWriteCreate
+                { root = Shelf.ShelfCreate {id = Nothing, name = "fiction"},
+                  books =
+                    Shelf.Set
+                      [ Shelf.BookNestedCreate {id = Nothing, title = "Dune"},
+                        Shelf.BookNestedCreate {id = Nothing, title = "Neuromancer"}
+                      ]
+                }
+          )
+          >>= assertRight
+      let nested = result :: ShelfWithBooksTags
+      nested.shelf.name `shouldBe` "fiction"
+      sort (map ((.title) . (.book)) nested.books) `shouldBe` ["Dune", "Neuromancer"]
 
-    it "replace-all children wipes then reinserts" $ \TestEnv {envPool = pool} -> do
-      shelf <- ShelfFixtures.insertShelf pool "fiction"
-      _ <- ShelfFixtures.insertBook pool shelf.id "Dune"
-      _ <- ShelfFixtures.insertBook pool shelf.id "Neuromancer"
-      runDb pool $ do
-        _ <- Delete.deleteMany @BookTable (eq bookShelfId shelf.id)
-        _ <- Insert.insert @BookTable @BookRow (BookCreate {id = Nothing, shelfId = shelf.id, title = "Hyperion"}) >>= either (liftIO . fail . show) pure
-        pure ()
-      remaining <- runDb pool (Ops.findMany @BookTable @BookRow id)
-      map (.title) remaining `shouldBe` ["Hyperion"]
+    it "Set replaces all children" $ \TestEnv {envPool = pool} -> do
+      created <-
+        runDb
+          pool
+          ( Shelf.createNested
+              Shelf.withBooksTags
+              Shelf.ShelfWriteCreate
+                { root = Shelf.ShelfCreate {id = Nothing, name = "fiction"},
+                  books =
+                    Shelf.Set
+                      [ Shelf.BookNestedCreate {id = Nothing, title = "Dune"},
+                        Shelf.BookNestedCreate {id = Nothing, title = "Neuromancer"}
+                      ]
+                }
+          )
+          >>= assertRight
+      let createdNested = created :: ShelfWithBooksTags
+      updated <-
+        runDb
+          pool
+          ( Shelf.updateNested
+              Shelf.withBooksTags
+              createdNested.shelf.id
+              Shelf.ShelfWriteUpdate
+                { root = Shelf.ShelfUpdate {name = Nothing},
+                  books = Just (Shelf.Set [Shelf.BookNestedCreate {id = Nothing, title = "Hyperion"}])
+                }
+          )
+          >>= assertRight
+      let updatedNested = updated :: ShelfWithBooksTags
+      map ((.title) . (.book)) updatedNested.books `shouldBe` ["Hyperion"]
 
-    it "create adds a child without wiping existing ones" $ \TestEnv {envPool = pool} -> do
-      shelf <- ShelfFixtures.insertShelf pool "fiction"
-      _ <- ShelfFixtures.insertBook pool shelf.id "Dune"
+    it "Ops create adds a child without wiping existing ones" $ \TestEnv {envPool = pool} -> do
+      created <-
+        runDb
+          pool
+          ( Shelf.createNested
+              Shelf.withBooksTags
+              Shelf.ShelfWriteCreate
+                { root = Shelf.ShelfCreate {id = Nothing, name = "fiction"},
+                  books = Shelf.Set [Shelf.BookNestedCreate {id = Nothing, title = "Dune"}]
+                }
+          )
+          >>= assertRight
+      let createdNested = created :: ShelfWithBooksTags
       _ <-
-        runDb pool (Insert.insert @BookTable @BookRow (BookCreate {id = Nothing, shelfId = shelf.id, title = "Neuromancer"}))
+        runDb
+          pool
+          ( Shelf.updateNested
+              Shelf.withBooksTags
+              createdNested.shelf.id
+              Shelf.ShelfWriteUpdate
+                { root = Shelf.ShelfUpdate {name = Nothing},
+                  books =
+                    Just
+                      ( Shelf.Ops
+                          Shelf.BookNestedOps
+                            { create = [Shelf.BookNestedCreate {id = Nothing, title = "Neuromancer"}],
+                              createMany = [],
+                              connect = [],
+                              disconnect = [],
+                              delete = [],
+                              update = [],
+                              upsert = []
+                            }
+                      )
+                }
+          )
           >>= assertRight
       remaining <- runDb pool (Ops.findMany @BookTable @BookRow id)
       sort (map (.title) remaining) `shouldBe` ["Dune", "Neuromancer"]
 
-    it "delete removes a child by id" $ \TestEnv {envPool = pool} -> do
-      shelf <- ShelfFixtures.insertShelf pool "fiction"
-      dune <- ShelfFixtures.insertBook pool shelf.id "Dune"
-      _ <- ShelfFixtures.insertBook pool shelf.id "Neuromancer"
-      deleted <- runDb pool (Ops.delete @BookTable dune.id) >>= assertRight
-      deleted `shouldBe` 1
+    it "Ops delete removes a child by id" $ \TestEnv {envPool = pool} -> do
+      created <-
+        runDb
+          pool
+          ( Shelf.createNested
+              Shelf.withBooksTags
+              Shelf.ShelfWriteCreate
+                { root = Shelf.ShelfCreate {id = Nothing, name = "fiction"},
+                  books =
+                    Shelf.Set
+                      [ Shelf.BookNestedCreate {id = Nothing, title = "Dune"},
+                        Shelf.BookNestedCreate {id = Nothing, title = "Neuromancer"}
+                      ]
+                }
+          )
+          >>= assertRight
+      let createdNested = created :: ShelfWithBooksTags
+          duneId = head [b.book.id | b <- createdNested.books, b.book.title == "Dune"]
+      _ <-
+        runDb
+          pool
+          ( Shelf.updateNested
+              Shelf.withBooksTags
+              createdNested.shelf.id
+              Shelf.ShelfWriteUpdate
+                { root = Shelf.ShelfUpdate {name = Nothing},
+                  books =
+                    Just
+                      ( Shelf.Ops
+                          Shelf.BookNestedOps
+                            { create = [],
+                              createMany = [],
+                              connect = [],
+                              disconnect = [],
+                              delete = [duneId],
+                              update = [],
+                              upsert = []
+                            }
+                      )
+                }
+          )
+          >>= assertRight
       remaining <- runDb pool (Ops.findMany @BookTable @BookRow id)
       map (.title) remaining `shouldBe` ["Neuromancer"]
 
-    it "transaction rolls back nested inserts when the action throws" $ \TestEnv {envPool = pool} -> do
-      _ <-
-        try @ErrorCall $
-          runDb pool $
-            transaction $ do
-              created <-
-                Insert.insert @ShelfTable @ShelfRow (ShelfCreate {id = Nothing, name = "rollback"})
-                  >>= either (liftIO . fail . show) pure
-              _ <-
-                Insert.insert @BookTable @BookRow (BookCreate {id = Nothing, shelfId = created.id, title = "Lost"})
-                  >>= either (liftIO . fail . show) pure
-              liftIO $ throwIO (ErrorCall "boom")
+    it "createNested rolls back the parent when a child write fails" $ \TestEnv {envPool = pool} -> do
+      fixed <- V4.nextRandom
+      result <-
+        runDb pool $
+          Shelf.createNested
+            Shelf.withBooksTags
+            Shelf.ShelfWriteCreate
+              { root = Shelf.ShelfCreate {id = Nothing, name = "rollback"},
+                books =
+                  Shelf.Set
+                    [ Shelf.BookNestedCreate {id = Just fixed, title = "Lost"},
+                      Shelf.BookNestedCreate {id = Just fixed, title = "Dup"}
+                    ]
+              }
+      case result of
+        Left (UniqueViolation _) -> pure ()
+        other -> expectationFailure ("expected UniqueViolation, got " <> show other)
       shelves <- runDb pool (Ops.findMany @ShelfTable @ShelfRow id)
       books <- runDb pool (Ops.findMany @BookTable @BookRow id)
       shelves `shouldBe` []

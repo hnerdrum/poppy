@@ -3,8 +3,6 @@
 module Poppy.Codegen.Emit.Client
   ( emitClientModule,
     emitSimpleClientModule,
-    emitWriteClientModule,
-    nestedWriteRelation,
   )
 where
 
@@ -114,36 +112,6 @@ emitSimpleClientModule moduleName model =
 emitIncludeClientModule :: Text -> Schema -> ModelInclude -> Text
 emitIncludeClientModule moduleName schema incl =
   T.unlines
-    ( [ "{-# LANGUAGE FlexibleContexts #-}",
-        "{-# LANGUAGE FlexibleInstances #-}",
-        "{-# LANGUAGE MultiParamTypeClasses #-}",
-        "{-# LANGUAGE NamedFieldPuns #-}",
-        "{-# LANGUAGE RecordWildCards #-}",
-        "{-# LANGUAGE TypeApplications #-}",
-        "{-# LANGUAGE TypeFamilies #-}",
-        "",
-        "module " <> moduleName
-      ]
-        ++ exportLinesFromItems (includeClientExportItems schema incl)
-        ++ ["where", ""]
-        ++ includeClientImportLines moduleName schema incl
-    )
-    <> "\n"
-    <> intercalateSections
-      ( [ emitCreateFn root,
-          emitUpdateFn root
-        ]
-          ++ emitIncludeReadDefinitions schema incl False
-          ++ [ emitDeleteFn root,
-               emitDeleteManyFn root
-             ]
-      )
-  where
-    root = lookupModel schema (includeRootModel incl)
-
-emitWriteClientModule :: Text -> Schema -> ModelInclude -> Text
-emitWriteClientModule moduleName schema incl =
-  T.unlines
     ( [ "{-# LANGUAGE AllowAmbiguousTypes #-}",
         "{-# LANGUAGE DuplicateRecordFields #-}",
         "{-# LANGUAGE FlexibleContexts #-}",
@@ -156,116 +124,55 @@ emitWriteClientModule moduleName schema incl =
         "{-# LANGUAGE TypeApplications #-}",
         "{-# LANGUAGE TypeFamilies #-}",
         "",
+        emitIncludeClientHeader schema root incl,
         "module " <> moduleName
       ]
-        ++ exportLinesFromItems
-          ( nubExportItems $
-              includeReadFunctionExportItems
-                ++ [ "create,",
-                     "update,",
-                     "delete,",
-                     "deleteMany,",
-                     writeCreateTypeName root <> " (..),",
-                     writeUpdateTypeName root <> " (..),",
-                     nestedCreateTypeName child <> " (..),",
-                     nestedWriteTypeName root rel <> " (..),",
-                     nestedOpsTypeName child <> " (..),",
-                     emptyNestedOpsName child <> ","
-                   ]
-                ++ includeReadPresetExportItems schema incl
-                ++ includeRecordExportItems schema incl
-                ++ [ "ResolveInclude,",
-                     queryTypeName root <> " (..),",
-                     "emptyQuery,",
-                     fieldBinder root (primaryKeyField root) <> ","
-                   ]
-                ++ writeClientTypeReexportItems schema root incl
-          )
+        ++ exportLinesFromItems (includeClientExportItems schema incl)
         ++ ["where", ""]
-        ++ [ "import Data.UUID (UUID)",
-             "import qualified Data.UUID.V4 as V4",
-             "import Poppy.PG (toField)",
-             "import Poppy.Core (fieldColumn)",
-             "import Poppy.Db (Db, liftIO, transaction)",
-             "import qualified Poppy.Delete as Delete",
-             "import Poppy.Errors (ORMError (..), requireFound)",
-             "import qualified Poppy.Include as Include",
-             "import qualified Poppy.Insert as Insert",
-             "import "
-               <> schemaModule moduleName root
-               <> " ( "
-               <> createTypeName root
-               <> " (..), "
-               <> rowTypeName root
-               <> " (..), "
-               <> selectTypeName root
-               <> " (..), "
-               <> pickedTypeName root
-               <> " (..), "
-               <> selectDefaultName root
-               <> ", "
-               <> selectColumnsFnName root
-               <> ", "
-               <> parsePickedName root
-               <> ", "
-               <> toPickedName root
-               <> ", "
-               <> tableTypeName root
-               <> ", "
-               <> updateTypeName root
-               <> " (..), "
-               <> fieldBinder root (primaryKeyField root)
-               <> ")",
-             includeModuleImportLine moduleName schema incl,
-             "import "
-               <> schemaModule moduleName child
-               <> " ( "
-               <> createTypeName child
-               <> " (..), "
-               <> rowTypeName child
-               <> " (..), "
-               <> updateTypeName child
-               <> " (..), "
-               <> tableTypeName child
-               <> ", "
-               <> fieldBinder child (primaryKeyField child)
-               <> ", "
-               <> fieldBinder child (lookupField child (relForeignField rel))
-               <> ")",
-             "import qualified Poppy.Operations as Ops",
-             "import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)",
-             "import Poppy.Select (OmitSelect (..), Picked (..))",
-             "import Poppy.Where (Where, and_, eq, in_)",
-             "import qualified Poppy.Update as Update"
-           ]
-        ++ writeClientRelatedRowImportLines moduleName schema root child incl
-        ++ nestedEnumImports moduleName schema child
+        ++ includeClientImportLines moduleName schema incl
     )
     <> "\n"
     <> intercalateSections
-      ( [ emitWriteCreateType root child rel,
-          emitWriteUpdateType root rel,
-          emitNestedToChildCreate child rel,
-          emitNestedToChildUpdate child rel,
-          emitNestedWriteHelpers schema root child rel
+      ( [ emitCreateFn root,
+          emitUpdateFn root
         ]
-          ++ emitIncludeReadDefinitions schema incl True
-          ++ [ emitWriteCreate schema root incl rel,
-               emitWriteUpdate schema root incl rel,
-               emitDeleteFn root,
+          ++ nestedWriteSections
+          ++ emitIncludeReadDefinitions schema incl False
+          ++ [ emitDeleteFn root,
                emitDeleteManyFn root
              ]
       )
   where
     root = lookupModel schema (includeRootModel incl)
-    (rel, child) =
+    nestedWriteSections =
       case nestedWriteRelation schema root incl of
-        Just found -> found
-        Nothing ->
-          error $
-            "emitWriteClientModule: include "
-              <> T.unpack (includeName incl)
-              <> " has no owned-child hasMany (child FK matching the relation)"
+        Nothing -> []
+        Just (rel, child) ->
+          [ emitWriteCreateType root child rel,
+            emitWriteUpdateType root rel,
+            emitNestedToChildCreate child rel,
+            emitNestedToChildUpdate child rel,
+            emitNestedWriteHelpers schema root child rel,
+            emitWriteCreate schema root incl rel,
+            emitWriteUpdate schema root incl rel
+          ]
+
+emitIncludeClientHeader :: Schema -> Model -> ModelInclude -> Text
+emitIncludeClientHeader schema root incl =
+  T.intercalate "\n" $
+    ["{- | Generated Client. Do not edit."]
+      ++ nestedDocs
+      ++ ["-}"]
+  where
+    nestedDocs =
+      case nestedWriteRelation schema root incl of
+        Nothing -> []
+        Just _ ->
+          [ "",
+            "Nested writes ('createNested' / 'updateNested'):",
+            "  Set xs  — replace all children with xs",
+            "  Ops o   — create, connect, disconnect, delete, update, upsert"
+          ]
 
 emitWriteCreateType :: Model -> Model -> RelationSpec -> Text
 emitWriteCreateType root child rel =
@@ -330,11 +237,15 @@ emitNestedCreateType child rel =
 
 nestedFieldLines :: Model -> RelationSpec -> [Text]
 nestedFieldLines child rel =
-  [ fieldName f <> " :: " <> hsType (fieldType f)
+  [ fieldName f <> " :: Maybe " <> hsType (fieldType f)
     | f <- modelFields child,
-      not (fieldIsPrimaryKey f),
-      fieldName f /= relForeignField rel
+      fieldIsPrimaryKey f
   ]
+    ++ [ fieldName f <> " :: " <> hsType (fieldType f)
+         | f <- modelFields child,
+           not (fieldIsPrimaryKey f),
+           fieldName f /= relForeignField rel
+       ]
 
 emitNestedToChildCreate :: Model -> RelationSpec -> Text
 emitNestedToChildCreate child rel =
@@ -342,7 +253,7 @@ emitNestedToChildCreate child rel =
     [ "to" <> createTypeName child <> " :: UUID -> " <> nestedCreateTypeName child <> " -> " <> createTypeName child,
       "to" <> createTypeName child <> " parentId nested =",
       "  " <> createTypeName child,
-      "    { id = Nothing,"
+      "    { " <> fieldName pkField <> " = nested." <> fieldName pkField <> ","
     ]
       ++ [ "      " <> fieldName f <> " = nested." <> fieldName f <> ","
            | f <- modelFields child,
@@ -350,6 +261,8 @@ emitNestedToChildCreate child rel =
              fieldName f /= relForeignField rel
          ]
       ++ ["      " <> relForeignField rel <> " = parentId", "    }"]
+  where
+    pkField = primaryKeyField child
 
 emitNestedToChildUpdate :: Model -> RelationSpec -> Text
 emitNestedToChildUpdate child rel =
@@ -407,7 +320,7 @@ emitNestedWriteHelpers schema root child rel =
       "  sequenceNested",
       "    [ deleteNested parentId ops.delete",
       "    , deleteNested parentId ops.disconnect",
-      "    , updateNested parentId ops.update",
+      "    , updateChildRows parentId ops.update",
       "    , upsertNested parentId ops.upsert",
       "    , insertNestedCreates parentId ops.create",
       "    , insertNestedCreateMany parentId ops.createMany",
@@ -422,8 +335,8 @@ emitNestedWriteHelpers schema root child rel =
       "    Left err -> Left err",
       "    Right _ -> Right ()",
       "",
-      "updateNested :: UUID -> [(UUID, " <> nestedCreateTypeName child <> ")] -> Db (Either ORMError ())",
-      "updateNested parentId = go",
+      "updateChildRows :: UUID -> [(UUID, " <> nestedCreateTypeName child <> ")] -> Db (Either ORMError ())",
+      "updateChildRows parentId = go",
       "  where",
       "    go [] = pure (Right ())",
       "    go ((childId, nested) : rest) = do",
@@ -551,12 +464,12 @@ emitWriteCreate _schema root _incl rel =
           "        Right () -> Include.findUniqueOrFail @" <> table <> " include rootId"
         ]
    in T.unlines $
-        [ "create ::",
+        [ "createNested ::",
           "  (Include.ExecuteInclude " <> table <> " include result) =>",
           "  include ->",
           "  " <> writeCreateTypeName root <> " ->",
           "  Db (Either ORMError result)",
-          "create include input = transaction $ do"
+          "createNested include input = transactionEither $ do"
         ]
           ++ createBody
 
@@ -579,13 +492,13 @@ emitWriteUpdate _schema root _incl rel =
           "        Right () -> Include.findUniqueOrFail @" <> table <> " include rootId"
         ]
    in T.unlines $
-        [ "update ::",
+        [ "updateNested ::",
           "  (Include.ExecuteInclude " <> table <> " include result) =>",
           "  include ->",
           "  UUID ->",
           "  " <> writeUpdateTypeName root <> " ->",
           "  Db (Either ORMError result)",
-          "update include rootId input = transaction $ do"
+          "updateNested include rootId input = transactionEither $ do"
         ]
           ++ updateBody
 
@@ -712,6 +625,7 @@ includeClientExportItems schema incl =
              "delete,",
              "deleteMany,"
            ]
+        ++ nestedWriteExportItems schema root incl
         ++ includeReadPresetExportItems schema incl
         ++ includeRecordExportItems schema incl
         ++ [ "NoInclude (..),",
@@ -730,6 +644,21 @@ includeClientExportItems schema incl =
              fieldBinder root (primaryKeyField root) <> ",",
              pickedIncludeTypeName root incl <> " (..)"
            ]
+
+nestedWriteExportItems :: Schema -> Model -> ModelInclude -> [Text]
+nestedWriteExportItems schema root incl =
+  case nestedWriteRelation schema root incl of
+    Nothing -> []
+    Just (rel, child) ->
+      [ "createNested,",
+        "updateNested,",
+        writeCreateTypeName root <> " (..),",
+        writeUpdateTypeName root <> " (..),",
+        nestedCreateTypeName child <> " (..),",
+        nestedWriteTypeName root rel <> " (..),",
+        nestedOpsTypeName child <> " (..),",
+        emptyNestedOpsName child <> ","
+      ]
 
 includeReadFunctionExportItems :: [Text]
 includeReadFunctionExportItems =
@@ -751,98 +680,107 @@ includeRecordExportItems :: Schema -> ModelInclude -> [Text]
 includeRecordExportItems schema incl =
   (includeName incl <> " (..),") : [name <> " (..)," | name <- nestedIncludeTypeNames schema incl]
 
-writeClientTypeReexportItems :: Schema -> Model -> ModelInclude -> [Text]
-writeClientTypeReexportItems schema root incl =
-  nubExportItems $
-    [ createTypeName root <> " (..),",
-      rowTypeName root <> " (..),",
-      selectTypeName root <> " (..),",
-      pickedTypeName root <> " (..),",
-      selectDefaultName root <> ",",
-      "OmitSelect (..),",
-      "Picked (..),",
-      pickedIncludeTypeName root incl <> " (..),",
-      updateTypeName root <> " (..),",
-      includeResultName root incl <> " (..),"
-    ]
-      ++ concatMap (includeNestedTypeReexports schema root) (includeTree incl)
-      ++ inlineEnumReexportItems schema
-
-includeNestedTypeReexports :: Schema -> Model -> IncludeTree -> [Text]
-includeNestedTypeReexports schema parent edge =
-  let rel = lookupRelation parent (includeRelation edge)
-      child = lookupModel schema (relToModel rel)
-      kids = includeChildren edge
-      nestedWith
-        | not (null kids) =
-            [resultTypeName schema child kids <> " (..),"]
-        | otherwise = []
-   in nestedWith
-        ++ [rowTypeName child <> " (..),"]
-        ++ concatMap (includeNestedTypeReexports schema child) kids
-
-inlineEnumReexportItems :: Schema -> [Text]
-inlineEnumReexportItems schema =
-  [enumName enum <> " (..)," | enum <- schemaEnums schema, isNothing (enumImport enum)]
-
-nubExportItems :: [Text] -> [Text]
-nubExportItems = foldr go []
-  where
-    go item acc | item `elem` acc = acc
-    go item acc = item : acc
-
 includeClientImportLines :: Text -> Schema -> ModelInclude -> [Text]
 includeClientImportLines moduleName schema incl =
-  [ "import Data.UUID (UUID)",
-    "import Poppy.Db (Db)",
-    "import qualified Poppy.Delete as Delete",
-    "import Poppy.Errors (ORMError (..), requireFound)",
-    "import qualified Poppy.Include as Include",
-    "import qualified Poppy.Insert as Insert",
-    "import qualified Poppy.Operations as Ops",
-    "import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)",
-    "import Poppy.Select (OmitSelect (..), Picked (..))",
-    "import qualified Poppy.Update as Update",
-    "import Poppy.Where (Where)",
-    "import "
-      <> schemaModule moduleName root
-      <> " ("
-      <> createTypeName root
-      <> " (..), "
-      <> rowTypeName root
-      <> " (..), "
-      <> selectTypeName root
-      <> " (..), "
-      <> pickedTypeName root
-      <> " (..), "
-      <> selectDefaultName root
-      <> ", "
-      <> selectColumnsFnName root
-      <> ", "
-      <> parsePickedName root
-      <> ", "
-      <> toPickedName root
-      <> ", "
-      <> tableTypeName root
-      <> ", "
-      <> updateTypeName root
-      <> " (..), "
-      <> fieldBinder root (primaryKeyField root)
-      <> ")",
-    includeModuleImportLine moduleName schema incl
-  ]
-    ++ includeLeafRowImportLines moduleName schema root incl
+  nestedPreludeImports nested
+    ++ [ dbImport nested,
+         "import qualified Poppy.Delete as Delete",
+         "import Poppy.Errors (ORMError (..), requireFound)",
+         "import qualified Poppy.Include as Include",
+         "import qualified Poppy.Insert as Insert",
+         "import qualified Poppy.Operations as Ops",
+         "import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)",
+         "import Poppy.Select (OmitSelect (..), Picked (..))",
+         "import qualified Poppy.Update as Update",
+         whereImport nested,
+         "import "
+           <> schemaModule moduleName root
+           <> " ("
+           <> createTypeName root
+           <> " (..), "
+           <> rowTypeName root
+           <> " (..), "
+           <> selectTypeName root
+           <> " (..), "
+           <> pickedTypeName root
+           <> " (..), "
+           <> selectDefaultName root
+           <> ", "
+           <> selectColumnsFnName root
+           <> ", "
+           <> parsePickedName root
+           <> ", "
+           <> toPickedName root
+           <> ", "
+           <> tableTypeName root
+           <> ", "
+           <> updateTypeName root
+           <> " (..), "
+           <> fieldBinder root (primaryKeyField root)
+           <> ")",
+         includeModuleImportLine moduleName schema incl
+       ]
+    ++ nestedChildImport moduleName nested
+    ++ includeLeafRowImportLines moduleName schema root incl excludeNames
+    ++ nestedChildEnumImports moduleName schema nested
   where
     root = lookupModel schema (includeRootModel incl)
+    nested = nestedWriteRelation schema root incl
+    excludeNames = maybe [] (\(_, child) -> [modelName child]) nested
 
-includeLeafRowImportLines :: Text -> Schema -> Model -> ModelInclude -> [Text]
-includeLeafRowImportLines moduleName schema root incl =
+nestedPreludeImports :: Maybe (RelationSpec, Model) -> [Text]
+nestedPreludeImports Nothing =
+  ["import Data.UUID (UUID)"]
+nestedPreludeImports (Just _) =
+  [ "import Data.Text (Text)",
+    "import Data.UUID (UUID)",
+    "import qualified Data.UUID.V4 as V4",
+    "import Poppy.Core (fieldColumn)",
+    "import Poppy.PG (toField)"
+  ]
+
+dbImport :: Maybe (RelationSpec, Model) -> Text
+dbImport Nothing = "import Poppy.Db (Db)"
+dbImport (Just _) = "import Poppy.Db (Db, liftIO, transactionEither)"
+
+whereImport :: Maybe (RelationSpec, Model) -> Text
+whereImport Nothing = "import Poppy.Where (Where)"
+whereImport (Just _) = "import Poppy.Where (Where, and_, eq, in_)"
+
+nestedChildImport :: Text -> Maybe (RelationSpec, Model) -> [Text]
+nestedChildImport _ Nothing = []
+nestedChildImport moduleName (Just (rel, child)) =
+  [ "import "
+      <> schemaModule moduleName child
+      <> " ("
+      <> createTypeName child
+      <> " (..), "
+      <> rowTypeName child
+      <> " (..), "
+      <> updateTypeName child
+      <> " (..), "
+      <> tableTypeName child
+      <> ", "
+      <> fieldBinder child (primaryKeyField child)
+      <> ", "
+      <> fieldBinder child (lookupField child (relForeignField rel))
+      <> ")"
+  ]
+
+nestedChildEnumImports :: Text -> Schema -> Maybe (RelationSpec, Model) -> [Text]
+nestedChildEnumImports _ _ Nothing = []
+nestedChildEnumImports moduleName schema (Just (_, child)) =
+  nestedEnumImports moduleName schema child
+
+includeLeafRowImportLines :: Text -> Schema -> Model -> ModelInclude -> [Text] -> [Text]
+includeLeafRowImportLines moduleName schema root incl excludeNames =
   [ "import "
       <> schemaModule moduleName model
       <> " ("
       <> rowTypeName model
       <> " (..))"
-    | model <- leafRowModels schema root (includeTree incl)
+    | model <- leafRowModels schema root (includeTree incl),
+      modelName model `notElem` excludeNames
   ]
 
 leafRowModels :: Schema -> Model -> [IncludeTree] -> [Model]
@@ -876,27 +814,6 @@ nestedWithTypeImportNames schema parent edges =
       let kids = includeChildren edge,
       not (null kids)
   ]
-
-writeClientRelatedRowImportLines :: Text -> Schema -> Model -> Model -> ModelInclude -> [Text]
-writeClientRelatedRowImportLines moduleName schema root child incl =
-  [ "import "
-      <> schemaModule moduleName model
-      <> " ("
-      <> rowTypeName model
-      <> " (..))"
-    | model <- includeTreeModels schema root (includeTree incl),
-      modelName model `notElem` [modelName root, modelName child]
-  ]
-
-includeTreeModels :: Schema -> Model -> [IncludeTree] -> [Model]
-includeTreeModels schema parent =
-  concatMap (includeEdgeModels schema parent)
-
-includeEdgeModels :: Schema -> Model -> IncludeTree -> [Model]
-includeEdgeModels schema parent edge =
-  let rel = lookupRelation parent (includeRelation edge)
-      child = lookupModel schema (relToModel rel)
-   in child : includeTreeModels schema child (includeChildren edge)
 
 nestedIncludeTypeNames :: Schema -> ModelInclude -> [Text]
 nestedIncludeTypeNames schema incl =

@@ -6,16 +6,19 @@ module Poppy.Db
     runDb,
     withTransaction,
     transaction,
+    transactionEither,
     withConn,
     liftIO,
   )
 where
 
+import Control.Exception (handle, throwIO)
 import Control.Monad.IO.Class (MonadIO (..), liftIO)
 import qualified Data.ByteString.Char8 as B8
 import Data.Pool (Pool, defaultPoolConfig, destroyAllResources, newPool, setNumStripes, withResource)
 import Database.PostgreSQL.Simple (Connection)
 import qualified Database.PostgreSQL.Simple as PG
+import Poppy.Errors (ORMError)
 
 newtype DbPool = DbPool {unDbPool :: Pool Connection}
 
@@ -67,3 +70,15 @@ withTransaction (DbPool pool) (Db action) =
 -- | Wrap an in-flight 'Db' action in @BEGIN@/@COMMIT@ (vs 'withTransaction', which takes a pool).
 transaction :: Db a -> Db a
 transaction (Db action) = Db $ \conn -> PG.withTransaction conn (action conn)
+
+-- | Like 'transaction', but 'Left' also rolls back. @postgresql-simple@ only
+-- undoes the transaction when the action throws; 'ORMError' is rethrown inside
+-- the transaction and caught afterwards so callers still see 'Either'.
+transactionEither :: Db (Either ORMError a) -> Db (Either ORMError a)
+transactionEither (Db action) = Db $ \conn ->
+  handle (pure . Left) $
+    PG.withTransaction conn $ do
+      result <- action conn
+      case result of
+        Left err -> throwIO err
+        Right val -> pure (Right val)

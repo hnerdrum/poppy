@@ -36,4 +36,8 @@ emitClientSpec =
           actual = emitClientModule "Schema.Client.Shelf" shelfSchema shelf
       T.strip actual `shouldBe` T.strip expected
       actual `shouldSatisfy` T.isInfixOf "create ::"
+      actual `shouldSatisfy` T.isInfixOf "createNested ::"
+      actual `shouldSatisfy` T.isInfixOf "updateNested ::"
+      actual `shouldSatisfy` T.isInfixOf "data BooksWrite"
+      actual `shouldSatisfy` T.isInfixOf "Set xs"
       actual `shouldSatisfy` T.isInfixOf "include_ :: include"

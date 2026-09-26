@@ -80,6 +80,7 @@ module Poppy
     runDb,
     withTransaction,
     transaction,
+    transactionEither,
     Db (..),
     DbPool (..),
     connect,
@@ -94,7 +95,7 @@ where
 import Database.PostgreSQL.Simple.ToField (toField)
 import Poppy.Column
 import Poppy.Core
-import Poppy.Db (Db (..), DbPool (..), closePool, connect, runDb, transaction, withTransaction)
+import Poppy.Db (Db (..), DbPool (..), closePool, connect, runDb, transaction, transactionEither, withTransaction)
 import Poppy.Delete
 import Poppy.Errors
 import Poppy.Insert
