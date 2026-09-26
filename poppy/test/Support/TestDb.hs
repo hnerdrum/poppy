@@ -20,8 +20,10 @@ import Database.PostgreSQL.Simple.Types (Query (..))
 import Poppy.Core (Entity (..))
 import Poppy.Db (DbPool, closePool, connect, withConn)
 import Poppy.Sql (quoteIdent)
+import Schema.Author (AuthorTable)
 import Schema.Book (BookTable)
 import Schema.Chapter (ChapterTable)
+import Schema.Post (PostTable)
 import Schema.Section (SectionTable)
 import Schema.Shelf (ShelfTable)
 import Schema.Tag (TagTable)
@@ -92,6 +94,8 @@ resetTestData env = do
   truncateTable @BookTable env
   truncateTable @TagTable env
   truncateTable @ShelfTable env
+  truncateTable @PostTable env
+  truncateTable @AuthorTable env
 
 truncateTable ::
   forall table.

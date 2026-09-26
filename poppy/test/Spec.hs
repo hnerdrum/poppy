@@ -1,5 +1,7 @@
 module Main (main) where
 
+import Poppy.BelongsToSpec (belongsToSpec)
+import Poppy.EnumSpec (enumSpec)
 import Poppy.ErrorsSpec (errorsSpec)
 import Poppy.GroupSpec (groupSpec)
 import Poppy.IncludeSpec (includeSpec)
@@ -21,6 +23,8 @@ main = hspec $ do
     operationsSpec
       >> joinSpec
       >> includeSpec
+      >> belongsToSpec
+      >> enumSpec
       >> rawSpec
       >> selectSpec
       >> nestedWriteSpec
