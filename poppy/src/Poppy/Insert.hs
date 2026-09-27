@@ -32,7 +32,7 @@ import Database.PostgreSQL.Simple.FromRow (FromRow, fromRow)
 import Database.PostgreSQL.Simple.ToField (Action, ToField, toField)
 import Database.PostgreSQL.Simple.Types (Query (..))
 import Poppy.Core (Entity (..), Field (..), NullableValue (..))
-import Poppy.Db (Db (..))
+import Poppy.Db (Db, dbIO)
 import Poppy.Errors (ORMError (..), parseSingleton)
 import Poppy.Sql (catchSql, quoteIdent)
 
@@ -64,7 +64,7 @@ insertBuilder ::
   (FromRow result) =>
   InsertBuilder table ->
   Db (Either ORMError result)
-insertBuilder builder = Db $ \conn -> do
+insertBuilder builder = dbIO $ \conn -> do
   result <- catchSql (runInsertReturning conn builder)
   pure $
     case result of
@@ -80,13 +80,13 @@ insertReturning ::
   (FromRow result) =>
   InsertBuilder table ->
   Db [result]
-insertReturning builder = Db (`runInsertReturning` builder)
+insertReturning builder = dbIO (`runInsertReturning` builder)
 
 executeInsert :: InsertBuilder table -> Db ()
-executeInsert builder = Db (`runExecuteInsert` builder)
+executeInsert builder = dbIO (`runExecuteInsert` builder)
 
 tryExecuteInsert :: InsertBuilder table -> Db (Either ORMError ())
-tryExecuteInsert builder = Db $ \conn -> catchSql (runExecuteInsert conn builder)
+tryExecuteInsert builder = dbIO $ \conn -> catchSql (runExecuteInsert conn builder)
 
 emptyInsert :: forall table. (Entity table) => InsertBuilder table
 emptyInsert =

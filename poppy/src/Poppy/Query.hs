@@ -34,13 +34,14 @@ import Data.Int (Int64)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
+import Data.Text.Encoding.Error (lenientDecode)
 import Database.PostgreSQL.Simple (Only (..))
 import qualified Database.PostgreSQL.Simple as PGSimple
 import Database.PostgreSQL.Simple.FromRow (FromRow, RowParser, fromRow)
 import Database.PostgreSQL.Simple.ToField (Action)
 import Database.PostgreSQL.Simple.Types (Query (..))
 import Poppy.Core (Entity (..), Field (..))
-import Poppy.Db (Db (..))
+import Poppy.Db (Db, dbIO, logSql)
 import Poppy.Sql (quoteIdent)
 import Poppy.Where (Where, compileWhere)
 
@@ -177,10 +178,10 @@ runQuery :: (FromRow result) => QueryBuilder table -> Db [result]
 runQuery = runQueryWith fromRow
 
 runQueryWith :: RowParser result -> QueryBuilder table -> Db [result]
-runQueryWith parser qb =
-  Db $ \conn -> do
-    let (query, params) = buildQuery qb
-    PGSimple.queryWith parser conn query params
+runQueryWith parser qb = do
+  let (query, params) = buildQuery qb
+  logSql (queryText query)
+  dbIO $ \conn -> PGSimple.queryWith parser conn query params
 
 runQueryOne :: (FromRow result) => QueryBuilder table -> Db (Maybe result)
 runQueryOne qb = do
@@ -190,8 +191,12 @@ runQueryOne qb = do
     (x : _) -> Just x
 
 runCountQuery :: QueryBuilder table -> Db Int
-runCountQuery qb =
-  Db $ \conn -> do
-    let (query, params) = buildCountQuery qb
+runCountQuery qb = do
+  let (query, params) = buildCountQuery qb
+  logSql (queryText query)
+  dbIO $ \conn -> do
     [Only count] <- PGSimple.query conn query params
     pure (fromIntegral (count :: Int64))
+
+queryText :: Query -> Text
+queryText (Query bytes) = TE.decodeUtf8With lenientDecode bytes

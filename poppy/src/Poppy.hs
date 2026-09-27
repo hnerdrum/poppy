@@ -83,7 +83,11 @@ module Poppy
     transactionEither,
     Db (..),
     DbPool (..),
+    PoolConfig (..),
+    SqlLogger,
+    defaultPool,
     connect,
+    connectWith,
     closePool,
     queryRaw,
     executeRaw,
@@ -95,7 +99,7 @@ where
 import Database.PostgreSQL.Simple.ToField (toField)
 import Poppy.Column
 import Poppy.Core
-import Poppy.Db (Db (..), DbPool (..), closePool, connect, runDb, transaction, transactionEither, withTransaction)
+import Poppy.Db (Db (..), DbPool (..), PoolConfig (..), SqlLogger, closePool, connect, connectWith, defaultPool, runDb, transaction, transactionEither, withTransaction)
 import Poppy.Delete
 import Poppy.Errors
 import Poppy.Insert

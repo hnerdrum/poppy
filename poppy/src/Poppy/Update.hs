@@ -31,7 +31,7 @@ import Database.PostgreSQL.Simple.FromRow (FromRow, fromRow)
 import Database.PostgreSQL.Simple.ToField (Action, ToField, toField)
 import Database.PostgreSQL.Simple.Types (Query (..))
 import Poppy.Core (Entity (..), Field (..), NullableValue (..), PrimaryKeyType)
-import Poppy.Db (Db (..))
+import Poppy.Db (Db (..), dbIO)
 import Poppy.Errors (ORMError (..), parseSingleton)
 import qualified Poppy.Operations as Ops
 import Poppy.Query (buildWhereClause)
@@ -134,7 +134,7 @@ updateBuilder ::
 updateBuilder builder
   | null (ubWhere builder) =
       pure (Left (EmptyWhere "UPDATE requires a WHERE clause"))
-  | otherwise = Db $ \conn -> do
+  | otherwise = dbIO $ \conn -> do
       result <- catchSql (runUpdateReturning conn builder)
       pure $
         case result of
@@ -153,7 +153,7 @@ updateReturning ::
 updateReturning builder
   | null (ubWhere builder) =
       pure (Left (EmptyWhere "UPDATE requires a WHERE clause"))
-  | otherwise = Db $ \conn -> catchSql (runUpdateReturning conn builder)
+  | otherwise = dbIO $ \conn -> catchSql (runUpdateReturning conn builder)
 
 liftCurrentTime :: Db UTCTime
 liftCurrentTime = Db (const getCurrentTime)

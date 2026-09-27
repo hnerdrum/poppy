@@ -26,7 +26,7 @@ import Database.PostgreSQL.Simple.FromField (ResultError (..))
 import Database.PostgreSQL.Simple.FromRow (FromRow, fromRow)
 import Database.PostgreSQL.Simple.ToField (Action, ToField, toField)
 import Database.PostgreSQL.Simple.Types (Query (..))
-import Poppy.Db (Db (..))
+import Poppy.Db (Db (..), dbIO, logSql)
 import Poppy.Errors (DatabaseErrorInfo (..), DriverErrorKind (..), ORMError (..))
 
 newtype Param = Param {unParam :: Action}
@@ -41,17 +41,22 @@ quoteQualified :: Text -> Text -> Text
 quoteQualified alias col = quoteIdent alias <> "." <> quoteIdent col
 
 queryRaw :: (FromRow r) => Query -> [Param] -> Db [r]
-queryRaw query params =
-  Db $ \conn ->
+queryRaw query params = do
+  logSql (sqlText query)
+  dbIO $ \conn ->
     PGSimple.queryWith fromRow conn query (map unParam params)
 
 executeRaw :: Query -> [Param] -> Db Int
-executeRaw query params =
-  Db $ \conn ->
+executeRaw query params = do
+  logSql (sqlText query)
+  dbIO $ \conn ->
     fromIntegral <$> PGSimple.execute conn query (map unParam params)
 
+sqlText :: Query -> Text
+sqlText (Query bytes) = decodeUtf8With lenientDecode bytes
+
 catchDb :: Db a -> Db (Either ORMError a)
-catchDb (Db action) = Db $ \conn -> catchSql (action conn)
+catchDb (Db action) = Db $ \env -> catchSql (action env)
 
 catchSql :: IO a -> IO (Either ORMError a)
 catchSql action =

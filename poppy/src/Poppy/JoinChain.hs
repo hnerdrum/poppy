@@ -31,7 +31,7 @@ import Database.PostgreSQL.Simple.FromRow (FromRow, fromRow)
 import Database.PostgreSQL.Simple.ToField (Action)
 import Database.PostgreSQL.Simple.Types (Query (..))
 import Poppy.Core (Entity (..), Field (..))
-import Poppy.Db (Db (..))
+import Poppy.Db (Db, dbIO)
 import Poppy.Query (buildWhereClause)
 import Poppy.Relation (BelongsTo (..), HasMany (..), JoinType (..))
 import Poppy.Sql (quoteIdent, quoteQualified)
@@ -215,7 +215,7 @@ runJoinChain ::
   (FromRow result) =>
   JoinChain root ->
   Db [result]
-runJoinChain chain = Db (`runJoinChainConn` chain)
+runJoinChain chain = dbIO (`runJoinChainConn` chain)
 
 runJoinChainConn ::
   forall result root.

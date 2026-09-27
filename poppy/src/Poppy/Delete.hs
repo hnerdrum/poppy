@@ -22,7 +22,7 @@ import Database.PostgreSQL.Simple.FromRow (FromRow, fromRow)
 import Database.PostgreSQL.Simple.ToField (Action)
 import Database.PostgreSQL.Simple.Types (Query (..))
 import Poppy.Core (Entity (..))
-import Poppy.Db (Db (..))
+import Poppy.Db (Db, dbIO)
 import Poppy.Errors (ORMError (..))
 import Poppy.Query (buildWhereClause)
 import Poppy.Sql (catchSql, quoteIdent)
@@ -57,7 +57,7 @@ deleteWhere ::
 deleteWhere builder
   | null (dbWhere builder) =
       pure (Left (EmptyWhere "DELETE requires a WHERE clause"))
-  | otherwise = Db $ \conn -> catchSql (runDeleteWhere conn builder)
+  | otherwise = dbIO $ \conn -> catchSql (runDeleteWhere conn builder)
 
 deleteMany ::
   forall table.
@@ -77,7 +77,7 @@ deleteReturning ::
 deleteReturning builder
   | null (dbWhere builder) =
       pure (Left (EmptyWhere "DELETE requires a WHERE clause"))
-  | otherwise = Db $ \conn -> catchSql (runDeleteReturning conn builder)
+  | otherwise = dbIO $ \conn -> catchSql (runDeleteReturning conn builder)
 
 runDeleteWhere ::
   Connection ->
