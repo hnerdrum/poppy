@@ -47,6 +47,7 @@ library
       Poppy.Include
       Poppy.Insert
       Poppy.JoinChain
+      Poppy.Migrate
       Poppy.Operations
       Poppy.PG
       Poppy.Query
@@ -71,6 +72,8 @@ library
       base >=4.17 && <4.21
     , bytestring >=0.11 && <0.13
     , containers >=0.6 && <0.8
+    , directory ==1.3.*
+    , filepath >=1.4 && <1.6
     , mtl >=2.2 && <2.4
     , postgresql-simple >=0.6 && <0.8
     , resource-pool ==0.4.*
@@ -91,6 +94,7 @@ test-suite poppy-test
       Poppy.GroupSpec
       Poppy.IncludeSpec
       Poppy.JoinSpec
+      Poppy.MigrateSpec
       Poppy.NestedWriteSpec
       Poppy.OperationsSpec
       Poppy.RawSpec

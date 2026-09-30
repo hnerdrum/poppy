@@ -93,6 +93,8 @@ module Poppy
     executeRaw,
     param,
     catchDb,
+    applyMigrations,
+    MigrateError (..),
   )
 where
 
@@ -103,6 +105,7 @@ import Poppy.Db (Db (..), DbPool (..), PoolConfig (..), SqlLogger, closePool, co
 import Poppy.Delete
 import Poppy.Errors
 import Poppy.Insert
+import Poppy.Migrate (MigrateError (..), applyMigrations)
 import Poppy.Operations
 import Poppy.Query
 import Poppy.Relation
