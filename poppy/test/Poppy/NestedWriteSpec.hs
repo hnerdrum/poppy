@@ -27,7 +27,7 @@ nestedWriteSpec =
         runDb
           pool
           ( Shelf.createNested
-              Shelf.withBooksTags
+              shelfInclude
               Shelf.ShelfWriteCreate
                 { root = Shelf.ShelfCreate {id = Nothing, name = "fiction"},
                   books =
@@ -47,7 +47,7 @@ nestedWriteSpec =
         runDb
           pool
           ( Shelf.createNested
-              Shelf.withBooksTags
+              shelfInclude
               Shelf.ShelfWriteCreate
                 { root = Shelf.ShelfCreate {id = Nothing, name = "fiction"},
                   books =
@@ -63,7 +63,7 @@ nestedWriteSpec =
         runDb
           pool
           ( Shelf.updateNested
-              Shelf.withBooksTags
+              shelfInclude
               createdNested.shelf.id
               Shelf.ShelfWriteUpdate
                 { root = Shelf.ShelfUpdate {name = Nothing},
@@ -79,7 +79,7 @@ nestedWriteSpec =
         runDb
           pool
           ( Shelf.createNested
-              Shelf.withBooksTags
+              shelfInclude
               Shelf.ShelfWriteCreate
                 { root = Shelf.ShelfCreate {id = Nothing, name = "fiction"},
                   books = Shelf.Set [Shelf.BookNestedCreate {id = Nothing, title = "Dune"}]
@@ -91,7 +91,7 @@ nestedWriteSpec =
         runDb
           pool
           ( Shelf.updateNested
-              Shelf.withBooksTags
+              shelfInclude
               createdNested.shelf.id
               Shelf.ShelfWriteUpdate
                 { root = Shelf.ShelfUpdate {name = Nothing},
@@ -119,7 +119,7 @@ nestedWriteSpec =
         runDb
           pool
           ( Shelf.createNested
-              Shelf.withBooksTags
+              shelfInclude
               Shelf.ShelfWriteCreate
                 { root = Shelf.ShelfCreate {id = Nothing, name = "fiction"},
                   books =
@@ -136,7 +136,7 @@ nestedWriteSpec =
         runDb
           pool
           ( Shelf.updateNested
-              Shelf.withBooksTags
+              shelfInclude
               createdNested.shelf.id
               Shelf.ShelfWriteUpdate
                 { root = Shelf.ShelfUpdate {name = Nothing},
@@ -164,7 +164,7 @@ nestedWriteSpec =
       result <-
         runDb pool $
           Shelf.createNested
-            Shelf.withBooksTags
+            shelfInclude
             Shelf.ShelfWriteCreate
               { root = Shelf.ShelfCreate {id = Nothing, name = "rollback"},
                 books =
@@ -180,3 +180,10 @@ nestedWriteSpec =
       books <- runDb pool (Ops.findMany @BookTable @BookRow id)
       shelves `shouldBe` []
       books `shouldBe` []
+
+shelfInclude :: Shelf.ShelfInclude
+shelfInclude =
+  Shelf.ShelfInclude
+    { books = Just (Shelf.BookInclude {chapters = Just (Shelf.ChapterInclude {sections = True})}),
+      tags = True
+    }

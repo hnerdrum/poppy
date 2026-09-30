@@ -186,7 +186,7 @@ selectSpec = do
               }
           query =
             Shelf.ShelfQuery
-              { include_ = Shelf.withBooksTags,
+              { include_ = shelfInclude,
                 select_ = sel,
                 where_ = Just (eq shelfName "fiction"),
                 orderBy_ = [],
@@ -221,7 +221,7 @@ selectSpec = do
           pool
           ( Shelf.findUnique
               Shelf.emptyQuery
-                { Shelf.include_ = Shelf.withBooksTags,
+                { Shelf.include_ = shelfInclude,
                   Shelf.where_ = Just (eq shelfId shelf.id)
                 }
           )
@@ -238,9 +238,16 @@ selectSpec = do
           pool
           ( Shelf.findMany
               Shelf.emptyQuery
-                { Shelf.include_ = Shelf.withBooksTags,
+                { Shelf.include_ = shelfInclude,
                   Shelf.where_ = Just (eq shelfId created.id)
                 }
           )
       map ((.name) . (.shelf)) rows `shouldBe` ["Pantry"]
       map ((.id) . (.shelf)) rows `shouldBe` [created.id]
+
+shelfInclude :: Shelf.ShelfInclude
+shelfInclude =
+  Shelf.ShelfInclude
+    { books = Just (Shelf.BookInclude {chapters = Just (Shelf.ChapterInclude {sections = True})}),
+      tags = True
+    }

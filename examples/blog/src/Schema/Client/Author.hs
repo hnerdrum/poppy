@@ -38,7 +38,6 @@ module Schema.Client.Author
     PostsWrite (..),
     PostNestedOps (..),
     emptyPostNestedOps,
-    withPosts,
     noInclude,
     AuthorInclude (..),
     NoInclude (..),
@@ -295,10 +294,6 @@ updateNested include rootId input = transactionEither $ do
       case nestedResult of
         Left err -> pure (Left err)
         Right () -> Include.findUniqueOrFail @AuthorTable include rootId
-
-withPosts :: AuthorInclude
-withPosts =
-  AuthorInclude {posts = True}
 
 noInclude :: NoInclude
 noInclude = NoInclude AuthorInclude {posts = False}

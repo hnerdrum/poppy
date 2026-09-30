@@ -641,7 +641,7 @@ includeClientExportItems schema incl =
              "deleteMany,"
            ]
         ++ nestedWriteExportItems schema root incl
-        ++ includeReadPresetExportItems schema incl
+        ++ includeReadPresetExportItems
         ++ includeRecordExportItems schema incl
         ++ [ "NoInclude (..),",
              "ResolveInclude,",
@@ -685,11 +685,9 @@ includeReadFunctionExportItems =
     "count,"
   ]
 
-includeReadPresetExportItems :: Schema -> ModelInclude -> [Text]
-includeReadPresetExportItems schema incl =
-  [ fullPresetName schema incl <> ",",
-    "noInclude,"
-  ]
+includeReadPresetExportItems :: [Text]
+includeReadPresetExportItems =
+  ["noInclude,"]
 
 includeRecordExportItems :: Schema -> ModelInclude -> [Text]
 includeRecordExportItems schema incl =
@@ -849,8 +847,7 @@ collectNestedIncludeNames schema current =
 emitIncludeReadDefinitions :: Schema -> ModelInclude -> Bool -> [Text]
 emitIncludeReadDefinitions schema incl useRecordDot =
   let root = lookupModel schema (includeRootModel incl)
-   in [ emitFullIncludePreset schema incl,
-        emitNoIncludePreset schema incl,
+   in [ emitNoIncludePreset schema incl,
         emitPickedIncludeType schema root incl useRecordDot,
         emitIncludeQueryType root incl,
         emitIncludeEmptyQueryFn root,
@@ -1127,14 +1124,6 @@ emitDeleteManyFn model =
       "deleteMany = Delete.deleteMany @" <> tableTypeName model
     ]
 
-emitFullIncludePreset :: Schema -> ModelInclude -> Text
-emitFullIncludePreset schema incl =
-  T.unlines
-    [ fullPresetName schema incl <> " :: " <> includeName incl,
-      fullPresetName schema incl <> " =",
-      "  " <> fullIncludeValue schema incl
-    ]
-
 emitNoIncludePreset :: Schema -> ModelInclude -> Text
 emitNoIncludePreset schema incl =
   T.unlines
@@ -1267,27 +1256,11 @@ includeResultName model incl =
   where
     stubSchema = Schema {schemaEnums = [], schemaModels = [model], schemaIncludes = [incl], schemaUniques = []}
 
-fullIncludeValue :: Schema -> ModelInclude -> Text
-fullIncludeValue schema incl =
-  includeRecordValue schema root (includeTree incl)
-  where
-    root = lookupModel schema (includeRootModel incl)
-
 noIncludeValue :: Schema -> ModelInclude -> Text
 noIncludeValue schema incl =
   includeRecordValue schema root []
   where
     root = lookupModel schema (includeRootModel incl)
-
-fullPresetName :: Schema -> ModelInclude -> Text
-fullPresetName schema incl =
-  "with"
-    <> T.concat
-      [ upperFirst (includeFieldName root rel)
-        | let root = lookupModel schema (includeRootModel incl),
-          edge <- includeTree incl,
-          let rel = lookupRelation root (includeRelation edge)
-      ]
 
 schemaModule :: Text -> Model -> Text
 schemaModule clientModule model =

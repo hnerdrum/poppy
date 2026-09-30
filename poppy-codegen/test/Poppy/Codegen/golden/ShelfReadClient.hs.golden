@@ -38,7 +38,6 @@ module Schema.Client.Shelf
     BooksWrite (..),
     BookNestedOps (..),
     emptyBookNestedOps,
-    withBooksTags,
     noInclude,
     ShelfInclude (..),
     BookInclude (..),
@@ -295,10 +294,6 @@ updateNested include rootId input = transactionEither $ do
       case nestedResult of
         Left err -> pure (Left err)
         Right () -> Include.findUniqueOrFail @ShelfTable include rootId
-
-withBooksTags :: ShelfInclude
-withBooksTags =
-  ShelfInclude {books = Just (BookInclude {chapters = Just (ChapterInclude {sections = True})}), tags = True}
 
 noInclude :: NoInclude
 noInclude = NoInclude ShelfInclude {books = Nothing, tags = False}

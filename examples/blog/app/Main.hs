@@ -18,7 +18,7 @@ main = do
       created <-
         runDb pool $
           Author.createNested
-            Author.withPosts
+            Author.AuthorInclude {posts = True}
             Author.AuthorWriteCreate
               { root = Author.AuthorCreate {id = Nothing, name = "Ada"},
                 posts =
@@ -36,6 +36,6 @@ main = do
           listed <-
             runDb
               pool
-              (Author.findMany Author.emptyQuery {Author.include_ = Author.withPosts})
+              (Author.findMany Author.emptyQuery {Author.include_ = Author.AuthorInclude {posts = True}})
           putStrLn $ "authors with posts: " <> show (length (listed :: [AuthorWithPosts]))
   closePool pool
