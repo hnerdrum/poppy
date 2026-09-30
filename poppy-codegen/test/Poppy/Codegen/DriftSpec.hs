@@ -16,6 +16,7 @@ import Poppy.Codegen.Introspect (canonicalizeColumnType, introspectCatalog)
 import qualified Poppy.Codegen.Schema as Builder
 import Poppy.Codegen.Spec.Author (authorSchema)
 import Poppy.Codegen.Spec.Flag (flagSchema)
+import Poppy.Codegen.Spec.Packet (packetSchema)
 import Poppy.Codegen.Spec.Shelf (shelfSchema)
 import Poppy.Codegen.Spec.Widget (widgetSchema)
 import Poppy.Db (withConn)
@@ -58,6 +59,17 @@ driftSpec =
     it "canonicalizes Postgres boolean to the IR boolean type" $
       canonicalizeColumnType "boolean" "bool" `shouldBe` "boolean"
 
+    it "canonicalizes Postgres numeric and jsonb" $ do
+      canonicalizeColumnType "numeric" "numeric" `shouldBe` "numeric"
+      canonicalizeColumnType "jsonb" "jsonb" `shouldBe` "jsonb"
+
+    it "accepts numeric and jsonb columns that match the catalog" $
+      checkSchema packetSchema packetCatalog `shouldBe` []
+
+    it "reports type drift on a numeric column" $
+      checkSchema packetSchema packetCatalogAmountAsInt
+        `shouldBe` [DriftType "test_packet" "amount" "numeric" "int"]
+
     it "reports a missing column DEFAULT" $
       checkSchema widgetSchema (widgetCatalogWithoutIdDefault)
         `shouldBe` [DriftMissingDefault "test_widget" "id" DefaultUuidV4]
@@ -81,11 +93,12 @@ driftSpec =
 driftDbSpec :: SpecWith TestEnv
 driftDbSpec =
   describe "Poppy.Codegen.Drift against Postgres" $ do
-    it "matches widget, shelf, and author IR to the test database" $ \TestEnv {envPool = pool} -> do
+    it "matches widget, shelf, author, and packet IR to the test database" $ \TestEnv {envPool = pool} -> do
       catalog <- withConn pool introspectCatalog
       checkSchema widgetSchema catalog `shouldBe` []
       checkSchema shelfSchema catalog `shouldBe` []
       checkSchema authorSchema catalog `shouldBe` []
+      checkSchema packetSchema catalog `shouldBe` []
 
 widgetSchemaWithNameUnique :: Schema
 widgetSchemaWithNameUnique =
@@ -197,6 +210,36 @@ flagCatalogAsText =
             Map.singleton
               "flag"
               table {dbColumns = Map.insert "active" active {dbColType = "text"} (dbColumns table)}
+        }
+
+packetCatalog :: DbCatalog
+packetCatalog =
+  emptyCatalog
+    { dbTables =
+        Map.singleton
+          "test_packet"
+          DbTable
+            { dbTableName = "test_packet",
+              dbColumns =
+                Map.fromList
+                  [ col "id" "uuid" False (Just "uuid_generate_v4()"),
+                    col "amount" "numeric" False Nothing,
+                    col "payload" "jsonb" False Nothing
+                  ],
+              dbPrimaryKey = ["id"],
+              dbUniques = []
+            }
+    }
+
+packetCatalogAmountAsInt :: DbCatalog
+packetCatalogAmountAsInt =
+  let table = dbTables packetCatalog Map.! "test_packet"
+      amount = dbColumns table Map.! "amount"
+   in packetCatalog
+        { dbTables =
+            Map.singleton
+              "test_packet"
+              table {dbColumns = Map.insert "amount" amount {dbColType = "int"} (dbColumns table)}
         }
 
 col :: Text -> Text -> Bool -> Maybe Text -> (Text, DbColumn)

@@ -51,23 +51,23 @@ emitModelModule moduleName schema model =
           "  primaryKey = " <> fieldBinder model pkField,
           "  tableColumns = [" <> T.intercalate ", " (map colLit (modelFields model)) <> "]"
         ]
-        ++ uniqueKeysLines schema model
-        ++ [ "",
-          emitInsertable model,
-          "",
-          emitUpdatable model,
-          "",
-          emitRow model,
-          "",
-          emitCreate model,
-          "",
-          emitUpdate model,
-          "",
-          emitFromRow model,
-          "",
-          emitSelectTypes model,
-          ""
-        ],
+          ++ uniqueKeysLines schema model
+          ++ [ "",
+               emitInsertable model,
+               "",
+               emitUpdatable model,
+               "",
+               emitRow model,
+               "",
+               emitCreate model,
+               "",
+               emitUpdate model,
+               "",
+               emitFromRow model,
+               "",
+               emitSelectTypes model,
+               ""
+             ],
         concatMap (emitFieldDecl model) (modelFields model),
         map (emitHasMany schema) (hasManyRelations model),
         map (emitBelongsTo schema) (belongsToRelations model)
@@ -116,6 +116,8 @@ imports moduleName schema model =
       [ "import Data.Text (Text)",
         if needsTime model then "import Data.Time (UTCTime)" else "",
         if needsUuid model then "import Data.UUID (UUID)" else "",
+        if needsScientific model then "import Data.Scientific (Scientific)" else "",
+        if needsJsonb model then "import Data.Aeson (Value)" else "",
         "import Poppy.PG (FromRow (..), RowParser, field)",
         "import Poppy.Core",
         "import Poppy.Select (Picked (..), picked)",
@@ -292,6 +294,12 @@ needsUuid = any (isUuidType . fieldType) . modelFields
   where
     isUuidType TyUuid = True
     isUuidType _ = False
+
+needsScientific :: Model -> Bool
+needsScientific = any ((== TyNumeric) . fieldType) . modelFields
+
+needsJsonb :: Model -> Bool
+needsJsonb = any ((== TyJsonb) . fieldType) . modelFields
 
 hasRequiredCreateField :: Model -> Bool
 hasRequiredCreateField =

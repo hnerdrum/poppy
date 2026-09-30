@@ -277,6 +277,8 @@ irType spec =
     TyText -> "text"
     TyUuid -> "uuid"
     TyInt -> "int"
+    TyNumeric -> "numeric"
+    TyJsonb -> "jsonb"
     TyTimestamptz -> "timestamptz"
     TyBool -> "boolean"
     TyEnum name -> "enum:" <> T.toLower name

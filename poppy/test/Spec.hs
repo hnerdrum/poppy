@@ -12,6 +12,7 @@ import Poppy.MigrateSpec (migrateSpec)
 import Poppy.NestedWriteSpec (nestedWriteSpec)
 import Poppy.OperationsSpec (operationsSpec)
 import Poppy.RawSpec (rawSpec)
+import Poppy.ScalarSpec (scalarSpec)
 import Poppy.SelectSpec (selectSpec)
 import Poppy.WhereSpec (whereSpec)
 import Support.TestDb (withTestDb)
@@ -34,3 +35,4 @@ main = hspec $ do
       >> dbSpec
       >> migrateSpec
       >> clientWriteSpec
+      >> scalarSpec

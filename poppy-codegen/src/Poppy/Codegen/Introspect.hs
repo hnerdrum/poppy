@@ -47,6 +47,8 @@ canonicalizeColumnType dataType udtName =
     "text" -> "text"
     "uuid" -> "uuid"
     "integer" -> "int"
+    "numeric" -> "numeric"
+    "jsonb" -> "jsonb"
     "timestamp with time zone" -> "timestamptz"
     "boolean" -> "boolean"
     "USER-DEFINED" -> "enum:" <> udtName

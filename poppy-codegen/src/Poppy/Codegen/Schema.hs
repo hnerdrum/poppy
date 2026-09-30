@@ -11,6 +11,8 @@ module Poppy.Codegen.Schema
     uuid,
     text,
     int,
+    numeric,
+    jsonb,
     bool,
     timestamptz,
     enumField,
@@ -114,6 +116,12 @@ text = typedField IR.TyText
 
 int :: Text -> FieldSpec
 int = typedField IR.TyInt
+
+numeric :: Text -> FieldSpec
+numeric = typedField IR.TyNumeric
+
+jsonb :: Text -> FieldSpec
+jsonb = typedField IR.TyJsonb
 
 bool :: Text -> FieldSpec
 bool = typedField IR.TyBool

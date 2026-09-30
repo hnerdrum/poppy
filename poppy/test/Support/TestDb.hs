@@ -23,6 +23,7 @@ import Poppy.Sql (quoteIdent)
 import Schema.Author (AuthorTable)
 import Schema.Book (BookTable)
 import Schema.Chapter (ChapterTable)
+import Schema.Packet (PacketTable)
 import Schema.Post (PostTable)
 import Schema.Section (SectionTable)
 import Schema.Shelf (ShelfTable)
@@ -96,6 +97,7 @@ resetTestData env = do
   truncateTable @ShelfTable env
   truncateTable @PostTable env
   truncateTable @AuthorTable env
+  truncateTable @PacketTable env
 
 truncateTable ::
   forall table.

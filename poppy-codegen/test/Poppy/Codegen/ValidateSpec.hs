@@ -9,6 +9,7 @@ import Poppy.Codegen.IR
 import qualified Poppy.Codegen.Schema as Builder
 import Poppy.Codegen.Spec.Example (exampleSchema)
 import Poppy.Codegen.Spec.Flag (flagSchema)
+import Poppy.Codegen.Spec.Packet (packetSchema)
 import Poppy.Codegen.Spec.Shelf (shelfSchema)
 import Poppy.Codegen.Validate
 import Test.Hspec
@@ -29,6 +30,9 @@ validateSpec =
 
       it "accepts a Schema with a boolean field" $
         validateSchema flagSchema `shouldBe` []
+
+      it "accepts a Schema with numeric and jsonb fields" $
+        validateSchema packetSchema `shouldBe` []
 
       it "rejects a builder model with no primary key" $
         validateSchema (Builder.schema [] [Builder.model "Widget" [text "name"] []] [])

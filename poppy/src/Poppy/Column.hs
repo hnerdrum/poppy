@@ -5,7 +5,9 @@ module Poppy.Column
   )
 where
 
+import Data.Aeson (Value)
 import Data.Int (Int32, Int64)
+import Data.Scientific (Scientific)
 import Data.Text (Text)
 import Data.Time (UTCTime)
 import Data.UUID (UUID)
@@ -27,6 +29,12 @@ instance Column Int32 where
 
 instance Column Int64 where
   columnType = "bigint"
+
+instance Column Scientific where
+  columnType = "numeric"
+
+instance Column Value where
+  columnType = "jsonb"
 
 instance Column UTCTime where
   columnType = "timestamp with time zone"

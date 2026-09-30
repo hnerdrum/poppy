@@ -34,6 +34,8 @@ hsType :: FieldType -> Text
 hsType TyText = "Text"
 hsType TyUuid = "UUID"
 hsType TyInt = "Int"
+hsType TyNumeric = "Scientific"
+hsType TyJsonb = "Value"
 hsType TyTimestamptz = "UTCTime"
 hsType TyBool = "Bool"
 hsType (TyEnum name) = name

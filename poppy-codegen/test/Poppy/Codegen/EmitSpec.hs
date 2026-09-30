@@ -24,6 +24,7 @@ import Poppy.Codegen.IR
 import qualified Poppy.Codegen.Schema as Builder
 import Poppy.Codegen.Spec.Example (exampleSchema, taskModel)
 import Poppy.Codegen.Spec.Flag (flagModel, flagSchema)
+import Poppy.Codegen.Spec.Packet (packetModel, packetSchema)
 import Poppy.Codegen.Spec.Shelf (shelfSchema)
 import Poppy.Codegen.Spec.Widget (widgetModel, widgetSchema)
 import Test.Hspec
@@ -45,6 +46,11 @@ emitSpec = do
     it "emits Flag matching the golden file" $ do
       expected <- T.readFile "test/Poppy/Codegen/golden/Flag.hs.golden"
       let actual = emitModelModule "Schema.Flag" flagSchema flagModel
+      T.strip actual `shouldBe` T.strip expected
+
+    it "emits Packet matching the golden file" $ do
+      expected <- T.readFile "test/Poppy/Codegen/golden/Packet.hs.golden"
+      let actual = emitModelModule "Schema.Packet" packetSchema packetModel
       T.strip actual `shouldBe` T.strip expected
 
     it "includes HasMany in a Shelf model module" $ do

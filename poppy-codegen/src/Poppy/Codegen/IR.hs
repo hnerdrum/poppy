@@ -16,6 +16,8 @@ module Poppy.Codegen.IR
     uuid,
     text,
     int,
+    numeric,
+    jsonb,
     timestamptz,
     bool,
     enumField,
@@ -75,6 +77,8 @@ data FieldType
   = TyText
   | TyUuid
   | TyInt
+  | TyNumeric
+  | TyJsonb
   | TyTimestamptz
   | TyBool
   | TyEnum Text
@@ -146,6 +150,12 @@ text name = field name TyText
 
 int :: Text -> FieldSpec
 int name = field name TyInt
+
+numeric :: Text -> FieldSpec
+numeric name = field name TyNumeric
+
+jsonb :: Text -> FieldSpec
+jsonb name = field name TyJsonb
 
 timestamptz :: Text -> FieldSpec
 timestamptz name = field name TyTimestamptz
