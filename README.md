@@ -130,6 +130,19 @@ cabal test all
 
 `DATABASE_URL` is used if `TEST_DATABASE_URL` is unset.
 
+## Examples
+
+- [`examples/task/`](examples/task/) — single-table hello-world
+- [`examples/blog/`](examples/blog/) — Author/Post, nested create, and includes
+
+From the repo root, after `docker compose up -d`:
+
+```bash
+export DATABASE_URL=postgres://poppy:poppy@127.0.0.1:5435/poppy_test
+(cd examples/task && cabal run task)
+(cd examples/blog && cabal run blog)
+```
+
 ## License
 
 BSD-3-Clause. See [LICENSE](LICENSE).

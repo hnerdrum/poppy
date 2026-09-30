@@ -26,8 +26,6 @@ data MigrateError
   | MigrateFailed Text ORMError
   deriving (Show, Eq)
 
--- | Apply @*.sql@ files in name order. Names already in @_poppy_migrations@
--- are skipped. A failed file is not recorded (same transaction as the SQL).
 applyMigrations :: DbPool -> FilePath -> IO (Either MigrateError [Text])
 applyMigrations pool dir = do
   listed <- listMigrationFiles dir

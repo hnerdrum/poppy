@@ -1,0 +1,55 @@
+name: blog
+version: 0.1.0.0
+license: BSD3
+author: "Henrik Nerdrum"
+maintainer: "henrik.nerdrum@gmail.com"
+copyright: "2023–2026 Henrik Nerdrum"
+category: Database
+synopsis: Poppy relational example
+description: An Author/Post Schema, codegen executable, generated Client, nested create, and includes.
+
+dependencies:
+  - base >= 4.17 && < 4.21
+  - poppy
+  - text
+  - time
+  - uuid
+
+ghc-options:
+  - -Wall
+
+library:
+  source-dirs: src
+  default-extensions:
+    - AllowAmbiguousTypes
+    - DuplicateRecordFields
+    - FlexibleContexts
+    - FlexibleInstances
+    - NamedFieldPuns
+    - NoFieldSelectors
+    - OverloadedRecordDot
+    - OverloadedStrings
+    - RecordWildCards
+    - TypeApplications
+    - TypeFamilies
+
+executables:
+  blog:
+    main: Main.hs
+    source-dirs: app
+    dependencies:
+      - blog
+    default-extensions:
+      - DuplicateRecordFields
+      - NamedFieldPuns
+      - OverloadedRecordDot
+      - OverloadedStrings
+  blog-codegen:
+    main: Main.hs
+    source-dirs: codegen
+    dependencies:
+      - poppy-codegen
+    default-extensions:
+      - NamedFieldPuns
+      - OverloadedRecordDot
+      - OverloadedStrings

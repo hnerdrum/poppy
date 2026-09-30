@@ -59,10 +59,18 @@ jobs:
           (cd poppy && hpack)
           (cd poppy-codegen && hpack)
           (cd examples/task && hpack)
+          (cd examples/blog && hpack)
           git diff --exit-code
 
       - name: Test
         run: cabal test all
+
+      - name: Examples
+        env:
+          DATABASE_URL: postgres://poppy:poppy@127.0.0.1:5432/poppy_test
+        run: |
+          (cd examples/task && cabal run task-codegen -- --check && cabal run task && cabal run task-codegen -- --check-schema)
+          (cd examples/blog && cabal run blog-codegen -- --check && cabal run blog && cabal run blog-codegen -- --check-schema)
 
       - name: Haddock
         run: cabal haddock all

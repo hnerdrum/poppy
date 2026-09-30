@@ -1,0 +1,91 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.38.3.
+--
+-- see: https://github.com/sol/hpack
+
+name:           blog
+version:        0.1.0.0
+synopsis:       Poppy relational example
+description:    An Author/Post Schema, codegen executable, generated Client, nested create, and includes.
+category:       Database
+author:         Henrik Nerdrum
+maintainer:     henrik.nerdrum@gmail.com
+copyright:      2023–2026 Henrik Nerdrum
+license:        BSD3
+build-type:     Simple
+
+library
+  exposed-modules:
+      Schema.ArticleStatus
+      Schema.Author
+      Schema.AuthorInclude
+      Schema.Client.Author
+      Schema.Client.Post
+      Schema.Post
+  other-modules:
+      Paths_blog
+  hs-source-dirs:
+      src
+  default-extensions:
+      AllowAmbiguousTypes
+      DuplicateRecordFields
+      FlexibleContexts
+      FlexibleInstances
+      NamedFieldPuns
+      NoFieldSelectors
+      OverloadedRecordDot
+      OverloadedStrings
+      RecordWildCards
+      TypeApplications
+      TypeFamilies
+  ghc-options: -Wall
+  build-depends:
+      base >=4.17 && <4.21
+    , poppy
+    , text
+    , time
+    , uuid
+  default-language: Haskell2010
+
+executable blog
+  main-is: Main.hs
+  other-modules:
+      Paths_blog
+  hs-source-dirs:
+      app
+  default-extensions:
+      DuplicateRecordFields
+      NamedFieldPuns
+      OverloadedRecordDot
+      OverloadedStrings
+  ghc-options: -Wall
+  build-depends:
+      base >=4.17 && <4.21
+    , blog
+    , poppy
+    , text
+    , time
+    , uuid
+  default-language: Haskell2010
+
+executable blog-codegen
+  main-is: Main.hs
+  other-modules:
+      BlogSchema
+      Paths_blog
+  hs-source-dirs:
+      codegen
+  default-extensions:
+      NamedFieldPuns
+      OverloadedRecordDot
+      OverloadedStrings
+  ghc-options: -Wall
+  build-depends:
+      base >=4.17 && <4.21
+    , poppy
+    , poppy-codegen
+    , text
+    , time
+    , uuid
+  default-language: Haskell2010
