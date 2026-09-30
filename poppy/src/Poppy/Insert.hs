@@ -8,6 +8,7 @@ module Poppy.Insert
   ( InsertBuilder,
     Insertable (..),
     insert,
+    insertMany,
     insertBuilder,
     insertReturning,
     executeInsert,
@@ -15,6 +16,8 @@ module Poppy.Insert
     emptyInsert,
     onConflictDoNothing,
     onConflictDoUpdate,
+    onConflictDoUpdateSet,
+    upsert,
     set,
     setNull,
     setMaybe,
@@ -23,18 +26,21 @@ module Poppy.Insert
   )
 where
 
+import Control.Monad.IO.Class (liftIO)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as TE
+import Data.Time (getCurrentTime)
 import Database.PostgreSQL.Simple (Connection)
 import qualified Database.PostgreSQL.Simple as PGSimple
 import Database.PostgreSQL.Simple.FromRow (FromRow, fromRow)
 import Database.PostgreSQL.Simple.ToField (Action, ToField, toField)
 import Database.PostgreSQL.Simple.Types (Query (..))
 import Poppy.Core (Entity (..), Field (..), NullableValue (..))
-import Poppy.Db (Db, dbIO)
+import Poppy.Db (Db, dbIO, transactionEither)
 import Poppy.Errors (ORMError (..), parseSingleton)
 import Poppy.Sql (catchSql, quoteIdent)
+import qualified Poppy.Update as Update
 
 class (Entity table) => Insertable table where
   type CreateInput table
@@ -51,6 +57,7 @@ data OnConflict
   = NoConflict
   | DoNothing [Text]
   | DoUpdate [Text] [Text]
+  | DoUpdateSet [Text] [(Text, Action)]
 
 insert ::
   forall table result.
@@ -58,6 +65,39 @@ insert ::
   CreateInput table ->
   Db (Either ORMError result)
 insert input = insertBuilder (toInsertBuilder @table input)
+
+insertMany ::
+  forall table.
+  (Insertable table) =>
+  [CreateInput table] ->
+  Db (Either ORMError Int)
+insertMany [] = pure (Right 0)
+insertMany inputs = transactionEither (go 0 inputs)
+  where
+    go n [] = pure (Right n)
+    go n (input : rest) = do
+      result <- tryExecuteInsert (toInsertBuilder @table input)
+      case result of
+        Left err -> pure (Left err)
+        Right () -> go (n + 1) rest
+
+upsert ::
+  forall table result.
+  (Insertable table, Update.Updatable table, FromRow result) =>
+  [Text] ->
+  CreateInput table ->
+  Update.UpdateInput table ->
+  Db (Either ORMError result)
+upsert conflictCols createInput updateInput = do
+  now <- liftIO getCurrentTime
+  let insertB = toInsertBuilder @table createInput
+      updateB = Update.touchUpdatedAt @table now (Update.toUpdateBuilder @table updateInput)
+      sets = Update.updateSets updateB
+      builder =
+        if null sets
+          then onConflictDoUpdate conflictCols conflictCols insertB
+          else onConflictDoUpdateSet conflictCols sets insertB
+  insertBuilder builder
 
 insertBuilder ::
   forall table result.
@@ -102,6 +142,9 @@ onConflictDoNothing cols builder = builder {ibConflict = DoNothing cols}
 
 onConflictDoUpdate :: [Text] -> [Text] -> InsertBuilder table -> InsertBuilder table
 onConflictDoUpdate cols setCols builder = builder {ibConflict = DoUpdate cols setCols}
+
+onConflictDoUpdateSet :: [Text] -> [(Text, Action)] -> InsertBuilder table -> InsertBuilder table
+onConflictDoUpdateSet cols sets builder = builder {ibConflict = DoUpdateSet cols sets}
 
 set :: forall table a. (ToField a) => Field table a -> a -> InsertBuilder table -> InsertBuilder table
 set field value builder =
@@ -171,6 +214,7 @@ insertQueryParts :: InsertBuilder table -> Text -> (Text, [Action])
 insertQueryParts builder suffix =
   let allColumns = ibColumns builder
       allValues = ibValues builder
+      (conflictSql, conflictParams) = conflictParts (ibConflict builder)
       placeholders = Text.intercalate ", " $ replicate (length allValues) "?"
       columnsText = Text.intercalate ", " (map quoteIdent allColumns)
       queryText =
@@ -181,16 +225,25 @@ insertQueryParts builder suffix =
           <> ") VALUES ("
           <> placeholders
           <> ")"
-          <> conflictClause (ibConflict builder)
+          <> conflictSql
           <> suffix
-   in (queryText, allValues)
+   in (queryText, allValues ++ conflictParams)
 
-conflictClause :: OnConflict -> Text
-conflictClause NoConflict = ""
-conflictClause (DoNothing cols) =
-  " ON CONFLICT (" <> Text.intercalate ", " (map quoteIdent cols) <> ") DO NOTHING"
-conflictClause (DoUpdate cols setCols) =
-  " ON CONFLICT ("
-    <> Text.intercalate ", " (map quoteIdent cols)
-    <> ") DO UPDATE SET "
-    <> Text.intercalate ", " [quoteIdent col <> " = EXCLUDED." <> quoteIdent col | col <- setCols]
+conflictParts :: OnConflict -> (Text, [Action])
+conflictParts NoConflict = ("", [])
+conflictParts (DoNothing cols) =
+  (" ON CONFLICT (" <> Text.intercalate ", " (map quoteIdent cols) <> ") DO NOTHING", [])
+conflictParts (DoUpdate cols setCols) =
+  ( " ON CONFLICT ("
+      <> Text.intercalate ", " (map quoteIdent cols)
+      <> ") DO UPDATE SET "
+      <> Text.intercalate ", " [quoteIdent col <> " = EXCLUDED." <> quoteIdent col | col <- setCols],
+    []
+  )
+conflictParts (DoUpdateSet cols sets) =
+  ( " ON CONFLICT ("
+      <> Text.intercalate ", " (map quoteIdent cols)
+      <> ") DO UPDATE SET "
+      <> Text.intercalate ", " [quoteIdent col <> " = ?" | (col, _) <- sets],
+    map snd sets
+  )

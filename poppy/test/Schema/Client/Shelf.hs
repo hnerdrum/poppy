@@ -4,18 +4,17 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE NoFieldSelectors #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE NoFieldSelectors #-}
 
-{- | Generated Client. Do not edit.
-
-Nested writes ('createNested' / 'updateNested'):
-  Set xs  — replace all children with xs
-  Ops o   — create, connect, disconnect, delete, update, upsert
--}
+-- | Generated Client. Do not edit.
+--
+-- Nested writes ('createNested' / 'updateNested'):
+--  Set xs  — replace all children with xs
+--  Ops o   — create, connect, disconnect, delete, update, upsert
 module Schema.Client.Shelf
   ( findMany,
     findUnique,
@@ -24,7 +23,10 @@ module Schema.Client.Shelf
     findFirstOrFail,
     count,
     create,
+    createMany,
     update,
+    updateMany,
+    upsert,
     delete,
     deleteMany,
     createNested,
@@ -54,7 +56,7 @@ module Schema.Client.Shelf
     ShelfUpdate (..),
     ShelfTable,
     shelfId,
-    ShelfWithBooksTagsPicked (..)
+    ShelfWithBooksTagsPicked (..),
   )
 where
 
@@ -62,41 +64,51 @@ import Data.Text (Text)
 import Data.UUID (UUID)
 import qualified Data.UUID.V4 as V4
 import Poppy.Core (fieldColumn)
-import Poppy.PG (toField)
 import Poppy.Db (Db, liftIO, transactionEither)
 import qualified Poppy.Delete as Delete
 import Poppy.Errors (ORMError (..), requireFound)
 import qualified Poppy.Include as Include
 import qualified Poppy.Insert as Insert
 import qualified Poppy.Operations as Ops
+import Poppy.PG (toField)
 import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)
 import Poppy.Select (OmitSelect (..), Picked (..))
 import qualified Poppy.Update as Update
 import Poppy.Where (Where, and_, eq, in_)
-import Schema.Shelf (ShelfCreate (..), ShelfRow (..), ShelfSelect (..), ShelfPicked (..), shelfSelect, shelfSelectColumns, parseShelfPicked, toShelfPicked, ShelfTable, ShelfUpdate (..), shelfId)
-import Schema.ShelfInclude ( ShelfInclude (..), BookInclude (..), ChapterInclude (..), ShelfWithBooksTags (..), BookWithChapters (..), NoInclude (..), ResolveInclude)
-import Schema.Book (BookCreate (..), BookRow (..), BookUpdate (..), BookTable, bookId, bookShelfId)
+import Schema.Book (BookCreate (..), BookRow (..), BookTable, BookUpdate (..), bookId, bookShelfId)
+import Schema.Shelf (ShelfCreate (..), ShelfPicked (..), ShelfRow (..), ShelfSelect (..), ShelfTable, ShelfUpdate (..), parseShelfPicked, shelfId, shelfSelect, shelfSelectColumns, toShelfPicked)
+import Schema.ShelfInclude (BookInclude (..), BookWithChapters (..), ChapterInclude (..), NoInclude (..), ResolveInclude, ShelfInclude (..), ShelfWithBooksTags (..))
 import Schema.Tag (TagRow (..))
 
 create :: ShelfCreate -> Db (Either ORMError ShelfRow)
 create = Insert.insert @ShelfTable @ShelfRow
 
+createMany :: [ShelfCreate] -> Db (Either ORMError Int)
+createMany = Insert.insertMany @ShelfTable
+
 update :: UUID -> ShelfUpdate -> Db (Either ORMError ShelfRow)
 update = Update.update @ShelfTable @ShelfRow
 
+updateMany :: Where ShelfTable -> ShelfUpdate -> Db (Either ORMError Int)
+updateMany = Update.updateMany @ShelfTable
+
+upsert :: ShelfCreate -> ShelfUpdate -> Db (Either ORMError ShelfRow)
+upsert = Insert.upsert @ShelfTable @ShelfRow ["id"]
+
 data BookNestedCreate = BookNestedCreate
-  { id :: Maybe UUID, title :: Text
+  { id :: Maybe UUID,
+    title :: Text
   }
   deriving (Show, Eq)
 
 data BookNestedOps = BookNestedOps
-  { create :: [BookNestedCreate]
-  , createMany :: [BookNestedCreate]
-  , connect :: [UUID]
-  , disconnect :: [UUID]
-  , delete :: [UUID]
-  , update :: [(UUID, BookNestedCreate)]
-  , upsert :: [BookNestedCreate]
+  { create :: [BookNestedCreate],
+    createMany :: [BookNestedCreate],
+    connect :: [UUID],
+    disconnect :: [UUID],
+    delete :: [UUID],
+    update :: [(UUID, BookNestedCreate)],
+    upsert :: [BookNestedCreate]
   }
   deriving (Show, Eq)
 
@@ -106,24 +118,24 @@ data BooksWrite = Set [BookNestedCreate] | Ops BookNestedOps
 emptyBookNestedOps :: BookNestedOps
 emptyBookNestedOps =
   BookNestedOps
-    { create = []
-    , createMany = []
-    , connect = []
-    , disconnect = []
-    , delete = []
-    , update = []
-    , upsert = []
+    { create = [],
+      createMany = [],
+      connect = [],
+      disconnect = [],
+      delete = [],
+      update = [],
+      upsert = []
     }
 
 data ShelfWriteCreate = ShelfWriteCreate
-  { root :: ShelfCreate
-  , books :: BooksWrite
+  { root :: ShelfCreate,
+    books :: BooksWrite
   }
   deriving (Show, Eq)
 
 data ShelfWriteUpdate = ShelfWriteUpdate
-  { root :: ShelfUpdate
-  , books :: Maybe BooksWrite
+  { root :: ShelfUpdate,
+    books :: Maybe BooksWrite
   }
   deriving (Show, Eq)
 
@@ -175,13 +187,13 @@ insertNestedCreates parentId = go
 applyBookNestedOps :: UUID -> BookNestedOps -> Db (Either ORMError ())
 applyBookNestedOps parentId ops =
   sequenceNested
-    [ deleteNested parentId ops.delete
-    , deleteNested parentId ops.disconnect
-    , updateChildRows parentId ops.update
-    , upsertNested parentId ops.upsert
-    , insertNestedCreates parentId ops.create
-    , insertNestedCreateMany parentId ops.createMany
-    , connectNested parentId ops.connect
+    [ deleteNested parentId ops.delete,
+      deleteNested parentId ops.disconnect,
+      updateChildRows parentId ops.update,
+      upsertNested parentId ops.upsert,
+      insertNestedCreates parentId ops.create,
+      insertNestedCreateMany parentId ops.createMany,
+      connectNested parentId ops.connect
     ]
 
 deleteNested :: UUID -> [UUID] -> Db (Either ORMError ())
@@ -214,7 +226,7 @@ upsertNested parentId = go
       result <-
         Insert.insertBuilder @BookTable @BookRow $
           Prelude.id $
-          Insert.toInsertBuilder @BookTable (toBookCreate parentId nested)
+            Insert.toInsertBuilder @BookTable (toBookCreate parentId nested)
       case result of
         Left err -> pure (Left err)
         Right _ -> go rest
@@ -227,7 +239,7 @@ insertNestedCreateMany parentId = go
       result <-
         Insert.tryExecuteInsert $
           Prelude.id $
-          Insert.toInsertBuilder @BookTable (toBookCreate parentId nested)
+            Insert.toInsertBuilder @BookTable (toBookCreate parentId nested)
       case result of
         Left err -> pure (Left err)
         Right () -> go rest
@@ -254,7 +266,7 @@ createNested ::
 createNested include input = transactionEither $ do
   rootId <- liftIO $ maybe V4.nextRandom pure input.root.id
   let rootInput =
-        ShelfCreate { id = Just rootId, name = input.root.name }
+        ShelfCreate {id = Just rootId, name = input.root.name}
   rootResult <-
     Insert.insert @ShelfTable @ShelfRow rootInput
   case rootResult of
@@ -301,18 +313,18 @@ data ShelfWithBooksTagsPicked = ShelfWithBooksTagsPicked
 toShelfWithBooksTagsPicked :: ShelfSelect -> ShelfWithBooksTags -> ShelfWithBooksTagsPicked
 toShelfWithBooksTagsPicked select_ ShelfWithBooksTags {shelf, books, tags} =
   ShelfWithBooksTagsPicked
-    { shelf = toShelfPicked select_ shelf
-    , books = books
-    , tags = tags
+    { shelf = toShelfPicked select_ shelf,
+      books = books,
+      tags = tags
     }
 
 data ShelfQuery include select = ShelfQuery
-  { include_ :: include
-  , select_ :: select
-  , where_ :: Maybe (Where ShelfTable)
-  , orderBy_ :: [OrderBy ShelfTable]
-  , limit_ :: Maybe Int
-  , offset_ :: Maybe Int
+  { include_ :: include,
+    select_ :: select,
+    where_ :: Maybe (Where ShelfTable),
+    orderBy_ :: [OrderBy ShelfTable],
+    limit_ :: Maybe Int,
+    offset_ :: Maybe Int
   }
 
 emptyQuery :: ShelfQuery NoInclude OmitSelect
@@ -320,8 +332,11 @@ emptyQuery =
   ShelfQuery {include_ = noInclude, select_ = OmitSelect, where_ = Nothing, orderBy_ = [], limit_ = Nothing, offset_ = Nothing}
 
 type instance ResolveInclude (ShelfQuery ShelfInclude OmitSelect) = ShelfWithBooksTags
+
 type instance ResolveInclude (ShelfQuery NoInclude OmitSelect) = ShelfRow
+
 type instance ResolveInclude (ShelfQuery ShelfInclude ShelfSelect) = ShelfWithBooksTagsPicked
+
 type instance ResolveInclude (ShelfQuery NoInclude ShelfSelect) = ShelfPicked
 
 class ReadShelf include select where

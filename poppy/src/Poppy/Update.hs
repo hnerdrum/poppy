@@ -18,6 +18,9 @@ module Poppy.Update
     setFieldNullable,
     whereUpdate,
     emptyUpdate,
+    updateMany,
+    updateSets,
+    touchUpdatedAt,
   )
 where
 
@@ -36,6 +39,7 @@ import Poppy.Errors (ORMError (..), parseSingleton)
 import qualified Poppy.Operations as Ops
 import Poppy.Query (buildWhereClause)
 import Poppy.Sql (catchSql, quoteIdent)
+import Poppy.Where (Where, compileWhere)
 
 class (Entity table) => Updatable table where
   type UpdateInput table
@@ -155,6 +159,25 @@ updateReturning builder
       pure (Left (EmptyWhere "UPDATE requires a WHERE clause"))
   | otherwise = dbIO $ \conn -> catchSql (runUpdateReturning conn builder)
 
+updateMany ::
+  forall table.
+  (Updatable table) =>
+  Where table ->
+  UpdateInput table ->
+  Db (Either ORMError Int)
+updateMany clause input = do
+  now <- liftCurrentTime
+  let (sql, params) = compileWhere clause
+      builder =
+        whereUpdate sql params $
+          touchUpdatedAt @table now (toUpdateBuilder @table input)
+  if null (ubSets builder)
+    then pure (Right 0)
+    else dbIO $ \conn -> catchSql (runUpdate conn builder)
+
+updateSets :: UpdateBuilder table -> [(Text, Action)]
+updateSets = ubSets
+
 liftCurrentTime :: Db UTCTime
 liftCurrentTime = Db (const getCurrentTime)
 
@@ -180,6 +203,20 @@ runUpdateReturning conn builder = do
           <> " RETURNING *"
       query = Query (TE.encodeUtf8 queryText)
   PGSimple.queryWith fromRow conn query allParams
+
+runUpdate :: Connection -> UpdateBuilder table -> IO Int
+runUpdate conn builder = do
+  let setClause = buildSetClause (ubSets builder)
+      setParams = map snd (ubSets builder)
+      whereClause = buildWhereClause (ubWhere builder)
+      allParams = setParams ++ ubWhereParams builder
+      queryText =
+        "UPDATE "
+          <> quoteIdent (ubTable builder)
+          <> setClause
+          <> whereClause
+      query = Query (TE.encodeUtf8 queryText)
+  fromIntegral <$> PGSimple.execute conn query allParams
 
 touchUpdatedAt ::
   forall table.

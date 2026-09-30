@@ -6,7 +6,10 @@
 
 module Schema.Client.Widget
   ( create,
+    createMany,
     update,
+    updateMany,
+    upsert,
     findMany,
     findUnique,
     findUniqueOrFail,
@@ -57,8 +60,17 @@ import Schema.Widget
 create :: WidgetCreate -> Db (Either ORMError WidgetRow)
 create = Insert.insert @WidgetTable @WidgetRow
 
+createMany :: [WidgetCreate] -> Db (Either ORMError Int)
+createMany = Insert.insertMany @WidgetTable
+
 update :: UUID -> WidgetUpdate -> Db (Either ORMError WidgetRow)
 update = Update.update @WidgetTable @WidgetRow
+
+updateMany :: Where WidgetTable -> WidgetUpdate -> Db (Either ORMError Int)
+updateMany = Update.updateMany @WidgetTable
+
+upsert :: WidgetCreate -> WidgetUpdate -> Db (Either ORMError WidgetRow)
+upsert = Insert.upsert @WidgetTable @WidgetRow ["id"]
 
 data WidgetQuery select = WidgetQuery
   { select_ :: select,

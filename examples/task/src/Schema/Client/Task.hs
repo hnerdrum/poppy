@@ -6,7 +6,10 @@
 
 module Schema.Client.Task
   ( create,
+    createMany,
     update,
+    updateMany,
+    upsert,
     findMany,
     findUnique,
     findUniqueOrFail,
@@ -27,49 +30,54 @@ module Schema.Client.Task
     TaskTable,
     TaskQuery (..),
     emptyQuery,
-    taskId
+    taskId,
   )
-
 where
 
 import Data.UUID (UUID)
 import Poppy.Db (Db)
-import Poppy.Errors (ORMError (..), requireFound)
 import qualified Poppy.Delete as Delete
+import Poppy.Errors (ORMError (..), requireFound)
 import qualified Poppy.Insert as Insert
 import qualified Poppy.Operations as Ops
 import Poppy.Query (OrderBy, QueryBuilder, applyQueryModifiers, matching, selectColumns)
 import Poppy.Select (OmitSelect (..), Picked (..))
-import Poppy.Where (Where)
-import Schema.Task (TaskCreate (..), TaskRow (..), TaskSelect (..), TaskPicked (..), taskSelect, taskSelectColumns, parseTaskPicked, TaskTable, TaskUpdate (..), taskId)
 import qualified Poppy.Update as Update
+import Poppy.Where (Where)
+import Schema.Task (TaskCreate (..), TaskPicked (..), TaskRow (..), TaskSelect (..), TaskTable, TaskUpdate (..), parseTaskPicked, taskId, taskSelect, taskSelectColumns)
 
 create :: TaskCreate -> Db (Either ORMError TaskRow)
 create = Insert.insert @TaskTable @TaskRow
 
+createMany :: [TaskCreate] -> Db (Either ORMError Int)
+createMany = Insert.insertMany @TaskTable
 
 update :: UUID -> TaskUpdate -> Db (Either ORMError TaskRow)
 update = Update.update @TaskTable @TaskRow
 
+updateMany :: Where TaskTable -> TaskUpdate -> Db (Either ORMError Int)
+updateMany = Update.updateMany @TaskTable
+
+upsert :: TaskCreate -> TaskUpdate -> Db (Either ORMError TaskRow)
+upsert = Insert.upsert @TaskTable @TaskRow ["id"]
 
 data TaskQuery select = TaskQuery
-  { select_ :: select
-  , where_ :: Maybe (Where TaskTable)
-  , orderBy_ :: [OrderBy TaskTable]
-  , limit_ :: Maybe Int
-  , offset_ :: Maybe Int
+  { select_ :: select,
+    where_ :: Maybe (Where TaskTable),
+    orderBy_ :: [OrderBy TaskTable],
+    limit_ :: Maybe Int,
+    offset_ :: Maybe Int
   }
-
 
 emptyQuery :: TaskQuery OmitSelect
 emptyQuery =
   TaskQuery {select_ = OmitSelect, where_ = Nothing, orderBy_ = [], limit_ = Nothing, offset_ = Nothing}
 
-
 type family ResolveSelect select
-type instance ResolveSelect OmitSelect = TaskRow
-type instance ResolveSelect TaskSelect = TaskPicked
 
+type instance ResolveSelect OmitSelect = TaskRow
+
+type instance ResolveSelect TaskSelect = TaskPicked
 
 class ReadTask select where
   findMany :: TaskQuery select -> Db [ResolveSelect select]
@@ -128,15 +136,11 @@ applyQuery :: TaskQuery select -> QueryBuilder TaskTable -> QueryBuilder TaskTab
 applyQuery TaskQuery {where_, orderBy_, limit_, offset_} =
   applyQueryModifiers where_ orderBy_ limit_ offset_
 
-
 count :: TaskQuery select -> Db Int
 count q = Ops.count @TaskTable (applyQuery q)
-
 
 delete :: UUID -> Db (Either ORMError Int)
 delete = Ops.delete @TaskTable
 
-
 deleteMany :: Where TaskTable -> Db (Either ORMError Int)
 deleteMany = Delete.deleteMany @TaskTable
-

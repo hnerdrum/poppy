@@ -88,6 +88,7 @@ test-suite poppy-test
   other-modules:
       Poppy.AuthorFixtures
       Poppy.BelongsToSpec
+      Poppy.ClientWriteSpec
       Poppy.DbSpec
       Poppy.EnumSpec
       Poppy.ErrorsSpec

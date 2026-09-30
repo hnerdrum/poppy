@@ -24,7 +24,10 @@ module Schema.Client.Shelf
     findFirstOrFail,
     count,
     create,
+    createMany,
     update,
+    updateMany,
+    upsert,
     delete,
     deleteMany,
     createNested,
@@ -81,8 +84,17 @@ import Schema.Tag (TagRow (..))
 create :: ShelfCreate -> Db (Either ORMError ShelfRow)
 create = Insert.insert @ShelfTable @ShelfRow
 
+createMany :: [ShelfCreate] -> Db (Either ORMError Int)
+createMany = Insert.insertMany @ShelfTable
+
 update :: UUID -> ShelfUpdate -> Db (Either ORMError ShelfRow)
 update = Update.update @ShelfTable @ShelfRow
+
+updateMany :: Where ShelfTable -> ShelfUpdate -> Db (Either ORMError Int)
+updateMany = Update.updateMany @ShelfTable
+
+upsert :: ShelfCreate -> ShelfUpdate -> Db (Either ORMError ShelfRow)
+upsert = Insert.upsert @ShelfTable @ShelfRow ["id"]
 
 data BookNestedCreate = BookNestedCreate
   { id :: Maybe UUID, title :: Text

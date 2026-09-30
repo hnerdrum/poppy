@@ -35,7 +35,7 @@ emitClientModule :: Text -> Schema -> Model -> Text
 emitClientModule moduleName schema model =
   case lookupModelInclude schema model of
     Just incl -> emitIncludeClientModule moduleName schema incl
-    Nothing -> emitSimpleClientModule moduleName model
+    Nothing -> emitSimpleClientModule moduleName schema model
 
 lookupModelInclude :: Schema -> Model -> Maybe ModelInclude
 lookupModelInclude schema model =
@@ -43,8 +43,8 @@ lookupModelInclude schema model =
     (incl : _) -> Just incl
     [] -> Nothing
 
-emitSimpleClientModule :: Text -> Model -> Text
-emitSimpleClientModule moduleName model =
+emitSimpleClientModule :: Text -> Schema -> Model -> Text
+emitSimpleClientModule moduleName schema model =
   T.unlines
     [ "{-# LANGUAGE FlexibleContexts #-}",
       "{-# LANGUAGE FlexibleInstances #-}",
@@ -92,7 +92,13 @@ emitSimpleClientModule moduleName model =
       "",
       emitCreateFn model,
       "",
+      emitClientCreateManyFn model,
+      "",
       emitUpdateFn model,
+      "",
+      emitUpdateManyFn model,
+      "",
+      emitClientUpsertFn schema model,
       "",
       emitQueryType model,
       "",
@@ -134,7 +140,10 @@ emitIncludeClientModule moduleName schema incl =
     <> "\n"
     <> intercalateSections
       ( [ emitCreateFn root,
-          emitUpdateFn root
+          emitClientCreateManyFn root,
+          emitUpdateFn root,
+          emitUpdateManyFn root,
+          emitClientUpsertFn schema root
         ]
           ++ nestedWriteSections
           ++ emitIncludeReadDefinitions schema incl False
@@ -584,7 +593,10 @@ emitSimpleExports :: Model -> Text
 emitSimpleExports model =
   T.unlines
     [ "  ( create,",
+      "    createMany,",
       "    update,",
+      "    updateMany,",
+      "    upsert,",
       "    findMany,",
       "    findUnique,",
       "    findUniqueOrFail,",
@@ -621,7 +633,10 @@ includeClientExportItems schema incl =
   let root = lookupModel schema (includeRootModel incl)
    in includeReadFunctionExportItems
         ++ [ "create,",
+             "createMany,",
              "update,",
+             "updateMany,",
+             "upsert,",
              "delete,",
              "deleteMany,"
            ]
@@ -931,12 +946,39 @@ emitCreateFn model =
       "create = Insert.insert @" <> tableTypeName model <> " @" <> rowTypeName model
     ]
 
+emitClientCreateManyFn :: Model -> Text
+emitClientCreateManyFn model =
+  T.unlines
+    [ "createMany :: [" <> createTypeName model <> "] -> Db (Either ORMError Int)",
+      "createMany = Insert.insertMany @" <> tableTypeName model
+    ]
+
 emitUpdateFn :: Model -> Text
 emitUpdateFn model =
   T.unlines
     [ "update :: UUID -> " <> updateTypeName model <> " -> Db (Either ORMError " <> rowTypeName model <> ")",
       "update = Update.update @" <> tableTypeName model <> " @" <> rowTypeName model
     ]
+
+emitUpdateManyFn :: Model -> Text
+emitUpdateManyFn model =
+  T.unlines
+    [ "updateMany :: Where " <> tableTypeName model <> " -> " <> updateTypeName model <> " -> Db (Either ORMError Int)",
+      "updateMany = Update.updateMany @" <> tableTypeName model
+    ]
+
+emitClientUpsertFn :: Schema -> Model -> Text
+emitClientUpsertFn schema model =
+  T.unlines
+    [ "upsert :: " <> createTypeName model <> " -> " <> updateTypeName model <> " -> Db (Either ORMError " <> rowTypeName model <> ")",
+      "upsert = Insert.upsert @" <> tableTypeName model <> " @" <> rowTypeName model <> " " <> listLit (upsertConflictCols schema model)
+    ]
+
+upsertConflictCols :: Schema -> Model -> [Text]
+upsertConflictCols schema model =
+  case uniqueCols schema model of
+    [] -> [fieldColumn (primaryKeyField model)]
+    cols -> cols
 
 emitFindManyFn :: Model -> Text
 emitFindManyFn model =

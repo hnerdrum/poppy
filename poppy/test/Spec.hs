@@ -1,6 +1,7 @@
 module Main (main) where
 
 import Poppy.BelongsToSpec (belongsToSpec)
+import Poppy.ClientWriteSpec (clientWriteSpec)
 import Poppy.DbSpec (dbSpec)
 import Poppy.EnumSpec (enumSpec)
 import Poppy.ErrorsSpec (errorsSpec)
@@ -32,3 +33,4 @@ main = hspec $ do
       >> nestedWriteSpec
       >> dbSpec
       >> migrateSpec
+      >> clientWriteSpec
