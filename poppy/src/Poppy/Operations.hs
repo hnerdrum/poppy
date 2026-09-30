@@ -4,6 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
+-- | Low-level reads used by generated Clients. Application code calls @Schema.Client.*@.
 module Poppy.Operations
   ( findMany,
     findManyWith,
@@ -30,8 +31,8 @@ import qualified Poppy.Delete as Delete
 import Poppy.Errors (ORMError (..), requireFound)
 import Poppy.Query
   ( QueryBuilder,
-    matching,
     limit,
+    matching,
     runCountQuery,
     runQuery,
     runQueryOne,

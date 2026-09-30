@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 
+-- | 'Column' instances for Schema scalars (including @numeric@ / 'Data.Scientific.Scientific' and @jsonb@ / 'Data.Aeson.Value').
 module Poppy.Column
   ( Column (..),
   )

@@ -1,6 +1,6 @@
 # Task example
 
-One Schema, a codegen executable, a generated Client, and two queries. For relations, nested writes, and includes see [`examples/blog/`](../blog/).
+One Schema, a codegen executable, a generated Client, and two queries. For relations, nested writes, and includes see [`examples/blog/`](../blog/). Full walkthrough: [Getting started](../../docs/getting-started.md).
 
 From this directory:
 

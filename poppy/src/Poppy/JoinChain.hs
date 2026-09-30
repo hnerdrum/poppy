@@ -3,6 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
+-- | Ad-hoc SELECT with explicit joins. Not a replacement for include records.
 module Poppy.JoinChain
   ( JoinChain,
     JoinedTable (..),

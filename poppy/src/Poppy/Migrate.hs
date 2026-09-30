@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeApplications #-}
 
+-- | Apply hand-written @.sql@ files and record names in @_poppy_migrations@.
 module Poppy.Migrate
   ( MigrateError (..),
     applyMigrations,
@@ -21,11 +22,17 @@ import Poppy.Sql (catchSql)
 import System.Directory (doesDirectoryExist, doesFileExist, listDirectory)
 import System.FilePath (takeExtension, (</>))
 
+-- | Missing directory / unreadable file, or a SQL file that Postgres rejected.
 data MigrateError
-  = MigrateDirectoryError Text
-  | MigrateFailed Text ORMError
+  = -- | Directory missing or a migration file could not be read.
+    MigrateDirectoryError Text
+  | -- | Postgres rejected that file; the name is not recorded.
+    MigrateFailed Text ORMError
   deriving (Show, Eq)
 
+-- | Run pending @*.sql@ files in @dir@ (sorted, not hidden) against the pool.
+-- Creates @_poppy_migrations@ if needed. Returns names applied on this call.
+-- A failed file is not recorded; fix it and re-run. Poppy does not generate SQL.
 applyMigrations :: DbPool -> FilePath -> IO (Either MigrateError [Text])
 applyMigrations pool dir = do
   listed <- listMigrationFiles dir

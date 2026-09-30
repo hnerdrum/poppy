@@ -21,4 +21,4 @@ The module prefix follows the output path (`src/Schema` → `Schema`). Clients a
 | `--check-schema` | Compare Schema to live Postgres (`TEST_DATABASE_URL` or `DATABASE_URL`) |
 | `--list`         | Print output paths without writing                                      |
 
-Setup is in the [repository README](https://github.com/hnerdrum/poppy#readme), [`examples/task/`](https://github.com/hnerdrum/poppy/tree/main/examples/task), and [`examples/blog/`](https://github.com/hnerdrum/poppy/tree/main/examples/blog).
+Guides: [docs/](https://github.com/hnerdrum/poppy/tree/main/docs). Setup is in the [repository README](https://github.com/hnerdrum/poppy#readme), [`examples/task/`](https://github.com/hnerdrum/poppy/tree/main/examples/task), and [`examples/blog/`](https://github.com/hnerdrum/poppy/tree/main/examples/blog).

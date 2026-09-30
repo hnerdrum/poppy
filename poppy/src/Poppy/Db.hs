@@ -1,3 +1,4 @@
+-- | Connection pool, 'Db' monad, and SQL logging.
 module Poppy.Db
   ( Db (..),
     DbPool (..),
@@ -31,6 +32,7 @@ import Poppy.Errors (ORMError)
 -- | Assembled SQL only; bound parameters are not logged.
 type SqlLogger = Text -> IO ()
 
+-- | Connection pool and SQL logger. Bound parameters are never logged.
 data PoolConfig = PoolConfig
   { poolStripes :: Int,
     poolMaxPerStripe :: Int,
@@ -38,6 +40,7 @@ data PoolConfig = PoolConfig
     poolSqlLog :: SqlLogger
   }
 
+-- | 4 stripes × 5 connections, 10s idle, no SQL log.
 defaultPool :: PoolConfig
 defaultPool =
   PoolConfig
@@ -47,6 +50,7 @@ defaultPool =
       poolSqlLog = \_ -> pure ()
     }
 
+-- | Pool plus SQL logger.
 data DbPool = DbPool
   { unDbPool :: Pool Connection,
     dbSqlLog :: SqlLogger
@@ -57,6 +61,7 @@ data DbEnv = DbEnv
     dbLogSql :: SqlLogger
   }
 
+-- | Postgres work on a pooled connection.
 newtype Db a = Db {unDb :: DbEnv -> IO a}
 
 instance Functor Db where
@@ -80,9 +85,11 @@ dbIO action = Db $ \env -> action (dbConnection env)
 logSql :: Text -> Db ()
 logSql sql = Db $ \env -> dbLogSql env sql
 
+-- | Connect with 'defaultPool'.
 connect :: String -> IO DbPool
 connect = connectWith defaultPool
 
+-- | Connect with an explicit 'PoolConfig'.
 connectWith :: PoolConfig -> String -> IO DbPool
 connectWith config databaseUrl = do
   let totalMaxConnections = poolStripes config * poolMaxPerStripe config
@@ -96,9 +103,11 @@ connectWith config databaseUrl = do
   pool <- newPool poolConfig
   pure DbPool {unDbPool = pool, dbSqlLog = poolSqlLog config}
 
+-- | Destroy every connection in the pool.
 closePool :: DbPool -> IO ()
 closePool (DbPool pool _) = destroyAllResources pool
 
+-- | Run a 'Db' action on one pooled connection.
 runDb :: DbPool -> Db a -> IO a
 runDb pool (Db action) =
   withResource (unDbPool pool) $ \conn ->

@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | Codegen CLI: write files, @--check@ freshness, @--check-schema@ drift, @--list@ paths.
 module Poppy.Codegen.CLI
   ( generate,
     mainWith,
@@ -24,7 +25,9 @@ import System.Directory (getCurrentDirectory)
 import System.Environment (getArgs, lookupEnv)
 import System.Exit (exitFailure, exitSuccess)
 
--- | Write table types and a Client under @dir@.
+-- | Write table types and a Client under @dir@ (@src/Schema@ → module prefix @Schema@).
+--
+-- Flags on the process argv: none (write), @--check@, @--check-schema@, @--list@.
 generate :: FilePath -> Schema -> IO ()
 generate dir schema = mainWith [simpleTarget dir schema]
 

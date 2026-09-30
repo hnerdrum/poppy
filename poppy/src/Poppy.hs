@@ -1,3 +1,8 @@
+-- | Runtime used by generated Poppy Clients.
+--
+-- Application code typically imports this module plus @Schema.Client.*@.
+-- Guides: the repository @docs/@ directory. This module is the Haddock
+-- entry point for @Db@, @ORMError@, query combinators, and @applyMigrations@.
 module Poppy
   ( findMany,
     findUnique,

@@ -66,6 +66,7 @@ insert ::
   Db (Either ORMError result)
 insert input = insertBuilder (toInsertBuilder @table input)
 
+-- | Sequential inserts in one transaction (not a multi-row @INSERT@). Empty list succeeds with @0@.
 insertMany ::
   forall table.
   (Insertable table) =>
@@ -81,6 +82,7 @@ insertMany inputs = transactionEither (go 0 inputs)
         Left err -> pure (Left err)
         Right () -> go (n + 1) rest
 
+-- | @INSERT … ON CONFLICT (conflictCols) DO UPDATE@ using the update payload, not @EXCLUDED@.
 upsert ::
   forall table result.
   (Insertable table, Update.Updatable table, FromRow result) =>

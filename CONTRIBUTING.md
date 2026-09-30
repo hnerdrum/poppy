@@ -26,6 +26,8 @@ cabal test all
 
 `DATABASE_URL` is used if `TEST_DATABASE_URL` is unset.
 
+User-facing guides are [`docs/`](docs/). Haddock on `Poppy` and `Poppy.Codegen.Schema` should stay accurate when those APIs change (`cabal haddock all` is in CI).
+
 Example apps are [`examples/task/`](examples/task/) (single table) and [`examples/blog/`](examples/blog/) (relations). After changing emitters, regenerate from each example directory:
 
 ```bash

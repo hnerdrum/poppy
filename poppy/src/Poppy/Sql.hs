@@ -1,3 +1,4 @@
+-- | Raw SQL in 'Poppy.Db.Db': @queryRaw@ / @executeRaw@ with bound 'param's.
 module Poppy.Sql
   ( Param (..),
     param,
@@ -31,6 +32,7 @@ import Poppy.Errors (DatabaseErrorInfo (..), DriverErrorKind (..), ORMError (..)
 
 newtype Param = Param {unParam :: Action}
 
+-- | Bind a @ToField@ value as a @?@ placeholder.
 param :: (ToField a) => a -> Param
 param = Param . toField
 
@@ -40,12 +42,14 @@ quoteIdent name = "\"" <> T.replace "\"" "\"\"" name <> "\""
 quoteQualified :: Text -> Text -> Text
 quoteQualified alias col = quoteIdent alias <> "." <> quoteIdent col
 
+-- | @SELECT@ (or anything with a 'FromRow' result). Does not catch driver errors; wrap with 'catchDb'.
 queryRaw :: (FromRow r) => Query -> [Param] -> Db [r]
 queryRaw query params = do
   logSql (sqlText query)
   dbIO $ \conn ->
     PGSimple.queryWith fromRow conn query (map unParam params)
 
+-- | Statement with no result rows. Returns affected row count. Does not catch driver errors.
 executeRaw :: Query -> [Param] -> Db Int
 executeRaw query params = do
   logSql (sqlText query)
@@ -55,6 +59,7 @@ executeRaw query params = do
 sqlText :: Query -> Text
 sqlText (Query bytes) = decodeUtf8With lenientDecode bytes
 
+-- | Turn a driver exception into 'Left' 'ORMError'.
 catchDb :: Db a -> Db (Either ORMError a)
 catchDb (Db action) = Db $ \env -> catchSql (action env)
 

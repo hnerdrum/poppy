@@ -1,6 +1,6 @@
 # Blog example
 
-Author, Post, an enum, nested create, and includes. The single-table hello-world is [`examples/task/`](../task/).
+Author, Post, an enum, nested create, and includes. The single-table hello-world is [`examples/task/`](../task/). Guides: [Relations](../../docs/relations.md), [Writes](../../docs/writes.md).
 
 From this directory:
 

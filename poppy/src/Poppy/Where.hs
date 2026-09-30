@@ -27,6 +27,7 @@ import Database.PostgreSQL.Simple.Types (In (..))
 import Poppy.Core (Field (..))
 import Poppy.Sql (quoteIdent)
 
+-- | Predicate on the root table only (not nested includes).
 data Where table
   = WhereCmp Text Text Action
   | WhereIn Text Action
@@ -41,41 +42,53 @@ infixr 3 `and_`
 
 infixr 2 `or_`
 
+-- | @=@
 eq :: (ToField a) => Field table a -> a -> Where table
 eq = cmp "="
 
+-- | @<>@
 neq :: (ToField a) => Field table a -> a -> Where table
 neq = cmp "<>"
 
+-- | @>@
 gt :: (ToField a) => Field table a -> a -> Where table
 gt = cmp ">"
 
+-- | @>=@
 gte :: (ToField a) => Field table a -> a -> Where table
 gte = cmp ">="
 
+-- | @<@
 lt :: (ToField a) => Field table a -> a -> Where table
 lt = cmp "<"
 
+-- | @<=@
 lte :: (ToField a) => Field table a -> a -> Where table
 lte = cmp "<="
 
+-- | @IN (…)@. Empty list is false.
 in_ :: (ToField a) => Field table a -> [a] -> Where table
 in_ _ [] = WhereFalse
 in_ field values = WhereIn (fieldColumn field) (toField (In values))
 
+-- | Case-insensitive substring match (@POSITION@ of the needle in the column).
 contains :: Field table Text -> Text -> Where table
 contains field value =
   WhereContains (fieldColumn field) (toField value)
 
+-- | @IS NULL@
 isNull :: Field table a -> Where table
 isNull field = WhereNull (fieldColumn field)
 
+-- | @AND@
 and_ :: Where table -> Where table -> Where table
 and_ = WhereAnd
 
+-- | @OR@
 or_ :: Where table -> Where table -> Where table
 or_ = WhereOr
 
+-- | @NOT@
 not_ :: Where table -> Where table
 not_ = WhereNot
 

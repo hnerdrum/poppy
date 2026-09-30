@@ -5,12 +5,14 @@
 
 Poppy is a Postgres ORM for Haskell. You write a Schema, generate table types and a Client, then query and write through that Client.
 
+Guides: [docs/](docs/). Haddock on `Poppy` and `Poppy.Codegen.Schema` is the API lookup.
+
 Two packages:
 
 - [`poppy`](poppy/) (runtime, `Poppy.*`)
 - [`poppy-codegen`](poppy-codegen/) (Schema builder, file generation, drift-check)
 
-Snippets below are from [`examples/task/`](examples/task/).
+Snippets below are from [`examples/task/`](examples/task/). The full walkthrough is [Getting started](docs/getting-started.md).
 
 ## Getting started
 
@@ -91,28 +93,26 @@ getTask taskKey =
 
 `findUnique` / `findUniqueOrFail` require a `where_` that matches exactly one row: a primary key or a unique constraint on the Schema.
 
-Apply the example migration, then:
+The example app calls `applyMigrations` on `migrations/` then runs those queries:
 
 ```bash
-psql "$DATABASE_URL" -f migrations/001-task.sql
-cabal run task
+export DATABASE_URL=postgres://poppy:poppy@127.0.0.1:5435/poppy_test
+(cd examples/task && cabal run task)
 ```
 
 ## Drift-check and migrations
 
-Codegen does not run migrations.
-
-1. Hand-written SQL migrations change the database.
-2. `--check-schema` introspects live Postgres and reports drift.
-3. Fix the Schema or the SQL, whichever side is wrong, then re-run.
+Codegen does not generate SQL. Hand-written files plus `applyMigrations` change the database; `--check-schema` reports drift. Details: [Migrations and drift](docs/migrations-and-drift.md).
 
 ## Limits
 
 - Postgres only
 - `where_` applies to the root model, not nested relations
-- Include records load whole relations (N+1), not filtered subsets
+- Include records load whole relations (N+1 `IN` lookups, assembled in memory). Filtered includes are not 1.0
 - Queries are assembled as text with bound parameters
-- Scalars: uuid, text, int, bool, timestamptz, and Schema-defined enums
+- Scalars: uuid, text, int, numeric (`Scientific`), jsonb (`aeson` `Value`), bool, timestamptz, and Schema-defined enums
+- Includes are records (`AuthorInclude {posts = True}`), not `with*` helpers
+- `createMany` is sequential inserts in one transaction, not a multi-row `INSERT`
 
 ## Build and test
 

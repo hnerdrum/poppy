@@ -1,3 +1,4 @@
+-- | Column picking for generated @*Select@ records. Default is 'OmitSelect' (full row).
 module Poppy.Select
   ( OmitSelect (..),
     Picked (..),
@@ -5,9 +6,11 @@ module Poppy.Select
   )
 where
 
+-- | @select_@ default: every column, result is the full row type.
 data OmitSelect = OmitSelect
   deriving (Show, Eq)
 
+-- | One column in a partial select.
 data Picked a
   = Picked a
   | Skipped

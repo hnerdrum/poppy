@@ -3,6 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
+-- | Query builders used by generated Clients (@matching@, @asc@ / @desc@, @limit@).
 module Poppy.Query
   ( Query,
     QueryBuilder,
@@ -60,12 +61,15 @@ data OrderDirection = Asc | Desc
 data OrderBy table = OrderBy Text OrderDirection
   deriving (Show, Eq)
 
+-- | @ASC@
 asc :: Field table a -> OrderBy table
 asc field = OrderBy (fieldColumn field) Asc
 
+-- | @DESC@
 desc :: Field table a -> OrderBy table
 desc field = OrderBy (fieldColumn field) Desc
 
+-- | All columns, no filter.
 selectAll :: forall table. (Entity table) => QueryBuilder table
 selectAll =
   QueryBuilder
@@ -83,17 +87,21 @@ select = selectAll @table
 selectColumns :: [Text] -> QueryBuilder table -> QueryBuilder table
 selectColumns cols qb = qb {qbColumns = cols}
 
+-- | Append a @WHERE@ clause (root table).
 matching :: Where table -> QueryBuilder table -> QueryBuilder table
 matching clause qb =
   qb {qbWhere = qbWhere qb ++ [clause]}
 
+-- | Append an @ORDER BY@ column.
 orderBy :: Field table a -> OrderDirection -> QueryBuilder table -> QueryBuilder table
 orderBy field dir qb =
   qb {qbOrderBy = qbOrderBy qb ++ [OrderBy (fieldColumn field) dir]}
 
+-- | @LIMIT@
 limit :: Int -> QueryBuilder table -> QueryBuilder table
 limit n qb = qb {qbLimit = Just n}
 
+-- | @OFFSET@
 offset :: Int -> QueryBuilder table -> QueryBuilder table
 offset n qb = qb {qbOffset = Just n}
 
