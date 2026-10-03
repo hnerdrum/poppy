@@ -1,13 +1,13 @@
 # Client
 
-Generated Clients live under `Schema.Client.<Model>`. Import the Client qualified and the table types (`TaskRow`, field witnesses like `taskId`) from `Schema.<Model>`.
+Generated Clients live under `Schema.Client.<Model>`. Table types (`TaskRow`, field witnesses like `taskId`) can be imported from `Schema.<Model>`.
 
 ```haskell
 import qualified Schema.Client.Task as Task
 import Schema.Task (TaskRow (..), taskDone, taskId)
 ```
 
-Every read takes a query record. Start from `emptyQuery` and override fields.
+Reads take a query record. Start from `emptyQuery` and override the bits you need:
 
 ```haskell
 Task.findMany
@@ -19,18 +19,16 @@ Task.findMany
     }
 ```
 
-`emptyQuery` has no filter, no order, no limit/offset, `select_ = OmitSelect` (full row), and `include_ = noInclude` when the model has relations.
-
 ## Reads
 
-| Function           | Result                                              |
-| ------------------ | --------------------------------------------------- |
-| `findMany`         | `[row]` (empty list is success)                     |
-| `findFirst`        | `Maybe row`                                         |
-| `findFirstOrFail`  | `Either ORMError row` (`RecordNotFound` if missing) |
-| `findUnique`       | `Either ORMError (Maybe row)`                       |
-| `findUniqueOrFail` | `Either ORMError row`                               |
-| `count`            | `Int`                                               |
+| Function           | Result                        |
+| ------------------ | ----------------------------- |
+| `findMany`         | `[row]`                       |
+| `findFirst`        | `Maybe row`                   |
+| `findFirstOrFail`  | `Either ORMError row`         |
+| `findUnique`       | `Either ORMError (Maybe row)` |
+| `findUniqueOrFail` | `Either ORMError row`         |
+| `count`            | `Int`                         |
 
 `findUnique` / `findUniqueOrFail` require `where_` to be equalities on **exactly one** unique key: the primary key, or a `unique_` from the Schema. Incomplete keys, non-equality predicates, and filters that are not unique fail with `InvalidUniqueInput`. Multiple matching rows fail with `MultipleRecordsFound`.
 
@@ -40,6 +38,4 @@ Task.findMany
 
 ## Select
 
-Leave `select_ = OmitSelect` for a full `TaskRow`. To pick columns, pass the generated `TaskSelect` record (`True` keeps the column). The result type becomes `TaskPicked` (`Picked a` or `Skipped` per field). Mixing include and select uses a combined picked-with-relations type.
-
-Writes (`create`, `update`, …) are in [Writes](writes.md). Includes are in [Relations](relations.md).
+Leave `select_` alone if you want every column. To pick columns, pass a `TaskSelect` and set the ones you want to `True`. The result is `TaskPicked`: each field is either `Picked value` or `Skipped`. If you also set `include_`, you get a combined type with the picked root plus the loaded relations.
