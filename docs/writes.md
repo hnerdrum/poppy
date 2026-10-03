@@ -1,10 +1,8 @@
 # Writes
 
-Client write functions return `Db (Either ORMError …)`. Constraint failures become `UniqueViolation`, `ForeignKeyViolation`, or `NotNullViolation`. See [Errors](errors.md).
+These return `Db (Either ORMError …)`. Unique, foreign-key, and not-null failures from Postgres show up as `UniqueViolation`, `ForeignKeyViolation`, and `NotNullViolation`. See [Errors](errors.md).
 
-## Flat writes
-
-| Function     | Arguments                  | Result                |
+| Function     | You pass                   | You get               |
 | ------------ | -------------------------- | --------------------- |
 | `create`     | `TaskCreate`               | `TaskRow`             |
 | `createMany` | `[TaskCreate]`             | `Int` (rows inserted) |
@@ -14,17 +12,12 @@ Client write functions return `Db (Either ORMError …)`. Constraint failures be
 | `delete`     | primary key                | `TaskRow`             |
 | `deleteMany` | `Where`                    | `Int`                 |
 
-`createMany` inserts **one row at a time** inside a single transaction, not a multi-row `INSERT`. An empty list succeeds with `0`.
-
-Create fields that have Schema defaults are `Maybe` (`Nothing` omits the column so Postgres fills `DEFAULT`). `updatedAt` columns are set to now on update.
-
-`upsert` runs `INSERT … ON CONFLICT (cols) DO UPDATE`. Conflict columns are the **first** `unique_` on that model, or the primary key if there is none. The update side uses the `TaskUpdate` payload, not `EXCLUDED`. If the update sets no columns, Poppy still assigns the conflict columns to themselves so `RETURNING` yields a row.
-
-`updateMany` / `deleteMany` with no `Where` fail with `EmptyWhere`.
-
 ## Nested writes
 
-Generated on models that `hasMany` children. `createNested` / `updateNested` take an include record (what to return) and a write payload.
+If a model `hasMany` children, the Client also has `createNested` and `updateNested`. These functions take two arguments:
+
+1. An include record specifying what to load back after the operation
+2. The write operation itself
 
 ```haskell
 Author.createNested
@@ -39,13 +32,7 @@ Author.createNested
     }
 ```
 
-For each `hasMany` edge:
+Each `hasMany` field on the payload is either:
 
-- `Set xs` — delete every child with this parent's foreign key, then insert `xs`
-- `Ops o` — `create`, `createMany`, `connect`, `disconnect`, `delete`, `update`, `upsert` on that relation
-
-`emptyPostNestedOps` is all empty lists. Nested `createMany` is sequential inserts (and `ON CONFLICT DO NOTHING` when the child has a unique). Nested `upsert` conflicts on the child's first unique, or inserts with no conflict clause when there is none.
-
-There is no `connectOrCreate`. `connect` sets the child's foreign key to this parent. `disconnect` and `delete` both delete those child rows.
-
-The whole nested write runs in one transaction (`transactionEither`: a `Left` rolls back).
+- `Set xs` — delete every child that points at this parent, then insert `xs`
+- `Ops o` — run the lists on `o`: `create`, `createMany`, `connect`, `disconnect`, `delete`, `update`, `upsert`
