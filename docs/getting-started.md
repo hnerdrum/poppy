@@ -1,30 +1,15 @@
 # Getting started
 
-Depend on `poppy` and `poppy-codegen` (path deps in this repo; Hackage after the first release). GHC 9.4.8–9.10.3.
+The snippets below are from [`examples/task/`](../examples/task/). [`examples/blog/`](../examples/blog/) is a more involved example, including table relations. See [Relations](relations.md).
 
-The snippets below match [`examples/task/`](../examples/task/). For authors, posts, nested create, and includes see [`examples/blog/`](../examples/blog/) and [Relations](relations.md).
-
-## 1. Write SQL
-
-Poppy does not generate migrations. Put `.sql` files in a directory and apply them at startup with `applyMigrations`. Names are sorted; only `.sql` files that are not already in `_poppy_migrations` run.
-
-```sql
-CREATE TABLE IF NOT EXISTS task (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  title TEXT NOT NULL,
-  done BOOLEAN NOT NULL
-);
-```
-
-## 2. Write a Schema
+## 1. Write a Schema
 
 ```haskell
 {-# LANGUAGE OverloadedStrings #-}
 
 module TaskSchema
-  ( taskSchema,
+  ( taskModel,
+    taskSchema,
   )
 where
 
@@ -47,11 +32,11 @@ taskModel =
     []
 ```
 
-Table and column names default from Haskell names (`Task` → `task`, `createdAt` → `created_at`). Override with `& table "…"` or `& column "…"` when needed. Field combinators are in [Schema](schema.md).
+Table and column names default from the model and field names (`Task` → `task`, `createdAt` → `created_at`). You can override the default names with `& table "…"` or `& column "…"` when needed. The full list of column types is in [Schema](schema.md).
 
-## 3. Generate
+## 2. Generate
 
-A small executable:
+Call `generate` from an executable to generate the client from the above schema:
 
 ```haskell
 module Main (main) where
@@ -63,28 +48,31 @@ main :: IO ()
 main = generate "src/Schema" taskSchema
 ```
 
+`generate` takes an output directory and the schema value. In the Task example that executable is `task-codegen`:
+
 ```bash
 cabal run task-codegen
 ```
 
-That writes `Schema.Task` and `Schema.Client.Task` under `src/Schema/`. The module prefix is the output path with source-dir segments dropped (`src/Schema` → `Schema`). Re-run after Schema changes.
+The executable accepts the following flags:
 
-| Flag             | Purpose                                                                 |
-| ---------------- | ----------------------------------------------------------------------- |
-| _(none)_         | Validate Schemas and write generated files                              |
-| `--check`        | Fail if generated files on disk differ from Codegen                     |
-| `--check-schema` | Compare Schema to live Postgres (`TEST_DATABASE_URL` or `DATABASE_URL`) |
-| `--list`         | Print output paths without writing                                      |
+| Flag             | Purpose                                             |
+| ---------------- | --------------------------------------------------- |
+| _(none)_         | Validate Schemas and write generated files          |
+| `--check`        | Fail if generated files on disk differ from Codegen |
+| `--check-schema` | Compare Schema to live Postgres database            |
+| `--list`         | Print output paths without writing                  |
 
-`--check-schema` needs a database URL. Haskell IR is the source of truth: if Postgres disagrees, fix the SQL or the Schema. See [Migrations and drift](migrations-and-drift.md).
+`--check-schema` connects to Postgres via the `DATABASE_URL` environment variable and fails if tables, columns, or keys do not match the schema. See [Migrations and drift](migrations-and-drift.md) for more details.
 
-## 4. Query with the Client
+## 3. Query with the Client
 
 ```haskell
-import Poppy (Db, ORMError, applyMigrations, closePool, connect, runDb)
+import Data.UUID (UUID)
+import Poppy (Db, ORMError)
 import Poppy.Where (eq)
 import qualified Schema.Client.Task as Task
-import Schema.Task (TaskCreate (..), TaskRow (..), taskDone, taskId)
+import Schema.Task (TaskRow (..), taskDone, taskId)
 
 listOpenTasks :: Db [TaskRow]
 listOpenTasks =
@@ -97,11 +85,30 @@ getTask taskKey =
     Task.emptyQuery {Task.where_ = Just (eq taskId taskKey)}
 ```
 
-`findUnique` / `findUniqueOrFail` require a `where_` that is exactly a primary key or a unique declared on the Schema. Other reads and writes are in [Client](client.md) and [Writes](writes.md).
+More of the read and write API is in [Client](client.md) and [Writes](writes.md), respectively.
 
-## 5. Connect and migrate
+## 4. Migrations
+
+Poppy does not generate SQL from the Schema, so you write the `.sql` files for migrations yourself. To apply migrations, you call the `applyMigrations` runner before the app starts:
+
+Add a `001-task.sql` file to the `migrations` folder:
+
+```sql
+CREATE TABLE IF NOT EXISTS task (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  title TEXT NOT NULL,
+  done BOOLEAN NOT NULL
+);
+```
+
+The Task app connects, applies the file, then runs the queries:
 
 ```haskell
+import Poppy (applyMigrations, closePool, connect, runDb)
+import System.Environment (getEnv)
+
 main :: IO ()
 main = do
   url <- getEnv "DATABASE_URL"
@@ -115,7 +122,7 @@ main = do
   closePool pool
 ```
 
-`connect` uses `defaultPool`. Tune stripes, idle time, and SQL logging with `connectWith`. Bound parameters are not logged.
+[Migrations and drift](migrations-and-drift.md) explains this process in more detail.
 
 From this repo, after `docker compose up -d`:
 
