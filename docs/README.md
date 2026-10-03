@@ -13,6 +13,5 @@ Start here:
 7. [Errors](errors.md) — `ORMError`
 8. [Raw SQL](raw-sql.md) — `queryRaw`, `JoinChain`
 9. [Why Poppy](why-poppy.md) — shape of the 1.0 bar
-10. [Versioning](versioning.md) — packages, GHC, what 1.0 is not
 
 Worked examples: [`examples/task/`](../examples/task/) (one table) and [`examples/blog/`](../examples/blog/) (relations). Haddock on `Poppy` and `Poppy.Codegen.Schema` is the API lookup; these pages are the tutorial.

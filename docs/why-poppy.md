@@ -11,5 +11,3 @@ What that means in practice:
 - **Queries are text plus bound parameters**, not a typed query AST you extend. Escape hatch: `queryRaw` / `JoinChain`.
 
 Compared with Persistent (models and migrations in Template Haskell), Diesel (Rust, query builder as the center), or Drizzle (SQL-first schema in TypeScript), Poppy puts the generated Client in front and treats SQL schema as a drift-checked artifact. If you want a full query builder or generated migrations, this is the wrong tool.
-
-The 1.0 bar is frozen as that Prisma-shaped core, not feature parity. See [Versioning](versioning.md).
