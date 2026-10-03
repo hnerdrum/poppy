@@ -12,6 +12,5 @@ Start here:
 6. [Migrations and drift](migrations-and-drift.md) — hand-written SQL, `applyMigrations`, `--check-schema`
 7. [Errors](errors.md) — `ORMError`
 8. [Raw SQL](raw-sql.md) — `queryRaw`, `JoinChain`
-9. [Why Poppy](why-poppy.md) — shape of the 1.0 bar
 
 Worked examples: [`examples/task/`](../examples/task/) (one table) and [`examples/blog/`](../examples/blog/) (relations). Haddock on `Poppy` and `Poppy.Codegen.Schema` is the API lookup; these pages are the tutorial.
