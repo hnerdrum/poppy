@@ -1,5 +1,5 @@
 # poppy
 
-Runtime for [Poppy](https://github.com/hnerdrum/poppy). Application code imports this package to query and write Postgres through a generated Client.
+The runtime library for [Poppy](https://github.com/hnerdrum/poppy), a Postgres ORM for Haskell. Your app imports `poppy` to query and write through the client that [`poppy-codegen`](https://github.com/hnerdrum/poppy/tree/main/poppy-codegen) generates from your schema. It also provides `applyMigrations`, which runs your hand-written `.sql` migrations before the app starts.
 
-Guides: [docs/](https://github.com/hnerdrum/poppy/tree/main/docs). Setup, limits, and examples are in the [repository README](https://github.com/hnerdrum/poppy#readme).
+The [repository README](https://github.com/hnerdrum/poppy#readme) shows the full setup, and the [guides](https://github.com/hnerdrum/poppy/tree/main/docs) cover the client API, writes, relations, raw SQL, and errors.

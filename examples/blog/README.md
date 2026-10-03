@@ -1,30 +1,32 @@
 # Blog example
 
-Author, Post, an enum, nested create, and includes. The single-table hello-world is [`examples/task/`](../task/). Guides: [Relations](../../docs/relations.md), [Writes](../../docs/writes.md).
+Two related tables (an `Author` has many `Post`s) and an `ArticleStatus` enum. The app creates an author and two posts in one nested write, then loads every author with their posts. For a single-table version, see [`examples/task/`](../task/). The [Relations](../../docs/relations.md) and [Writes](../../docs/writes.md) guides explain the API used here.
 
-From this directory:
+Run the generator from this directory:
 
 ```bash
 cabal run blog-codegen
 ```
 
-That writes table types and Clients under `src/Schema/` (`generate "src/Schema"`). Re-run after Schema changes. `--check` fails if those files are stale; `--check-schema` compares the Schema to live Postgres (`TEST_DATABASE_URL` or `DATABASE_URL`).
+It writes the table types, the enum, an `AuthorInclude` type, and a client per table under `src/Schema/`. Re-run it whenever you change `codegen/BlogSchema.hs`. Pass `--check` to fail when those files are out of date, or `--check-schema` to compare the schema against Postgres. The schema check reads `TEST_DATABASE_URL` and falls back to `DATABASE_URL`.
+
+Start Postgres with `docker compose up -d` from the repo root, then run the app:
 
 ```bash
 export DATABASE_URL=postgres://poppy:poppy@127.0.0.1:5435/poppy_test
 cabal run blog
 ```
 
-`blog` applies `migrations/*.sql` with `applyMigrations`, creates an author with two posts in one nested write, then lists authors including their posts.
+The app applies `migrations/*.sql` with `applyMigrations` before it writes anything.
 
 ## Layout
 
-| Path                    | Role                                     |
-| ----------------------- | ---------------------------------------- |
-| `codegen/BlogSchema.hs` | Schema value                             |
-| `codegen/Main.hs`       | `generate "src/Schema" blogSchema`       |
-| `src/Schema/`           | Generated table types, includes, Clients |
-| `app/Main.hs`           | Nested create + include query            |
-| `migrations/`           | Hand-written SQL, applied at startup     |
+| Path                    | Contents                                    |
+| ----------------------- | ------------------------------------------- |
+| `codegen/BlogSchema.hs` | The schema                                  |
+| `codegen/Main.hs`       | `generate "src/Schema" blogSchema`          |
+| `src/Schema/`           | Generated table types, includes, and client |
+| `app/Main.hs`           | Nested create and include query             |
+| `migrations/`           | Hand-written SQL, applied at startup        |
 
-This package is not on Hackage. It path-depends on `../../poppy` and `../../poppy-codegen` via `cabal.project`.
+This package isn't published to Hackage. Its `cabal.project` points at `../../poppy` and `../../poppy-codegen` by path.
