@@ -1,6 +1,8 @@
 # Relations
 
-Declare relations on the Schema, generate, then pass an include **record** on the query. There are no `withPosts`-style helpers: the record is the API.
+Tables can point at each other. An author has many posts; each post stores `authorId`. You declare that on the Schema with `hasMany` or `belongsTo`. After codegen, a Client query can load the related rows in the same call, instead of you fetching posts yourself and grouping them.
+
+Set `include_` on the query when you want that. [`examples/blog/`](../examples/blog/) is a small app that loads authors with their posts.
 
 ```haskell
 model
@@ -11,24 +13,18 @@ model
   [hasMany "authorPosts" "Post" "authorId"]
 ```
 
-`hasMany "authorPosts" "Post" "authorId"` means `Post.authorId` points at `Author.id`. The include field is `posts` (owner prefix stripped). Name the relation so that strip is the field you want.
-
-`belongsTo "author" "Author" "authorId"` on `Post` is the inverse, for loading the parent from a child. Nested writes and parent→children includes need `hasMany` on the parent. Declare the direction you will query.
-
-Worked example: [`examples/blog/`](../examples/blog/).
+`Post.authorId` points at `Author.id`. The include field is `posts` because Codegen drops the `author` prefix from `authorPosts`.
 
 ## Include records
-
-Leaf edges are `Bool`. Nested edges are `Maybe ChildInclude`.
 
 ```haskell
 Author.findMany
   Author.emptyQuery {Author.include_ = Author.AuthorInclude {posts = True}}
 ```
 
-`emptyQuery` uses `noInclude` (`NoInclude` wrapping the include type) so the result is a plain `AuthorRow`. Setting `include_ = AuthorInclude {posts = True}` changes the result to `AuthorWithPosts { author :: AuthorRow, posts :: [PostRow] }`.
+`emptyQuery` uses `noInclude`, so you get `[AuthorRow]`. Set `include_` to `AuthorInclude {posts = True}` and the result type becomes `AuthorWithPosts`: an `author` row plus a `posts` list.
 
-Deeper graphs (shelf → books → chapters) look like:
+`posts = True` is enough when you only want that list. To go further (books, then chapters), wrap the next include in `Just`:
 
 ```haskell
 ShelfInclude
@@ -37,14 +33,4 @@ ShelfInclude
   }
 ```
 
-`True` / `Just …` loads that edge for **every** parent in the result. There is no per-relation `where_`, `orderBy_`, or `take` in 1.0.
-
-## How includes load
-
-Each included edge is a follow-up query: `WHERE foreign_key IN (…parent ids…)`, then assembly in memory. That is N+1 (one root query plus one per included edge), not a SQL `JOIN`. Root `where_`, `orderBy_`, `limit_`, and `offset_` do not apply to children.
-
-`where_` on the query record is still only the root model.
-
-## Nested writes
-
-`createNested` / `updateNested` take the same include type so the returned graph matches what you asked to load. Child payloads use `Set` (replace all children) or `Ops` (create, connect, disconnect, delete, update, upsert). See [Writes](writes.md).
+`True` or `Just …` loads that relation for every parent in the result. You cannot attach a `where_`, `orderBy_`, or `take` to a child.
