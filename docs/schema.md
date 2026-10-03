@@ -1,6 +1,6 @@
 # Schema
 
-A Schema is Haskell: enums, models, and unique constraints. Codegen turns it into table types (`Schema.Task`) and a Client (`Schema.Client.Task`). Import combinators from `Poppy.Codegen.Schema`.
+A Schema is Haskell code with three separate parts: enums, models, and unique constraints. Codegen then turns it into table types (`Schema.Task`) and a Client (`Schema.Client.Task`).
 
 ```haskell
 schema
@@ -8,8 +8,6 @@ schema
   [authorModel, postModel]
   [unique_ "Post" ["title"]]
 ```
-
-The third argument is uniques that are not the primary key. Models that declare relations also get a full-graph Include (see [Relations](relations.md)).
 
 ## Models and fields
 
@@ -25,9 +23,9 @@ model
   []
 ```
 
-`model "Task" fields relations` sets the table name to snake_case of the model name. Override with `& table "tasks"`. Field names become snake_case columns unless you `& column "…"`.
+The first argument is the model name. By default the table is that name in snake_case (`Task` → `task`), and each field becomes a snake_case column (`createdAt` → `created_at`). Use `& table "tasks"` or `& column "heading"` when the database already uses different names.
 
-| Combinator                           | Postgres                      | Haskell            |
+| Helper                               | Postgres                      | Haskell type       |
 | ------------------------------------ | ----------------------------- | ------------------ |
 | `uuid`                               | `uuid`                        | `UUID`             |
 | `text`                               | `text`                        | `Text`             |
@@ -38,12 +36,12 @@ model
 | `timestamptz`                        | `timestamp with time zone`    | `UTCTime`          |
 | `enumField "status" "ArticleStatus"` | enum type named in the Schema | generated sum type |
 
-Modifiers:
+You can chain extra options onto a field:
 
-- `pk` — exactly one per model
-- `nullable` — `Maybe` on the row; create/update use `NullableValue` (`Omit` / `Value` / `Null`)
-- `updatedAt` — Client writes set this column to now
-- `withDefault DefaultUuidV4` / `withDefault DefaultNow` — create input is `Maybe`; `--check-schema` requires a matching column `DEFAULT` (`uuid_generate_v4()` or `gen_random_uuid()`; `now()` or `CURRENT_TIMESTAMP`)
+- `pk` marks the primary key. A model needs exactly one.
+- `nullable` makes the row field a `Maybe`. On create and update you pass `Omit`, `Value x`, or `Null`.
+- `updatedAt` is filled with the current time whenever the Client writes the row.
+- `withDefault DefaultUuidV4` or `withDefault DefaultNow` makes the create field a `Maybe` (`Nothing` leaves the column out so Postgres can apply its `DEFAULT`). `--check-schema` expects that default to be `uuid_generate_v4()` / `gen_random_uuid()`, or `now()` / `CURRENT_TIMESTAMP`.
 
 ## Enums
 
@@ -51,9 +49,9 @@ Modifiers:
 enum_ "ArticleStatus" [variant "Draft", variant "Published"]
 ```
 
-Variant names are the Haskell constructors. The Postgres labels default to the same spelling. Use `variantMap "Draft" "draft"` when they differ. `enumImportFrom "My.Module"` skips generating the sum type and imports yours instead.
+Each variant becomes a Haskell constructor. Postgres gets the same spelling unless you use `variantMap "Draft" "draft"`. If you already have a sum type, `enumImportFrom "My.Module"` imports that instead of generating one.
 
-Create the Postgres type in a migration (`CREATE TYPE articlestatus AS ENUM (...)`). Enum type names are lowercased for drift-check.
+You still have to create the type in SQL (`CREATE TYPE articlestatus AS ENUM (...)`).
 
 ## Relations
 
@@ -62,11 +60,11 @@ hasMany "authorPosts" "Post" "authorId"
 belongsTo "author" "Author" "authorId"
 ```
 
-`hasMany name toModel foreignField` — the other table has `foreignField` pointing at this model's primary key.
+`hasMany` means the other table has a foreign key (`authorId` on `Post`) that points at this model's primary key. `belongsTo` is the other direction: this model has the foreign key.
 
-`belongsTo name toModel foreignField` — this model has `foreignField` pointing at `toModel`'s primary key.
+Add `hasMany` on `Author` when you want to create posts with the author, or load an author with their posts. Add `belongsTo` on `Post` when you want to load a post's author. [Relations](relations.md) covers how that loading works.
 
-The relation `name` is not the include record field. Codegen strips the owner prefix when present (`authorPosts` on `Author` → include field `posts`); otherwise it uses the target model name. Declare the edges you will query: nested writes and parent→children includes need `hasMany` on the parent; child→parent includes need `belongsTo` on the child. See [Relations](relations.md).
+The include record does not use the relation name as-is. On `Author`, `hasMany "authorPosts" …` becomes `AuthorInclude { posts = True }`: Codegen drops the `author` prefix. If you call the relation `posts`, the field is `post` instead (taken from the model name `Post`). Name it `authorPosts` if you want `posts`.
 
 ## Uniques
 
@@ -74,8 +72,16 @@ The relation `name` is not the include record field. Codegen strips the owner pr
 unique_ "Post" ["title"]
 ```
 
-Field names, not columns. They become `uniqueKeys` on the generated `Entity` instance. `findUnique` `where_` must be equalities on the primary key or one of these. `upsert` conflicts on the **first** unique, or the primary key if there are none.
+Pass the Schema field names (`title`), not the Postgres column. `findUnique` only accepts `eq` on the primary key, or `eq` on every field of one of these uniques. `upsert` conflicts on the first `unique_` you listed for that model; if there isn't one, it uses the primary key.
 
 ## Validation
 
-`generate` and `--check` run `validateSchema` first (duplicate names, missing PK, unknown relation fields, empty uniques, include depth, and so on). Fix those before drift-check.
+`generate` and `--check` run these checks:
+
+- Model, enum, and include names are unique.
+- Every model has exactly one `pk`.
+- Every enum has at least one variant, and variant names are unique.
+- `enumField` names an enum that exists on the Schema.
+- Each relation's `from` / `to` models exist, and the foreign-key field exists on the right model.
+- Each `unique_` names a real model and at least one real field.
+- The generated include tree has no duplicate edge on the same model, no unknown relation, and is at most 5 relations deep.
