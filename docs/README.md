@@ -1,16 +1,13 @@
-# Poppy docs
+# Docs
 
-Poppy is a Postgres ORM for Haskell. You write a Schema, generate table types and a Client, then query and write through that Client.
+[Getting started](getting-started.md) is the walkthrough from the root README. The other pages go deeper on one topic.
 
-Start here:
+- [Schema](schema.md)
+- [Client](client.md)
+- [Relations](relations.md)
+- [Writes](writes.md)
+- [Migrations and drift](migrations-and-drift.md)
+- [Errors](errors.md)
+- [Raw SQL](raw-sql.md)
 
-1. [Getting started](getting-started.md) — Schema, generate, migrate, first query
-2. [Schema](schema.md) — fields, enums, relations, uniques
-3. [Client](client.md) — `emptyQuery`, reads, `select_`
-4. [Relations](relations.md) — `hasMany` / `belongsTo`, include records
-5. [Writes](writes.md) — create, update, upsert, nested `Set` / `Ops`
-6. [Migrations and drift](migrations-and-drift.md) — hand-written SQL, `applyMigrations`, `--check-schema`
-7. [Errors](errors.md) — `ORMError`
-8. [Raw SQL](raw-sql.md) — `queryRaw`, `JoinChain`
-
-Worked examples: [`examples/task/`](../examples/task/) (one table) and [`examples/blog/`](../examples/blog/) (relations). Haddock on `Poppy` and `Poppy.Codegen.Schema` is the API lookup; these pages are the tutorial.
+Examples: [`examples/task/`](../examples/task/) (one table) and [`examples/blog/`](../examples/blog/) (tables with relation).
