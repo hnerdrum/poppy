@@ -28,6 +28,12 @@ extra-source-files:
     test/migrations/005-test-tag.sql
     test/migrations/006-test-author-post.sql
     test/migrations/007-test-packet.sql
+    include-spike-fail/RecordUpdateAmbiguous.hs
+    include-spike-fail/RecordUpdateOther.hs
+    include-spike-fail/RecordUpdateSame.hs
+    include-spike-fail/SkippedPosts.hs
+    include-spike-fail/SkippedPostsNoSelectors.hs
+    include-spike-fail/WrongChild.hs
 extra-doc-files:
     README.md
     CHANGELOG.md
@@ -87,6 +93,11 @@ test-suite poppy-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      IncludeSpike.Author
+      IncludeSpike.Examples
+      IncludeSpike.Rows
+      IncludeSpike.Runtime
+      IncludeSpike.Shelf
       Poppy.AuthorFixtures
       Poppy.BelongsToSpec
       Poppy.ClientWriteSpec
@@ -95,6 +106,7 @@ test-suite poppy-test
       Poppy.ErrorsSpec
       Poppy.GroupSpec
       Poppy.IncludeSpec
+      Poppy.IncludeSpikeSpec
       Poppy.MigrateSpec
       Poppy.NestedWriteSpec
       Poppy.OperationsSpec
@@ -159,6 +171,7 @@ test-suite poppy-test
     , mtl >=2.2 && <2.4
     , poppy
     , postgresql-simple >=0.6 && <0.8
+    , process ==1.6.*
     , resource-pool ==0.4.*
     , scientific >=0.3.4 && <0.4
     , text >=2.0 && <2.2

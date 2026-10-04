@@ -15,6 +15,7 @@ description: |
 
 extra-source-files:
   - test/migrations/*.sql
+  - include-spike-fail/*.hs
 
 extra-doc-files:
   - README.md
@@ -85,6 +86,7 @@ tests:
     dependencies:
       - poppy
       - hspec >= 2.11 && < 2.13
+      - process >= 1.6 && < 1.7
     default-extensions:
       - AllowAmbiguousTypes
       - DuplicateRecordFields
