@@ -23,6 +23,6 @@ The executable accepts the following flags:
 | `--check-schema` | Compare Schema to live Postgres database            |
 | `--list`         | Print output paths without writing                  |
 
-`--check-schema` reads `TEST_DATABASE_URL`, falls back to `DATABASE_URL`, and fails if tables, columns, or keys do not match the schema.
+`--check-schema` connects with `DATABASE_URL`, or with the URL passed as `--database-url`, and fails if tables, columns, or keys do not match the schema.
 
 The [repository README](https://github.com/hnerdrum/poppy#readme) shows the full setup. For working code, see [`examples/task/`](https://github.com/hnerdrum/poppy/tree/main/examples/task) and [`examples/blog/`](https://github.com/hnerdrum/poppy/tree/main/examples/blog). The [guides](https://github.com/hnerdrum/poppy/tree/main/docs) cover the schema builder and migrations in more depth.

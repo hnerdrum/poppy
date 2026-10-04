@@ -8,7 +8,7 @@ Run the generator from this directory:
 cabal run task-codegen
 ```
 
-It writes `src/Schema/Task.hs` and `src/Schema/Client/Task.hs`. Re-run it whenever you change `codegen/TaskSchema.hs`. Pass `--check` to fail when those files are out of date, or `--check-schema` to compare the schema against Postgres. The schema check reads `TEST_DATABASE_URL` and falls back to `DATABASE_URL`.
+It writes `src/Schema/Task.hs` and `src/Schema/Client/Task.hs`. Re-run it whenever you change `codegen/TaskSchema.hs`. Pass `--check` to fail when those files are out of date, or `--check-schema` to compare the schema against Postgres. The schema check uses `DATABASE_URL`, or the URL given to `--database-url`.
 
 Start Postgres with `docker compose up -d` from the repo root, then run the app:
 

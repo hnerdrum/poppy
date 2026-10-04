@@ -10,7 +10,6 @@ module Support.TestDb
   )
 where
 
-import Control.Applicative ((<|>))
 import Control.Exception (SomeException, displayException, try)
 import Control.Monad (void)
 import Data.Text (Text)
@@ -46,13 +45,12 @@ withTestDb spec =
 testDatabaseUrl :: IO String
 testDatabaseUrl = do
   mTestUrl <- lookupEnv "TEST_DATABASE_URL"
-  mDbUrl <- lookupEnv "DATABASE_URL"
-  case mTestUrl <|> mDbUrl of
+  case mTestUrl of
     Nothing ->
       fail $
         unlines
           [ "No test database URL configured.",
-            "Set TEST_DATABASE_URL (recommended) or DATABASE_URL.",
+            "Set TEST_DATABASE_URL.",
             "Start Postgres with: docker compose up -d",
             "Default URL: postgres://poppy:poppy@127.0.0.1:5435/poppy_test"
           ]

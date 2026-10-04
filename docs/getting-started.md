@@ -63,7 +63,7 @@ The executable accepts the following flags:
 | `--check-schema` | Compare Schema to live Postgres database            |
 | `--list`         | Print output paths without writing                  |
 
-`--check-schema` connects to Postgres via the `DATABASE_URL` environment variable and fails if tables, columns, or keys do not match the schema. See [Migrations and drift](migrations-and-drift.md) for more details.
+`--check-schema` connects to Postgres via `DATABASE_URL`, or via `--database-url URL`, and fails if tables, columns, or keys do not match the schema. See [Migrations and drift](migrations-and-drift.md) for more details.
 
 ## 3. Query with the Client
 

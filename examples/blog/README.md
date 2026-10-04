@@ -8,7 +8,7 @@ Run the generator from this directory:
 cabal run blog-codegen
 ```
 
-It writes the table types, the enum, an `AuthorInclude` type, and a client per table under `src/Schema/`. Re-run it whenever you change `codegen/BlogSchema.hs`. Pass `--check` to fail when those files are out of date, or `--check-schema` to compare the schema against Postgres. The schema check reads `TEST_DATABASE_URL` and falls back to `DATABASE_URL`.
+It writes the table types, the enum, an `AuthorInclude` type, and a client per table under `src/Schema/`. Re-run it whenever you change `codegen/BlogSchema.hs`. Pass `--check` to fail when those files are out of date, or `--check-schema` to compare the schema against Postgres. The schema check uses `DATABASE_URL`, or the URL given to `--database-url`.
 
 Start Postgres with `docker compose up -d` from the repo root, then run the app:
 
