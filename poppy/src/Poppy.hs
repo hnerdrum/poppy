@@ -81,9 +81,6 @@ module Poppy
     PrimaryKeyType,
     NullableValue (..),
     toField,
-    JoinType (..),
-    HasMany (..),
-    BelongsTo (..),
     requireFound,
     runDb,
     withTransaction,
@@ -116,7 +113,6 @@ import Poppy.Insert
 import Poppy.Migrate (MigrateError (..), applyMigrations)
 import Poppy.Operations
 import Poppy.Query
-import Poppy.Relation
 import Poppy.Select
 import Poppy.Sql (catchDb, executeRaw, param, queryRaw)
 import Poppy.Update

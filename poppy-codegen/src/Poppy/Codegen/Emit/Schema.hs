@@ -3,8 +3,6 @@
 module Poppy.Codegen.Emit.Schema
   ( emitModelModule,
     emitEnumModule,
-    emitHasMany,
-    emitBelongsTo,
     enumImportLine,
   )
 where
@@ -28,7 +26,7 @@ import Poppy.Codegen.EmitCommon
     updateTypeName,
   )
 import Poppy.Codegen.IR
-import Poppy.Codegen.Lookup (lookupField, lookupModel, lookupUniques)
+import Poppy.Codegen.Lookup (lookupField, lookupUniques)
 import Poppy.Codegen.TextUtil (lowerFirst)
 
 emitModelModule :: Text -> Schema -> Model -> Text
@@ -68,9 +66,7 @@ emitModelModule moduleName schema model =
                emitSelectTypes model,
                ""
              ],
-        concatMap (emitFieldDecl model) (modelFields model),
-        map (emitHasMany schema) (hasManyRelations model),
-        map (emitBelongsTo schema) (belongsToRelations model)
+        concatMap (emitFieldDecl model) (modelFields model)
       ]
   where
     tableName_ = tableTypeName model
@@ -95,8 +91,6 @@ emitExports model =
         updateTypeName model <> " (..)"
       ]
         ++ map (fieldBinder model) (modelFields model)
-        ++ map relName (hasManyRelations model)
-        ++ map relName (belongsToRelations model)
 
 pragmas :: [Text]
 pragmas =
@@ -122,11 +116,9 @@ imports moduleName schema model =
         "import Poppy.Core",
         "import Poppy.Select (Picked (..), picked)",
         insertImport model,
-        updateImport model,
-        relationImport model
+        updateImport model
       ]
       ++ enumImports moduleName schema model
-      ++ relationModelImports moduleName schema model
 
 enumImports :: Text -> Schema -> Model -> [Text]
 enumImports moduleName schema model =
@@ -227,36 +219,6 @@ emitEnumToString e =
 variantDbStr :: EnumVariant -> Text
 variantDbStr v = fromMaybe (lowerFirst (variantName v)) (variantDbValue v)
 
-relationModelImports :: Text -> Schema -> Model -> [Text]
-relationModelImports moduleName schema model =
-  concatMap hasManyImport (hasManyRelations model)
-    ++ concatMap belongsToImport (belongsToRelations model)
-  where
-    hasManyImport rel =
-      let child = lookupModel schema (relToModel rel)
-          foreignField = lookupField child (relForeignField rel)
-          childMod = siblingModule moduleName child
-       in [ "import "
-              <> childMod
-              <> " ("
-              <> tableTypeName child
-              <> ", "
-              <> fieldBinder child foreignField
-              <> ")"
-          ]
-    belongsToImport rel =
-      let parent = lookupModel schema (relToModel rel)
-          parentMod = siblingModule moduleName parent
-       in [ "import " <> parentMod <> " (" <> tableTypeName parent <> ")",
-            "import qualified " <> parentMod <> " as " <> modelName parent
-          ]
-
-siblingModule :: Text -> Model -> Text
-siblingModule moduleName model =
-  case T.breakOnEnd "." moduleName of
-    (prefix, _) | not (T.null prefix) -> prefix <> modelName model
-    _ -> modelName model
-
 insertImport :: Model -> Text
 insertImport model =
   let needsNullable = any fieldNullable (modelFields model)
@@ -278,14 +240,6 @@ updateImport model =
           ++ ["setFieldNullable" | needsNullable]
    in "import Poppy.Update (" <> T.intercalate ", " parts <> ")"
 
-relationImport :: Model -> Text
-relationImport model =
-  case (needsHasMany model, needsBelongsTo model) of
-    (False, False) -> ""
-    (True, False) -> "import Poppy.Relation (HasMany (..), JoinType (..))"
-    (False, True) -> "import Poppy.Relation (BelongsTo (..), JoinType (..))"
-    (True, True) -> "import Poppy.Relation (HasMany (..), BelongsTo (..), JoinType (..))"
-
 needsTime :: Model -> Bool
 needsTime = any ((== TyTimestamptz) . fieldType) . modelFields
 
@@ -304,20 +258,6 @@ needsJsonb = any ((== TyJsonb) . fieldType) . modelFields
 hasRequiredCreateField :: Model -> Bool
 hasRequiredCreateField =
   any (\f -> createKind f == CreateRequired) . modelFields
-
-needsHasMany :: Model -> Bool
-needsHasMany = not . null . hasManyRelations
-
-hasManyRelations :: Model -> [RelationSpec]
-hasManyRelations =
-  filter ((== RelHasMany) . relKind) . modelRelations
-
-needsBelongsTo :: Model -> Bool
-needsBelongsTo = not . null . belongsToRelations
-
-belongsToRelations :: Model -> [RelationSpec]
-belongsToRelations =
-  filter ((== RelBelongsTo) . relKind) . modelRelations
 
 pkHsType :: Model -> Text
 pkHsType model = hsType (fieldType (primaryKeyField model))
@@ -571,66 +511,3 @@ emitUpdatable model =
     updatedAtBinder f
       | fieldUpdatedAt f = Just (fieldBinder model f)
       | otherwise = Nothing
-
-emitHasMany :: Schema -> RelationSpec -> Text
-emitHasMany schema rel =
-  case relKind rel of
-    RelBelongsTo ->
-      error "emitHasMany: expected RelHasMany"
-    RelHasMany ->
-      T.unlines
-        [ name <> " :: HasMany " <> parentTable <> " " <> childTable <> " " <> keyTy,
-          name <> " =",
-          "  HasMany",
-          "    { localKey = " <> localBinder <> ",",
-          "      foreignKey = " <> foreignBinder <> ",",
-          "      joinType = " <> joinTy,
-          "    }"
-        ]
-  where
-    name = relName rel
-    parent = lookupModel schema (relFromModel rel)
-    child = lookupModel schema (relToModel rel)
-    parentTable = tableTypeName parent
-    childTable = tableTypeName child
-    localField = lookupField parent (relLocalField rel)
-    foreignField = lookupField child (relForeignField rel)
-    localBinder = fieldBinder parent localField
-    foreignBinder = fieldBinder child foreignField
-    keyTy = hsType (fieldType localField)
-    joinTy = emitJoinType (relJoin rel)
-
-emitBelongsTo :: Schema -> RelationSpec -> Text
-emitBelongsTo schema rel =
-  case relKind rel of
-    RelHasMany ->
-      error "emitBelongsTo: expected RelBelongsTo"
-    RelBelongsTo ->
-      T.unlines
-        [ name <> " :: BelongsTo " <> childTable <> " " <> parentTable <> " " <> keyTy,
-          name <> " =",
-          "  BelongsTo",
-          "    { foreignKey = " <> foreignBinder <> ",",
-          "      references = " <> referencesBinder <> ",",
-          "      joinType = " <> joinTy,
-          "    }"
-        ]
-  where
-    name = relName rel
-    child = lookupModel schema (relFromModel rel)
-    parent = lookupModel schema (relToModel rel)
-    childTable = tableTypeName child
-    parentTable = tableTypeName parent
-    -- IR: relForeignField = FK on child; relLocalField = referenced field on parent
-    foreignField = lookupField child (relForeignField rel)
-    referencedField = lookupField parent (relLocalField rel)
-    foreignBinder = fieldBinder child foreignField
-    referencesBinder =
-      modelName parent <> "." <> fieldBinder parent referencedField
-    keyTy = hsType (fieldType foreignField)
-    joinTy = emitJoinType (relJoin rel)
-
-emitJoinType :: JoinKind -> Text
-emitJoinType JoinLeft = "LeftJoin"
-emitJoinType JoinInner = "InnerJoin"
-emitJoinType JoinRight = "RightJoin"

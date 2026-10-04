@@ -53,15 +53,11 @@ library:
     - Poppy.Codegen.Validate
   other-modules:
     - Poppy.Codegen.Emit.Client
-    - Poppy.Codegen.Emit.FlatRow
     - Poppy.Codegen.Emit.Include
-    - Poppy.Codegen.Emit.Nest
     - Poppy.Codegen.Emit.Schema
     - Poppy.Codegen.Emit.SelectIn
     - Poppy.Codegen.EmitCommon
-    - Poppy.Codegen.IncludePath
     - Poppy.Codegen.Introspect
-    - Poppy.Codegen.JoinAlias
     - Poppy.Codegen.Lookup
     - Poppy.Codegen.TextUtil
   default-extensions:
@@ -69,8 +65,8 @@ library:
     - OverloadedRecordDot
     - OverloadedStrings
 
-# Compile library sources with the test suite so hidden Emit/JoinAlias/IncludePath
-# modules can be unit-tested without exposing them to consumers.
+# Compile library sources with the test suite so hidden Emit modules can be
+# unit-tested without exposing them to consumers.
 tests:
   poppy-codegen-test:
     main: Spec.hs

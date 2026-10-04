@@ -84,4 +84,4 @@ Pass the Schema field names (`title`), not the Postgres column. `findUnique` onl
 - `enumField` names an enum that exists on the Schema.
 - Each relation's `from` / `to` models exist, and the foreign-key field exists on the right model.
 - Each `unique_` names a real model and at least one real field.
-- The generated include tree has no duplicate edge on the same model, no unknown relation, and is at most 5 relations deep.
+- The generated include tree has no duplicate edge on the same model and no unknown relation.

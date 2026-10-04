@@ -17,8 +17,7 @@ module Schema.Book
     BookUpdate (..),
     bookId,
     bookShelfId,
-    bookTitle,
-    bookChapters
+    bookTitle
   )
 where
 
@@ -29,8 +28,6 @@ import Poppy.Core
 import Poppy.Select (Picked (..), picked)
 import Poppy.Insert (Insertable (..), emptyInsert, set, setMaybe)
 import Poppy.Update (Updatable (..), emptyUpdate, setFieldMaybe)
-import Poppy.Relation (HasMany (..), JoinType (..))
-import Schema.Chapter (ChapterTable, chapterBookRef)
 
 data BookTable = BookTable
 
@@ -135,12 +132,4 @@ bookShelfId = Field "shelfId" "shelf_id"
 
 bookTitle :: Field BookTable Text
 bookTitle = Field "title" "title"
-
-bookChapters :: HasMany BookTable ChapterTable UUID
-bookChapters =
-  HasMany
-    { localKey = bookId,
-      foreignKey = chapterBookRef,
-      joinType = LeftJoin
-    }
 

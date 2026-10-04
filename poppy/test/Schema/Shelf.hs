@@ -16,9 +16,7 @@ module Schema.Shelf
     ShelfCreate (..),
     ShelfUpdate (..),
     shelfId,
-    shelfName,
-    shelfBooks,
-    shelfTags
+    shelfName
   )
 where
 
@@ -29,9 +27,6 @@ import Poppy.Core
 import Poppy.Select (Picked (..), picked)
 import Poppy.Insert (Insertable (..), emptyInsert, set, setMaybe)
 import Poppy.Update (Updatable (..), emptyUpdate, setFieldMaybe)
-import Poppy.Relation (HasMany (..), JoinType (..))
-import Schema.Book (BookTable, bookShelfId)
-import Schema.Tag (TagTable, tagShelfId)
 
 data ShelfTable = ShelfTable
 
@@ -122,20 +117,4 @@ shelfId = Field "id" "id"
 
 shelfName :: Field ShelfTable Text
 shelfName = Field "name" "name"
-
-shelfBooks :: HasMany ShelfTable BookTable UUID
-shelfBooks =
-  HasMany
-    { localKey = shelfId,
-      foreignKey = bookShelfId,
-      joinType = LeftJoin
-    }
-
-shelfTags :: HasMany ShelfTable TagTable UUID
-shelfTags =
-  HasMany
-    { localKey = shelfId,
-      foreignKey = tagShelfId,
-      joinType = LeftJoin
-    }
 

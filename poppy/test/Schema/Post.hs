@@ -18,8 +18,7 @@ module Schema.Post
     postId,
     postAuthorId,
     postTitle,
-    postStatus,
-    author
+    postStatus
   )
 where
 
@@ -30,10 +29,7 @@ import Poppy.Core
 import Poppy.Select (Picked (..), picked)
 import Poppy.Insert (Insertable (..), emptyInsert, set, setMaybe)
 import Poppy.Update (Updatable (..), emptyUpdate, setFieldMaybe)
-import Poppy.Relation (BelongsTo (..), JoinType (..))
 import Schema.PostStatus (PostStatus)
-import Schema.Author (AuthorTable)
-import qualified Schema.Author as Author
 
 data PostTable = PostTable
 
@@ -152,12 +148,4 @@ postTitle = Field "title" "title"
 
 postStatus :: Field PostTable PostStatus
 postStatus = Field "status" "status"
-
-author :: BelongsTo PostTable AuthorTable UUID
-author =
-  BelongsTo
-    { foreignKey = postAuthorId,
-      references = Author.authorId,
-      joinType = LeftJoin
-    }
 

@@ -9,9 +9,7 @@ where
 import Data.List (find, nub)
 import Data.Maybe (catMaybes, isNothing)
 import Data.Text (Text)
-import     Poppy.Codegen.IR
-import Poppy.Codegen.IncludePath (defaultMaxIncludeDepth, includeMaxDepth)
-import Poppy.Codegen.JoinAlias (allocateJoinAlias, includeModelsInOrder)
+import Poppy.Codegen.IR
 import Poppy.Codegen.Schema (fullGraphIncludeName, isFullGraphInclude)
 
 data ValidationError
@@ -27,8 +25,6 @@ data ValidationError
   | UnknownRelationField Text Text Text
   | UnknownIncludeRoot Text Text
   | UnknownIncludeRelation Text Text Text
-  | JoinAliasExhausted Text Text
-  | MaxIncludeDepthExceeded Text Int Int
   | DuplicateIncludeRelation Text Text Text
   | UnknownUniqueModel Text
   | UnknownUniqueField Text Text
@@ -119,10 +115,7 @@ validateInclude schema incl =
     Just root ->
       let treeErrs = validateIncludeTree schema (includeName incl) root (includeTree incl)
        in if null treeErrs
-            then
-              leftoverIncludeDeclaration schema incl
-                ++ validateIncludeJoinAliases schema incl
-                ++ validateIncludeDepth schema incl
+            then leftoverIncludeDeclaration schema incl
             else treeErrs
 
 leftoverIncludeDeclaration :: Schema -> ModelInclude -> [ValidationError]
@@ -131,13 +124,6 @@ leftoverIncludeDeclaration schema incl =
     | not (isFullGraphInclude (schemaModels schema) incl)
         || includeName incl /= fullGraphIncludeName (includeRootModel incl)
   ]
-
-validateIncludeDepth :: Schema -> ModelInclude -> [ValidationError]
-validateIncludeDepth schema incl =
-  let depth = includeMaxDepth schema incl
-   in [ MaxIncludeDepthExceeded (includeName incl) depth defaultMaxIncludeDepth
-        | depth > defaultMaxIncludeDepth
-      ]
 
 validateIncludeTree :: Schema -> Text -> Model -> [IncludeTree] -> [ValidationError]
 validateIncludeTree schema includeName current edges =
@@ -180,19 +166,6 @@ validateUnique schema UniqueConstraint {uniqueModel, uniqueFields} =
 requireField :: Text -> Text -> Text -> Model -> [ValidationError]
 requireField relName modelName wantedField model =
   [UnknownRelationField relName modelName wantedField | not (any ((== wantedField) . fieldName) (modelFields model))]
-
-validateIncludeJoinAliases :: Schema -> ModelInclude -> [ValidationError]
-validateIncludeJoinAliases schema incl =
-  if null (includeTree incl)
-    then []
-    else go (includeModelsInOrder schema incl) []
-  where
-    go [] _ = []
-    go (model : rest) taken =
-      case allocateJoinAlias model taken of
-        Nothing ->
-          [JoinAliasExhausted (includeName incl) (modelName model)]
-        Just alias -> go rest (alias : taken)
 
 duplicates :: (Eq a) => [a] -> [a]
 duplicates xs = nub [x | x <- xs, length (filter (== x) xs) > 1]

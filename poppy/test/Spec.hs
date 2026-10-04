@@ -7,7 +7,6 @@ import Poppy.EnumSpec (enumSpec)
 import Poppy.ErrorsSpec (errorsSpec)
 import Poppy.GroupSpec (groupSpec)
 import Poppy.IncludeSpec (includeSpec)
-import Poppy.JoinSpec (joinSpec)
 import Poppy.MigrateSpec (migrateSpec)
 import Poppy.NestedWriteSpec (nestedWriteSpec)
 import Poppy.OperationsSpec (operationsSpec)
@@ -25,7 +24,6 @@ main = hspec $ do
   whereSpec
   withTestDb $
     operationsSpec
-      >> joinSpec
       >> includeSpec
       >> belongsToSpec
       >> enumSpec

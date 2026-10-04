@@ -16,8 +16,7 @@ module Schema.Author
     AuthorCreate (..),
     AuthorUpdate (..),
     authorId,
-    authorName,
-    authorPosts
+    authorName
   )
 where
 
@@ -28,8 +27,6 @@ import Poppy.Core
 import Poppy.Select (Picked (..), picked)
 import Poppy.Insert (Insertable (..), emptyInsert, set, setMaybe)
 import Poppy.Update (Updatable (..), emptyUpdate, setFieldMaybe)
-import Poppy.Relation (HasMany (..), JoinType (..))
-import Schema.Post (PostTable, postAuthorId)
 
 data AuthorTable = AuthorTable
 
@@ -120,12 +117,4 @@ authorId = Field "id" "id"
 
 authorName :: Field AuthorTable Text
 authorName = Field "name" "name"
-
-authorPosts :: HasMany AuthorTable PostTable UUID
-authorPosts =
-  HasMany
-    { localKey = authorId,
-      foreignKey = postAuthorId,
-      joinType = LeftJoin
-    }
 

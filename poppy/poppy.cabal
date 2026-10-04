@@ -47,12 +47,10 @@ library
       Poppy.Group
       Poppy.Include
       Poppy.Insert
-      Poppy.JoinChain
       Poppy.Migrate
       Poppy.Operations
       Poppy.PG
       Poppy.Query
-      Poppy.Relation
       Poppy.Select
       Poppy.SelectIn
       Poppy.Sql
@@ -97,7 +95,6 @@ test-suite poppy-test
       Poppy.ErrorsSpec
       Poppy.GroupSpec
       Poppy.IncludeSpec
-      Poppy.JoinSpec
       Poppy.MigrateSpec
       Poppy.NestedWriteSpec
       Poppy.OperationsSpec

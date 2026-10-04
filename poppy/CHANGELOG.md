@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Haddock on Client-facing exports. Guides: repository @docs/@.
+- Remove `Poppy.JoinChain` and `Poppy.Relation`. Ad-hoc joins are raw SQL.
 
 ## 0.1.0.0 — 2026-09-17
 

@@ -34,6 +34,7 @@ extra-source-files:
     test/Poppy/Codegen/golden/Chapter.hs.golden
     test/Poppy/Codegen/golden/ChapterInclude.hs.golden
     test/Poppy/Codegen/golden/Flag.hs.golden
+    test/Poppy/Codegen/golden/Packet.hs.golden
     test/Poppy/Codegen/golden/Post.hs.golden
     test/Poppy/Codegen/golden/PostInclude.hs.golden
     test/Poppy/Codegen/golden/PostStatus.hs.golden
@@ -62,15 +63,11 @@ library
       Poppy.Codegen.Validate
   other-modules:
       Poppy.Codegen.Emit.Client
-      Poppy.Codegen.Emit.FlatRow
       Poppy.Codegen.Emit.Include
-      Poppy.Codegen.Emit.Nest
       Poppy.Codegen.Emit.Schema
       Poppy.Codegen.Emit.SelectIn
       Poppy.Codegen.EmitCommon
-      Poppy.Codegen.IncludePath
       Poppy.Codegen.Introspect
-      Poppy.Codegen.JoinAlias
       Poppy.Codegen.Lookup
       Poppy.Codegen.TextUtil
   hs-source-dirs:
@@ -96,11 +93,8 @@ test-suite poppy-codegen-test
   other-modules:
       Poppy.Codegen.DriftSpec
       Poppy.Codegen.EmitClientSpec
-      Poppy.Codegen.EmitFlatRowSpec
       Poppy.Codegen.EmitIncludeSpec
       Poppy.Codegen.EmitSpec
-      Poppy.Codegen.IncludePathSpec
-      Poppy.Codegen.JoinAliasSpec
       Poppy.Codegen.SchemaSpec
       Poppy.Codegen.Spec.Author
       Poppy.Codegen.Spec.Example
@@ -117,16 +111,12 @@ test-suite poppy-codegen-test
       Poppy.Codegen.CLI
       Poppy.Codegen.Drift
       Poppy.Codegen.Emit.Client
-      Poppy.Codegen.Emit.FlatRow
       Poppy.Codegen.Emit.Include
-      Poppy.Codegen.Emit.Nest
       Poppy.Codegen.Emit.Schema
       Poppy.Codegen.Emit.SelectIn
       Poppy.Codegen.EmitCommon
-      Poppy.Codegen.IncludePath
       Poppy.Codegen.Introspect
       Poppy.Codegen.IR
-      Poppy.Codegen.JoinAlias
       Poppy.Codegen.Lookup
       Poppy.Codegen.Run
       Poppy.Codegen.Schema
