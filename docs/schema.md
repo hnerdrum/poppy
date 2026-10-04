@@ -56,7 +56,7 @@ You still have to create the type in SQL (`CREATE TYPE articlestatus AS ENUM (..
 ## Relations
 
 ```haskell
-hasMany "authorPosts" "Post" "authorId"
+hasMany "posts" "Post" "authorId"
 belongsTo "author" "Author" "authorId"
 ```
 
@@ -64,7 +64,7 @@ belongsTo "author" "Author" "authorId"
 
 Add `hasMany` on `Author` when you want to create posts with the author, or load an author with their posts. Add `belongsTo` on `Post` when you want to load a post's author. [Relations](relations.md) covers how that loading works.
 
-The include record does not use the relation name as-is. On `Author`, `hasMany "authorPosts" …` becomes `AuthorInclude { posts = True }`: Codegen drops the `author` prefix. If you call the relation `posts`, the field is `post` instead (taken from the model name `Post`). Name it `authorPosts` if you want `posts`.
+The include and nested-write field is the relation name. `hasMany "posts" …` on `Author` becomes `AuthorInclude { posts = True }`. Two relations from one model to the same target are fine when the names differ (`writtenPosts` and `editedPosts`). A name used twice on one model, or a name equal to a scalar field on that model, fails validation.
 
 ## Uniques
 
@@ -85,3 +85,4 @@ Pass the Schema field names (`title`), not the Postgres column. `findUnique` onl
 - Each relation's `from` / `to` models exist, and the foreign-key field exists on the right model.
 - Each `unique_` names a real model and at least one real field.
 - The generated include tree has no duplicate edge on the same model and no unknown relation.
+- Relation names are unique on a model, and none of them match a scalar field on that model.

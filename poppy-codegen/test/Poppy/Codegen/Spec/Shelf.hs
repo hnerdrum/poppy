@@ -21,8 +21,8 @@ shelfModel =
     [ uuid "id" & pk & withDefault DefaultUuidV4,
       text "name"
     ]
-    [ hasMany "shelfBooks" "Book" "shelfId",
-      hasMany "shelfTags" "Tag" "shelfId"
+    [ hasMany "books" "Book" "shelfId",
+      hasMany "tags" "Tag" "shelfId"
     ]
     & table "test_shelf"
 
@@ -34,7 +34,7 @@ bookModel =
       uuid "shelfId",
       text "title"
     ]
-    [hasMany "bookChapters" "Chapter" "bookRef"]
+    [hasMany "chapters" "Chapter" "bookRef"]
     & table "test_book"
 
 chapterModel :: Model
@@ -45,7 +45,7 @@ chapterModel =
       uuid "bookRef" & column "book_id",
       text "heading"
     ]
-    [hasMany "chapterSections" "Section" "chapterRef"]
+    [hasMany "sections" "Section" "chapterRef"]
     & table "test_chapter"
 
 sectionModel :: Model

@@ -21,7 +21,7 @@ authorModel =
     [ uuid "id" & pk & withDefault DefaultUuidV4,
       text "name"
     ]
-    [hasMany "authorPosts" "Post" "authorId"]
+    [hasMany "posts" "Post" "authorId"]
 
 postModel :: Model
 postModel =

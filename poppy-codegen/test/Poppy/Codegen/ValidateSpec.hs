@@ -7,6 +7,7 @@ where
 
 import Poppy.Codegen.IR
 import qualified Poppy.Codegen.Schema as Builder
+import Poppy.Codegen.Spec.Editor (editorSchema)
 import Poppy.Codegen.Spec.Example (exampleSchema)
 import Poppy.Codegen.Spec.Flag (flagSchema)
 import Poppy.Codegen.Spec.Packet (packetSchema)
@@ -156,6 +157,47 @@ validateSpec =
                 []
         validateSchema schema
           `shouldBe` [UnknownRelationField "shelfBooks" "Book" "shelfId"]
+
+      it "rejects a relation name used twice on one model" $ do
+        let schema =
+              Builder.schema
+                []
+                [ Builder.model
+                    "Author"
+                    [pk (uuid "id"), text "name"]
+                    [ Builder.hasMany "posts" "Post" "authorId",
+                      Builder.hasMany "posts" "Post" "authorId"
+                    ],
+                  Builder.model
+                    "Post"
+                    [pk (uuid "id"), uuid "authorId", text "title"]
+                    []
+                ]
+                []
+        validateSchema schema
+          `shouldBe` [ DuplicateRelationName "Author" "posts",
+                       DuplicateIncludeRelation "AuthorInclude" "Author" "posts"
+                     ]
+
+      it "rejects a relation name equal to a scalar field" $ do
+        let schema =
+              Builder.schema
+                []
+                [ Builder.model
+                    "Author"
+                    [pk (uuid "id"), text "name"]
+                    [Builder.hasMany "name" "Post" "authorId"],
+                  Builder.model
+                    "Post"
+                    [pk (uuid "id"), uuid "authorId"]
+                    []
+                ]
+                []
+        validateSchema schema
+          `shouldBe` [RelationNameClashesWithField "Author" "name"]
+
+      it "accepts two relations from one model to the same model" $ do
+        validateSchema editorSchema `shouldBe` []
 
     describe "includes" $ do
       it "rejects an include rooted at an unknown model" $ do

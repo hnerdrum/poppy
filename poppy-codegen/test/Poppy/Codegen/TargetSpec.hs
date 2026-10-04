@@ -9,6 +9,7 @@ import Data.List (nub, sort)
 import qualified Data.Text as T
 import Poppy.Codegen.Run (allOutputs, schemasForTargets)
 import Poppy.Codegen.Spec.Author (authorSchema)
+import Poppy.Codegen.Spec.Editor (editorSchema)
 import Poppy.Codegen.Spec.Shelf (shelfSchema)
 import Poppy.Codegen.Spec.Widget (widgetSchema)
 import Poppy.Codegen.Target
@@ -25,11 +26,14 @@ allTargets = testTargets
 
 schemaGoldenNames :: [FilePath]
 schemaGoldenNames =
-  [ "Author",
+  [ "Article",
+    "Author",
     "Book",
     "BookInclude",
     "Chapter",
     "ChapterInclude",
+    "Editor",
+    "EditorInclude",
     "Post",
     "PostInclude",
     "PostStatus",
@@ -47,18 +51,22 @@ targetSpec =
       schemasForTargets allTargets
         `shouldMatchList` [ widgetSchema,
                             shelfSchema,
-                            authorSchema
+                            authorSchema,
+                            editorSchema
                           ]
 
     it "writes table types under the output dir and clients under Client/" $ do
       let paths = sort (nub (map outputPath (allOutputs allTargets)))
       filter (not . isClientPath) paths
         `shouldBe` sort
-          [ "test/Schema/Author.hs",
+          [ "test/Schema/Article.hs",
+            "test/Schema/Author.hs",
             "test/Schema/Book.hs",
             "test/Schema/BookInclude.hs",
             "test/Schema/Chapter.hs",
             "test/Schema/ChapterInclude.hs",
+            "test/Schema/Editor.hs",
+            "test/Schema/EditorInclude.hs",
             "test/Schema/Post.hs",
             "test/Schema/PostInclude.hs",
             "test/Schema/PostStatus.hs",

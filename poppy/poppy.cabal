@@ -104,13 +104,24 @@ test-suite poppy-test
       Poppy.ShelfFixtures
       Poppy.WhereSpec
       Poppy.WidgetFixtures
+      Schema.Article
       Schema.Author
       Schema.Book
       Schema.BookInclude
       Schema.Chapter
       Schema.ChapterInclude
+      Schema.Client.Article
+      Schema.Client.Author
+      Schema.Client.Book
+      Schema.Client.Chapter
+      Schema.Client.Editor
+      Schema.Client.Post
+      Schema.Client.Section
       Schema.Client.Shelf
+      Schema.Client.Tag
       Schema.Client.Widget
+      Schema.Editor
+      Schema.EditorInclude
       Schema.Packet
       Schema.Post
       Schema.PostInclude

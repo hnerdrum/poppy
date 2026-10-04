@@ -153,9 +153,8 @@ typedField ty name =
 column :: Text -> FieldSpec -> FieldSpec
 column = IR.column
 
--- | @hasMany \"authorPosts\" \"Post\" \"authorId\"@: the other table's @authorId@ points at this model's PK.
--- The include record field is the relation name with the owner prefix stripped when present
--- (@authorPosts@ on @Author@ → @posts@).
+-- | @hasMany \"posts\" \"Post\" \"authorId\"@: the other table's @authorId@ points at this model's PK.
+-- The include and nested-write field is that relation name (@posts@).
 hasMany ::
   Text ->
   Text ->

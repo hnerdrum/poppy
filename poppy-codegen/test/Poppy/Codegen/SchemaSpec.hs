@@ -6,6 +6,7 @@ module Poppy.Codegen.SchemaSpec
 where
 
 import Poppy.Codegen.Schema
+import Poppy.Codegen.Spec.Editor (editorSchema)
 import Poppy.Codegen.Spec.Shelf (shelfSchema)
 import Test.Hspec
 
@@ -17,7 +18,7 @@ schemaSpec =
             model
               "Parent"
               [uuid "id" & pk]
-              [hasMany "parentKids" "Kid" "parentId"]
+              [hasMany "kids" "Kid" "parentId"]
           child =
             model
               "Kid"
@@ -27,11 +28,15 @@ schemaSpec =
           incl = head (schemaIncludes built)
       map includeName (schemaIncludes built) `shouldBe` ["ParentInclude"]
       includeRootModel incl `shouldBe` "Parent"
-      map includeRelation (includeTree incl) `shouldBe` ["parentKids"]
+      map includeRelation (includeTree incl) `shouldBe` ["kids"]
 
     it "derives Shelf includes from relations only" $ do
       let names = map includeName (schemaIncludes shelfSchema)
           shelfIncl = head (schemaIncludes shelfSchema)
       names `shouldBe` ["ShelfInclude", "BookInclude", "ChapterInclude"]
       includeRootModel shelfIncl `shouldBe` "Shelf"
-      map includeRelation (includeTree shelfIncl) `shouldBe` ["shelfBooks", "shelfTags"]
+      map includeRelation (includeTree shelfIncl) `shouldBe` ["books", "tags"]
+
+    it "keeps two relations to the same model as distinct include edges" $ do
+      let editorIncl = head [incl | incl <- schemaIncludes editorSchema, includeRootModel incl == "Editor"]
+      map includeRelation (includeTree editorIncl) `shouldBe` ["writtenPosts", "editedPosts"]

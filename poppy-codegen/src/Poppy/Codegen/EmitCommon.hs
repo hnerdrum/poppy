@@ -51,10 +51,7 @@ primaryKeyField model =
           <> " must have exactly one primary key"
 
 includeFieldName :: Model -> RelationSpec -> Text
-includeFieldName parent rel =
-  case T.stripPrefix (lowerFirst (modelName parent)) (relName rel) of
-    Just rest | not (T.null rest) -> lowerFirst rest
-    _ -> lowerFirst (relToModel rel)
+includeFieldName _parent = relName
 
 createTypeName :: Model -> Text
 createTypeName model = modelName model <> "Create"
@@ -97,8 +94,7 @@ resultTypeName _schema model edges =
 
 -- | Include record literal with flags set for @selected@ edges of @parent@.
 includeRecordValue :: Schema -> Model -> [IncludeTree] -> Text
-includeRecordValue schema parent selected =
-  includeRecordLiteral schema parent (includeTree (fullInclude schema parent)) selected
+includeRecordValue schema parent = includeRecordLiteral schema parent (includeTree (fullInclude schema parent))
 
 fullInclude :: Schema -> Model -> ModelInclude
 fullInclude schema model =

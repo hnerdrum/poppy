@@ -97,6 +97,7 @@ test-suite poppy-codegen-test
       Poppy.Codegen.EmitSpec
       Poppy.Codegen.SchemaSpec
       Poppy.Codegen.Spec.Author
+      Poppy.Codegen.Spec.Editor
       Poppy.Codegen.Spec.Example
       Poppy.Codegen.Spec.Flag
       Poppy.Codegen.Spec.Packet

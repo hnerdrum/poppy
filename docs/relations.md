@@ -10,10 +10,10 @@ model
   [ uuid "id" & pk & withDefault DefaultUuidV4,
     text "name"
   ]
-  [hasMany "authorPosts" "Post" "authorId"]
+  [hasMany "posts" "Post" "authorId"]
 ```
 
-`Post.authorId` points at `Author.id`. The include field is `posts` because Codegen drops the `author` prefix from `authorPosts`.
+`Post.authorId` points at `Author.id`. The include field is `posts`, the name you gave the relation.
 
 ## Include records
 

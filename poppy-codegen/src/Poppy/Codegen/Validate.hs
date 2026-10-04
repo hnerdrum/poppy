@@ -26,6 +26,8 @@ data ValidationError
   | UnknownIncludeRoot Text Text
   | UnknownIncludeRelation Text Text Text
   | DuplicateIncludeRelation Text Text Text
+  | DuplicateRelationName Text Text
+  | RelationNameClashesWithField Text Text
   | UnknownUniqueModel Text
   | UnknownUniqueField Text Text
   | EmptyUniqueConstraint Text
@@ -75,7 +77,16 @@ validateModel schema model =
         [_] -> []
         _ -> [ModelMultiplePrimaryKeys (modelName model)]
       enumErrs = concatMap (validateFieldEnum schema (modelName model)) (modelFields model)
-   in pkErrs ++ enumErrs
+   in pkErrs ++ enumErrs ++ validateRelationNames model
+
+validateRelationNames :: Model -> [ValidationError]
+validateRelationNames model =
+  map (DuplicateRelationName (modelName model)) (duplicates (map relName (modelRelations model)))
+    ++ [ RelationNameClashesWithField (modelName model) name
+         | rel <- modelRelations model,
+           let name = relName rel,
+           any ((== name) . fieldName) (modelFields model)
+       ]
 
 validateFieldEnum :: Schema -> Text -> FieldSpec -> [ValidationError]
 validateFieldEnum schema modelName fieldSpec =
