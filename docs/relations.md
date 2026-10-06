@@ -33,4 +33,17 @@ ShelfInclude
   }
 ```
 
-`True` or `Just …` loads that relation for every parent in the result. You cannot attach a `where_`, `orderBy_`, or `take` to a child.
+`load` and `loadWith` fetch the related rows. Record-update `where_`, `orderBy_`, and `take_` on that value to filter, sort, or keep a per-parent number of children:
+
+```haskell
+AuthorInclude
+  { posts =
+      load
+        { where_ = Just (eq postStatus Published),
+          orderBy_ = [desc postTitle],
+          take_ = Just 2
+        }
+  }
+```
+
+`take_` uses a per-parent window, so each author keeps two posts. `Nothing` keeps every match.

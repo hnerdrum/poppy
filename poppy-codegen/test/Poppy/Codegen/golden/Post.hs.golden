@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NoFieldSelectors #-}
 {-# LANGUAGE OverloadedRecordDot #-}
@@ -26,6 +27,7 @@ import Data.Text (Text)
 import Data.UUID (UUID)
 import Poppy.PG (FromRow (..), RowParser, field)
 import Poppy.Core
+import Poppy.Include (ModelTable)
 import Poppy.Select (Picked (..), picked)
 import Poppy.Insert (Insertable (..), emptyInsert, set, setMaybe)
 import Poppy.Update (Updatable (..), emptyUpdate, setFieldMaybe)
@@ -34,6 +36,8 @@ import Schema.PostStatus (PostStatus)
 data PostTable = PostTable
 
 type instance PrimaryKeyType PostTable = UUID
+
+type instance ModelTable "Post" = PostTable
 
 instance Entity PostTable where
   tableName = "test_post"

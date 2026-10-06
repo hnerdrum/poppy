@@ -60,7 +60,7 @@ toCommentWithPicked select_ nested =
 
 type family CommentReplies edge where
   CommentReplies Skip = Skipped "replies" [CommentRow]
-  CommentReplies (Load include) = [CommentResult include]
+  CommentReplies (Load CommentTable include) = [CommentResult include]
 
 type family CommentResult include where
   CommentResult () = CommentRow
@@ -78,16 +78,16 @@ class LoadCommentReplies edge where
 instance LoadCommentReplies Skip where
   loadCommentReplies Skip roots = pure (map (const skipped) roots)
 
-instance LoadCommentReplies (Load ()) where
-  loadCommentReplies (Load ()) roots = do
-    rows <- findByIn @CommentTable @CommentRow Comment.commentParentId (map (.id) roots)
+instance LoadCommentReplies (Load CommentTable ()) where
+  loadCommentReplies edge roots = do
+    rows <- findByIn @CommentTable @CommentRow Comment.commentParentId (map (.id) roots) edge.where_ edge.orderBy_ edge.take_
     let grouped = indexHasManyMaybe (.parentId) rows
     pure [lookupGroups root.id grouped | root <- roots]
 
-instance (LoadComment replies) => LoadCommentReplies (Load (CommentInclude replies)) where
-  loadCommentReplies (Load nested) roots = do
-    rows <- findByIn @CommentTable @CommentRow Comment.commentParentId (map (.id) roots)
-    loaded <- loadComment nested rows
+instance (LoadComment replies) => LoadCommentReplies (Load CommentTable (CommentInclude replies)) where
+  loadCommentReplies edge roots = do
+    rows <- findByIn @CommentTable @CommentRow Comment.commentParentId (map (.id) roots) edge.where_ edge.orderBy_ edge.take_
+    loaded <- loadComment edge.include_ rows
     let grouped = indexHasManyMaybe ((.parentId) . (.comment)) loaded
     pure [lookupGroups root.id grouped | root <- roots]
 

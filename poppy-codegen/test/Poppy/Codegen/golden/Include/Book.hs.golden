@@ -62,7 +62,7 @@ toBookWithPicked select_ nested =
 
 type family BookChapters edge where
   BookChapters Skip = Skipped "chapters" [ChapterRow]
-  BookChapters (Load include) = [ChapterResult include]
+  BookChapters (Load ChapterTable include) = [ChapterResult include]
 
 type family BookResult include where
   BookResult () = BookRow
@@ -80,16 +80,16 @@ class LoadBookChapters edge where
 instance LoadBookChapters Skip where
   loadBookChapters Skip roots = pure (map (const skipped) roots)
 
-instance LoadBookChapters (Load ()) where
-  loadBookChapters (Load ()) roots = do
-    rows <- findByIn @ChapterTable @ChapterRow Chapter.chapterBookRef (map (.id) roots)
+instance LoadBookChapters (Load ChapterTable ()) where
+  loadBookChapters edge roots = do
+    rows <- findByIn @ChapterTable @ChapterRow Chapter.chapterBookRef (map (.id) roots) edge.where_ edge.orderBy_ edge.take_
     let grouped = indexHasMany (.bookRef) rows
     pure [lookupGroups root.id grouped | root <- roots]
 
-instance (LoadChapter sections) => LoadBookChapters (Load (ChapterInclude sections)) where
-  loadBookChapters (Load nested) roots = do
-    rows <- findByIn @ChapterTable @ChapterRow Chapter.chapterBookRef (map (.id) roots)
-    loaded <- loadChapter nested rows
+instance (LoadChapter sections) => LoadBookChapters (Load ChapterTable (ChapterInclude sections)) where
+  loadBookChapters edge roots = do
+    rows <- findByIn @ChapterTable @ChapterRow Chapter.chapterBookRef (map (.id) roots) edge.where_ edge.orderBy_ edge.take_
+    loaded <- loadChapter edge.include_ rows
     let grouped = indexHasMany ((.bookRef) . (.chapter)) loaded
     pure [lookupGroups root.id grouped | root <- roots]
 

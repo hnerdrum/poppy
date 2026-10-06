@@ -69,11 +69,11 @@ toShelfWithPicked select_ nested =
 
 type family ShelfBooks edge where
   ShelfBooks Skip = Skipped "books" [BookRow]
-  ShelfBooks (Load include) = [BookResult include]
+  ShelfBooks (Load BookTable include) = [BookResult include]
 
 type family ShelfTags edge where
   ShelfTags Skip = Skipped "tags" [TagRow]
-  ShelfTags (Load ()) = [TagRow]
+  ShelfTags (Load TagTable ()) = [TagRow]
 
 type family ShelfResult include where
   ShelfResult () = ShelfRow
@@ -91,16 +91,16 @@ class LoadShelfBooks edge where
 instance LoadShelfBooks Skip where
   loadShelfBooks Skip roots = pure (map (const skipped) roots)
 
-instance LoadShelfBooks (Load ()) where
-  loadShelfBooks (Load ()) roots = do
-    rows <- findByIn @BookTable @BookRow Book.bookShelfId (map (.id) roots)
+instance LoadShelfBooks (Load BookTable ()) where
+  loadShelfBooks edge roots = do
+    rows <- findByIn @BookTable @BookRow Book.bookShelfId (map (.id) roots) edge.where_ edge.orderBy_ edge.take_
     let grouped = indexHasMany (.shelfId) rows
     pure [lookupGroups root.id grouped | root <- roots]
 
-instance (LoadBook chapters) => LoadShelfBooks (Load (BookInclude chapters)) where
-  loadShelfBooks (Load nested) roots = do
-    rows <- findByIn @BookTable @BookRow Book.bookShelfId (map (.id) roots)
-    loaded <- loadBook nested rows
+instance (LoadBook chapters) => LoadShelfBooks (Load BookTable (BookInclude chapters)) where
+  loadShelfBooks edge roots = do
+    rows <- findByIn @BookTable @BookRow Book.bookShelfId (map (.id) roots) edge.where_ edge.orderBy_ edge.take_
+    loaded <- loadBook edge.include_ rows
     let grouped = indexHasMany ((.shelfId) . (.book)) loaded
     pure [lookupGroups root.id grouped | root <- roots]
 
@@ -113,9 +113,9 @@ class LoadShelfTags edge where
 instance LoadShelfTags Skip where
   loadShelfTags Skip roots = pure (map (const skipped) roots)
 
-instance LoadShelfTags (Load ()) where
-  loadShelfTags (Load ()) roots = do
-    rows <- findByIn @TagTable @TagRow Tag.tagShelfId (map (.id) roots)
+instance LoadShelfTags (Load TagTable ()) where
+  loadShelfTags edge roots = do
+    rows <- findByIn @TagTable @TagRow Tag.tagShelfId (map (.id) roots) edge.where_ edge.orderBy_ edge.take_
     let grouped = indexHasMany (.shelfId) rows
     pure [lookupGroups root.id grouped | root <- roots]
 

@@ -44,6 +44,8 @@ emitModelModule moduleName schema model =
           "",
           "type instance PrimaryKeyType " <> tableName_ <> " = " <> pkHsType model,
           "",
+          "type instance ModelTable \"" <> modelName model <> "\" = " <> tableName_,
+          "",
           "instance Entity " <> tableName_ <> " where",
           "  tableName = \"" <> modelTable model <> "\"",
           "  primaryKey = " <> fieldBinder model pkField,
@@ -95,6 +97,7 @@ emitExports model =
 pragmas :: [Text]
 pragmas =
   [ "{-# LANGUAGE AllowAmbiguousTypes #-}",
+    "{-# LANGUAGE DataKinds #-}",
     "{-# LANGUAGE DuplicateRecordFields #-}",
     "{-# LANGUAGE NoFieldSelectors #-}",
     "{-# LANGUAGE OverloadedRecordDot #-}",
@@ -114,6 +117,7 @@ imports moduleName schema model =
         if needsJsonb model then "import Data.Aeson (Value)" else "",
         "import Poppy.PG (FromRow (..), RowParser, field)",
         "import Poppy.Core",
+        "import Poppy.Include (ModelTable)",
         "import Poppy.Select (Picked (..), picked)",
         insertImport model,
         updateImport model

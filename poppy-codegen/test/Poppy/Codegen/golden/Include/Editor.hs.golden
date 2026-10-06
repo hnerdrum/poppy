@@ -66,11 +66,11 @@ toEditorWithPicked select_ nested =
 
 type family EditorWrittenPosts edge where
   EditorWrittenPosts Skip = Skipped "writtenPosts" [ArticleRow]
-  EditorWrittenPosts (Load ()) = [ArticleRow]
+  EditorWrittenPosts (Load ArticleTable ()) = [ArticleRow]
 
 type family EditorEditedPosts edge where
   EditorEditedPosts Skip = Skipped "editedPosts" [ArticleRow]
-  EditorEditedPosts (Load ()) = [ArticleRow]
+  EditorEditedPosts (Load ArticleTable ()) = [ArticleRow]
 
 type family EditorResult include where
   EditorResult () = EditorRow
@@ -88,9 +88,9 @@ class LoadEditorWrittenPosts edge where
 instance LoadEditorWrittenPosts Skip where
   loadEditorWrittenPosts Skip roots = pure (map (const skipped) roots)
 
-instance LoadEditorWrittenPosts (Load ()) where
-  loadEditorWrittenPosts (Load ()) roots = do
-    rows <- findByIn @ArticleTable @ArticleRow Article.articleAuthorId (map (.id) roots)
+instance LoadEditorWrittenPosts (Load ArticleTable ()) where
+  loadEditorWrittenPosts edge roots = do
+    rows <- findByIn @ArticleTable @ArticleRow Article.articleAuthorId (map (.id) roots) edge.where_ edge.orderBy_ edge.take_
     let grouped = indexHasMany (.authorId) rows
     pure [lookupGroups root.id grouped | root <- roots]
 
@@ -103,9 +103,9 @@ class LoadEditorEditedPosts edge where
 instance LoadEditorEditedPosts Skip where
   loadEditorEditedPosts Skip roots = pure (map (const skipped) roots)
 
-instance LoadEditorEditedPosts (Load ()) where
-  loadEditorEditedPosts (Load ()) roots = do
-    rows <- findByIn @ArticleTable @ArticleRow Article.articleAuthorId (map (.id) roots)
+instance LoadEditorEditedPosts (Load ArticleTable ()) where
+  loadEditorEditedPosts edge roots = do
+    rows <- findByIn @ArticleTable @ArticleRow Article.articleAuthorId (map (.id) roots) edge.where_ edge.orderBy_ edge.take_
     let grouped = indexHasMany (.authorId) rows
     pure [lookupGroups root.id grouped | root <- roots]
 

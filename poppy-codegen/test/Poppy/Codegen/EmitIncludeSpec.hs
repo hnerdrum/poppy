@@ -20,5 +20,8 @@ emitIncludeSpec =
       actual `shouldSatisfy` T.isInfixOf "module Schema.Include.Shelf"
       actual `shouldSatisfy` T.isInfixOf "data ShelfInclude books tags"
       actual `shouldSatisfy` T.isInfixOf "ShelfBooks Skip = Skipped \"books\""
+      actual `shouldSatisfy` T.isInfixOf "Load BookTable"
+      actual `shouldSatisfy` T.isInfixOf "edge.where_"
+      actual `shouldSatisfy` T.isInfixOf "edge.take_"
       actual `shouldSatisfy` T.isInfixOf "loadShelf"
       actual `shouldSatisfy` T.isInfixOf "IncludeFor \"Shelf\""

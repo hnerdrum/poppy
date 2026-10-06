@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NoFieldSelectors #-}
 {-# LANGUAGE OverloadedRecordDot #-}
@@ -25,6 +26,7 @@ import Data.Text (Text)
 import Data.UUID (UUID)
 import Poppy.PG (FromRow (..), RowParser, field)
 import Poppy.Core
+import Poppy.Include (ModelTable)
 import Poppy.Select (Picked (..), picked)
 import Poppy.Insert (Insertable (..), emptyInsert, set, setMaybe)
 import Poppy.Update (Updatable (..), emptyUpdate, setFieldMaybe)
@@ -32,6 +34,8 @@ import Poppy.Update (Updatable (..), emptyUpdate, setFieldMaybe)
 data ArticleTable = ArticleTable
 
 type instance PrimaryKeyType ArticleTable = UUID
+
+type instance ModelTable "Article" = ArticleTable
 
 instance Entity ArticleTable where
   tableName = "test_article"

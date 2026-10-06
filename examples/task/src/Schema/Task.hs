@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NoFieldSelectors #-}
 {-# LANGUAGE OverloadedRecordDot #-}
@@ -28,6 +29,7 @@ import Data.Time (UTCTime)
 import Data.UUID (UUID)
 import Poppy.PG (FromRow (..), RowParser, field)
 import Poppy.Core
+import Poppy.Include (ModelTable)
 import Poppy.Select (Picked (..), picked)
 import Poppy.Insert (Insertable (..), emptyInsert, set, setMaybe)
 import Poppy.Update (Updatable (..), emptyUpdate, setFieldMaybe)
@@ -35,6 +37,8 @@ import Poppy.Update (Updatable (..), emptyUpdate, setFieldMaybe)
 data TaskTable = TaskTable
 
 type instance PrimaryKeyType TaskTable = UUID
+
+type instance ModelTable "Task" = TaskTable
 
 instance Entity TaskTable where
   tableName = "task"

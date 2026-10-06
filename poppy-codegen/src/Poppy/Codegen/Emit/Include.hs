@@ -227,9 +227,9 @@ emitEdgeFamily schema model rel =
     skipTy = wrapSkip (plainLoaded schema rel)
     (loadPat, loadedTy)
       | hasInclude child =
-          ("(Load include)", loadedRhs schema rel "include")
+          ("(Load " <> tableTypeName child <> " include)", loadedRhs schema rel "include")
       | otherwise =
-          ("(Load ())", loadedRhs schema rel "")
+          ("(Load " <> tableTypeName child <> " ())", loadedRhs schema rel "")
 
 emitResultFamily :: Model -> [Text]
 emitResultFamily model =
@@ -319,19 +319,21 @@ emitSkipInstance model rel =
 
 emitUnitInstance :: Schema -> Model -> RelationSpec -> [Text]
 emitUnitInstance schema model rel =
-  [ "instance " <> edgeClass model rel <> " (Load ()) where",
-    "  " <> edgeMethod model rel <> " (Load ()) roots = do"
+  [ "instance " <> edgeClass model rel <> " (Load " <> tableTypeName child <> " ()) where",
+    "  " <> edgeMethod model rel <> " edge roots = do"
   ]
     ++ emitFetch schema model rel
     ++ emitGroup schema model rel False
+  where
+    child = childModel schema rel
 
 emitNestedInstance :: Schema -> Model -> RelationSpec -> Model -> [Text]
 emitNestedInstance schema model rel child =
-  [ "instance (" <> loadClass child <> " " <> params child <> ") => " <> edgeClass model rel <> " (Load (" <> includeType child <> " " <> params child <> ")) where",
-    "  " <> edgeMethod model rel <> " (Load nested) roots = do"
+  [ "instance (" <> loadClass child <> " " <> params child <> ") => " <> edgeClass model rel <> " (Load " <> tableTypeName child <> " (" <> includeType child <> " " <> params child <> ")) where",
+    "  " <> edgeMethod model rel <> " edge roots = do"
   ]
     ++ emitFetch schema model rel
-    ++ ["    loaded <- " <> loadMethod child <> " nested rows"]
+    ++ ["    loaded <- " <> loadMethod child <> " edge.include_ rows"]
     ++ emitGroup schema model rel True
 
 emitRejectedInstance :: Model -> RelationSpec -> [Text]
@@ -344,15 +346,15 @@ emitFetch :: Schema -> Model -> RelationSpec -> [Text]
 emitFetch schema model rel =
   case relKind rel of
     RelHasMany ->
-      [ "    rows <- findByIn @" <> tableTypeName child <> " @" <> rowTypeName child <> " " <> fkBinder <> " (map (." <> parentPk <> ") roots)"
+      [ "    rows <- findByIn @" <> tableTypeName child <> " @" <> rowTypeName child <> " " <> fkBinder <> " (map (." <> parentPk <> ") roots) edge.where_ edge.orderBy_ edge.take_"
       ]
     RelBelongsTo
       | isNullableBelongsTo schema rel ->
           [ "    let keys = [key | root <- roots, Just key <- [root." <> fkName <> "]]",
-            "    rows <- findByIn @" <> tableTypeName child <> " @" <> rowTypeName child <> " " <> pkBinder <> " keys"
+            "    rows <- findByIn @" <> tableTypeName child <> " @" <> rowTypeName child <> " " <> pkBinder <> " keys edge.where_ edge.orderBy_ edge.take_"
           ]
       | otherwise ->
-          [ "    rows <- findByIn @" <> tableTypeName child <> " @" <> rowTypeName child <> " " <> pkBinder <> " (map (." <> fkName <> ") roots)"
+          [ "    rows <- findByIn @" <> tableTypeName child <> " @" <> rowTypeName child <> " " <> pkBinder <> " (map (." <> fkName <> ") roots) edge.where_ edge.orderBy_ edge.take_"
           ]
   where
     child = childModel schema rel

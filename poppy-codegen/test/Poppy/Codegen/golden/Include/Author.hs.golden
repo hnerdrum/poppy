@@ -70,7 +70,7 @@ toAuthorWithPicked select_ nested =
 
 type family AuthorPosts edge where
   AuthorPosts Skip = Skipped "posts" [PostRow]
-  AuthorPosts (Load include) = [PostResult include]
+  AuthorPosts (Load PostTable include) = [PostResult include]
 
 type family AuthorResult include where
   AuthorResult () = AuthorRow
@@ -112,7 +112,7 @@ toPostWithPicked select_ nested =
 
 type family PostAuthor edge where
   PostAuthor Skip = Skipped "author" AuthorRow
-  PostAuthor (Load include) = AuthorResult include
+  PostAuthor (Load AuthorTable include) = AuthorResult include
 
 type family PostResult include where
   PostResult () = PostRow
@@ -130,16 +130,16 @@ class LoadAuthorPosts edge where
 instance LoadAuthorPosts Skip where
   loadAuthorPosts Skip roots = pure (map (const skipped) roots)
 
-instance LoadAuthorPosts (Load ()) where
-  loadAuthorPosts (Load ()) roots = do
-    rows <- findByIn @PostTable @PostRow Post.postAuthorId (map (.id) roots)
+instance LoadAuthorPosts (Load PostTable ()) where
+  loadAuthorPosts edge roots = do
+    rows <- findByIn @PostTable @PostRow Post.postAuthorId (map (.id) roots) edge.where_ edge.orderBy_ edge.take_
     let grouped = indexHasMany (.authorId) rows
     pure [lookupGroups root.id grouped | root <- roots]
 
-instance (LoadPost author) => LoadAuthorPosts (Load (PostInclude author)) where
-  loadAuthorPosts (Load nested) roots = do
-    rows <- findByIn @PostTable @PostRow Post.postAuthorId (map (.id) roots)
-    loaded <- loadPost nested rows
+instance (LoadPost author) => LoadAuthorPosts (Load PostTable (PostInclude author)) where
+  loadAuthorPosts edge roots = do
+    rows <- findByIn @PostTable @PostRow Post.postAuthorId (map (.id) roots) edge.where_ edge.orderBy_ edge.take_
+    loaded <- loadPost edge.include_ rows
     let grouped = indexHasMany ((.authorId) . (.post)) loaded
     pure [lookupGroups root.id grouped | root <- roots]
 
@@ -168,16 +168,16 @@ class LoadPostAuthor edge where
 instance LoadPostAuthor Skip where
   loadPostAuthor Skip roots = pure (map (const skipped) roots)
 
-instance LoadPostAuthor (Load ()) where
-  loadPostAuthor (Load ()) roots = do
-    rows <- findByIn @AuthorTable @AuthorRow Author.authorId (map (.authorId) roots)
+instance LoadPostAuthor (Load AuthorTable ()) where
+  loadPostAuthor edge roots = do
+    rows <- findByIn @AuthorTable @AuthorRow Author.authorId (map (.authorId) roots) edge.where_ edge.orderBy_ edge.take_
     let indexed = indexByPk (.id) rows
     pure [requireRelated "author" (lookupByPk root.authorId indexed) | root <- roots]
 
-instance (LoadAuthor posts) => LoadPostAuthor (Load (AuthorInclude posts)) where
-  loadPostAuthor (Load nested) roots = do
-    rows <- findByIn @AuthorTable @AuthorRow Author.authorId (map (.authorId) roots)
-    loaded <- loadAuthor nested rows
+instance (LoadAuthor posts) => LoadPostAuthor (Load AuthorTable (AuthorInclude posts)) where
+  loadPostAuthor edge roots = do
+    rows <- findByIn @AuthorTable @AuthorRow Author.authorId (map (.authorId) roots) edge.where_ edge.orderBy_ edge.take_
+    loaded <- loadAuthor edge.include_ rows
     let indexed = indexByPk ((.id) . (.author)) loaded
     pure [requireRelated "author" (lookupByPk root.authorId indexed) | root <- roots]
 

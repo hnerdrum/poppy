@@ -12,12 +12,13 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.UUID (UUID, nil)
 import GHC.Records (HasField)
-import Poppy (asc, load, loadWith, runDb, skip)
+import Poppy (asc, desc, load, loadWith, runDb, skip)
+import Poppy.Include (Load (..))
 import Poppy.IncludeUpdate (updatedChapters)
 import qualified Poppy.Operations as Ops
 import qualified Poppy.ShelfFixtures as ShelfFixtures
-import Poppy.Where (eq)
-import Schema.Book (BookRow (..), bookId)
+import Poppy.Where (eq, neq)
+import Schema.Book (BookRow (..), bookId, bookTitle)
 import Schema.Chapter (ChapterRow (..))
 import qualified Schema.Client.Book as Book
 import qualified Schema.Client.Shelf as Shelf
@@ -258,6 +259,67 @@ includeSpec =
 
     it "updates a book include from the caller when the field name is unique" $ \_ ->
       updatedChapters `shouldBe` load
+
+    it "findMany includes only books matching where_" $ \TestEnv {envPool = pool} -> do
+      fiction <- ShelfFixtures.insertShelf pool "fiction"
+      mystery <- ShelfFixtures.insertShelf pool "mystery"
+      _ <- ShelfFixtures.insertBook pool fiction.id "Dune"
+      _ <- ShelfFixtures.insertBook pool fiction.id "Neuromancer"
+      _ <- ShelfFixtures.insertBook pool mystery.id "Rebecca"
+      let include =
+            ShelfInclude
+              { books =
+                  (loadWith (BookInclude {chapters = skip}))
+                    { where_ = Just (eq bookTitle "Dune")
+                    },
+                tags = skip
+              }
+      results <- runDb pool (shelves include)
+      fictionResult <- lookupShelf fiction.id results
+      mysteryResult <- lookupShelf mystery.id results
+      map ((.title) . (.book)) fictionResult.books `shouldBe` ["Dune"]
+      length mysteryResult.books `shouldBe` 0
+
+    it "findMany orders included books" $ \TestEnv {envPool = pool} -> do
+      shelf <- ShelfFixtures.insertShelf pool "fiction"
+      _ <- ShelfFixtures.insertBook pool shelf.id "Neuromancer"
+      _ <- ShelfFixtures.insertBook pool shelf.id "Dune"
+      _ <- ShelfFixtures.insertBook pool shelf.id "Contact"
+      let include =
+            ShelfInclude
+              { books =
+                  (loadWith (BookInclude {chapters = skip}))
+                    { orderBy_ = [desc bookTitle]
+                    },
+                tags = skip
+              }
+      results <- runDb pool (shelves include)
+      [result] <- pure results
+      map ((.title) . (.book)) result.books `shouldBe` ["Neuromancer", "Dune", "Contact"]
+
+    it "findMany takes two ordered books per shelf" $ \TestEnv {envPool = pool} -> do
+      empty <- ShelfFixtures.insertShelf pool "empty"
+      fiction <- ShelfFixtures.insertShelf pool "fiction"
+      history <- ShelfFixtures.insertShelf pool "history"
+      mapM_ (ShelfFixtures.insertBook pool fiction.id) ["alpha", "bravo", "charlie", "zzz"]
+      mapM_ (ShelfFixtures.insertBook pool history.id) ["m", "n", "zzz"]
+      let include =
+            ShelfInclude
+              { books =
+                  (loadWith (BookInclude {chapters = skip}))
+                    { where_ = Just (neq bookTitle "zzz"),
+                      orderBy_ = [asc bookTitle],
+                      take_ = Just 2
+                    },
+                tags = skip
+              }
+      results <- runDb pool (shelves include)
+      emptyResult <- lookupShelf empty.id results
+      fictionResult <- lookupShelf fiction.id results
+      historyResult <- lookupShelf history.id results
+      length emptyResult.books `shouldBe` 0
+      map ((.title) . (.book)) fictionResult.books `shouldBe` ["alpha", "bravo"]
+      map ((.title) . (.book)) historyResult.books `shouldBe` ["m", "n"]
 
 renderBook :: (HasField "chapters" row [ChapterRow]) => row -> [Text]
 renderBook row = map (.heading) row.chapters

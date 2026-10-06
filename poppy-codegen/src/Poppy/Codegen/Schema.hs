@@ -144,6 +144,8 @@ column = IR.column
 -- | @hasMany \"posts\" \"Post\" \"authorId\"@: the other table's @authorId@ points at this model's PK.
 -- The include and nested-write field is that relation name (@posts@).
 -- Include values are @skip@, @load@, or @loadWith@ on a nested include.
+-- Record-update @where_@, @orderBy_@, and @take_@ on @load@ or @loadWith@
+-- to filter that relation. @take_@ is per parent.
 hasMany ::
   Text ->
   Text ->

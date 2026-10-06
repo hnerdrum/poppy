@@ -100,6 +100,7 @@ module Poppy
     catchDb,
     applyMigrations,
     MigrateError (..),
+    Load (..),
     load,
     loadWith,
     skip,
@@ -112,7 +113,7 @@ import Poppy.Core
 import Poppy.Db (Db (..), DbPool (..), PoolConfig (..), SqlLogger, closePool, connect, connectWith, defaultPool, runDb, transaction, transactionEither, withTransaction)
 import Poppy.Delete
 import Poppy.Errors
-import Poppy.Include (load, loadWith, skip)
+import Poppy.Include (Load (..), load, loadWith, skip)
 import Poppy.Insert
 import Poppy.Migrate (MigrateError (..), applyMigrations)
 import Poppy.Operations

@@ -16,6 +16,7 @@ module Poppy.Query
     selectColumns,
     matching,
     orderBy,
+    setOrderBy,
     asc,
     desc,
     limit,
@@ -137,6 +138,7 @@ applyQueryModifiers mWhere orders mLimit mOffset =
     . maybe id limit mLimit
     . maybe id offset mOffset
 
+-- | Replace the @ORDER BY@ list.
 setOrderBy :: [OrderBy table] -> QueryBuilder table -> QueryBuilder table
 setOrderBy orders qb = qb {qbOrderBy = orders}
 

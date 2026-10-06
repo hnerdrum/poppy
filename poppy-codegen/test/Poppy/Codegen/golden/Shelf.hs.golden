@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NoFieldSelectors #-}
 {-# LANGUAGE OverloadedRecordDot #-}
@@ -24,6 +25,7 @@ import Data.Text (Text)
 import Data.UUID (UUID)
 import Poppy.PG (FromRow (..), RowParser, field)
 import Poppy.Core
+import Poppy.Include (ModelTable)
 import Poppy.Select (Picked (..), picked)
 import Poppy.Insert (Insertable (..), emptyInsert, set, setMaybe)
 import Poppy.Update (Updatable (..), emptyUpdate, setFieldMaybe)
@@ -31,6 +33,8 @@ import Poppy.Update (Updatable (..), emptyUpdate, setFieldMaybe)
 data ShelfTable = ShelfTable
 
 type instance PrimaryKeyType ShelfTable = UUID
+
+type instance ModelTable "Shelf" = ShelfTable
 
 instance Entity ShelfTable where
   tableName = "test_shelf"

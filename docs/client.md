@@ -32,7 +32,7 @@ Task.findMany
 
 `findUnique` / `findUniqueOrFail` require `where_` to be equalities on **exactly one** unique key: the primary key, or a `unique_` from the Schema. Incomplete keys, non-equality predicates, and filters that are not unique fail with `InvalidUniqueInput`. Multiple matching rows fail with `MultipleRecordsFound`.
 
-`where_` is only the root table. Nested includes are not filtered. Combinators (`eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in_`, `contains`, `isNull`, `and_`, `or_`, `not_`) come from `Poppy` / `Poppy.Where`.
+`where_` on the query record filters the root table. To filter a loaded relation, record-update `where_`, `orderBy_`, and `take_` on `load` or `loadWith`. `take_` keeps that many child rows per parent. Combinators (`eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in_`, `contains`, `isNull`, `and_`, `or_`, `not_`) come from `Poppy` / `Poppy.Where`.
 
 `orderBy_` is a list of `asc field` / `desc field`. `limit_` and `offset_` are `Maybe Int`.
 

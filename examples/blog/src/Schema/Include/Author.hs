@@ -61,7 +61,7 @@ toAuthorWithPicked select_ nested =
 
 type family AuthorPosts edge where
   AuthorPosts Skip = Skipped "posts" [PostRow]
-  AuthorPosts (Load ()) = [PostRow]
+  AuthorPosts (Load PostTable ()) = [PostRow]
 
 type family AuthorResult include where
   AuthorResult () = AuthorRow
@@ -79,9 +79,9 @@ class LoadAuthorPosts edge where
 instance LoadAuthorPosts Skip where
   loadAuthorPosts Skip roots = pure (map (const skipped) roots)
 
-instance LoadAuthorPosts (Load ()) where
-  loadAuthorPosts (Load ()) roots = do
-    rows <- findByIn @PostTable @PostRow Post.postAuthorId (map (.id) roots)
+instance LoadAuthorPosts (Load PostTable ()) where
+  loadAuthorPosts edge roots = do
+    rows <- findByIn @PostTable @PostRow Post.postAuthorId (map (.id) roots) edge.where_ edge.orderBy_ edge.take_
     let grouped = indexHasMany (.authorId) rows
     pure [lookupGroups root.id grouped | root <- roots]
 

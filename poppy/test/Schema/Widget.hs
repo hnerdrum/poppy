@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NoFieldSelectors #-}
 {-# LANGUAGE OverloadedRecordDot #-}
@@ -28,6 +29,7 @@ import Data.Time (UTCTime)
 import Data.UUID (UUID)
 import Poppy.PG (FromRow (..), RowParser, field)
 import Poppy.Core
+import Poppy.Include (ModelTable)
 import Poppy.Select (Picked (..), picked)
 import Poppy.Insert (Insertable (..), emptyInsert, set, setMaybe, setNullable)
 import Poppy.Update (Updatable (..), emptyUpdate, setFieldMaybe, setFieldNullable)
@@ -35,6 +37,8 @@ import Poppy.Update (Updatable (..), emptyUpdate, setFieldMaybe, setFieldNullabl
 data WidgetTable = WidgetTable
 
 type instance PrimaryKeyType WidgetTable = UUID
+
+type instance ModelTable "Widget" = WidgetTable
 
 instance Entity WidgetTable where
   tableName = "test_widget"

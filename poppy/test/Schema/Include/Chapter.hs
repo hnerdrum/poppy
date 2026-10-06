@@ -61,7 +61,7 @@ toChapterWithPicked select_ nested =
 
 type family ChapterSections edge where
   ChapterSections Skip = Skipped "sections" [SectionRow]
-  ChapterSections (Load ()) = [SectionRow]
+  ChapterSections (Load SectionTable ()) = [SectionRow]
 
 type family ChapterResult include where
   ChapterResult () = ChapterRow
@@ -79,9 +79,9 @@ class LoadChapterSections edge where
 instance LoadChapterSections Skip where
   loadChapterSections Skip roots = pure (map (const skipped) roots)
 
-instance LoadChapterSections (Load ()) where
-  loadChapterSections (Load ()) roots = do
-    rows <- findByIn @SectionTable @SectionRow Section.sectionChapterRef (map (.id) roots)
+instance LoadChapterSections (Load SectionTable ()) where
+  loadChapterSections edge roots = do
+    rows <- findByIn @SectionTable @SectionRow Section.sectionChapterRef (map (.id) roots) edge.where_ edge.orderBy_ edge.take_
     let grouped = indexHasMany (.chapterRef) rows
     pure [lookupGroups root.id grouped | root <- roots]
 
