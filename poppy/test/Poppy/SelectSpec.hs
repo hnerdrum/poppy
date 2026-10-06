@@ -6,7 +6,7 @@ module Poppy.SelectSpec
   )
 where
 
-import Poppy (ORMError (..), Picked (..), asc, desc, runDb)
+import Poppy (ORMError (..), Picked (..), asc, desc, load, loadWith, runDb, skip)
 import qualified Poppy.Operations as Ops
 import Poppy.Query (selectColumns)
 import Poppy.Select (picked)
@@ -16,8 +16,9 @@ import qualified Poppy.WidgetFixtures as WidgetFixtures
 import Schema.Book (BookRow (..))
 import qualified Schema.Client.Shelf as Shelf
 import qualified Schema.Client.Widget as Widget
-import Schema.Shelf (ShelfRow (..), shelfId, shelfName)
-import Schema.ShelfInclude (BookWithChapters (..), ShelfWithBooksTags (..))
+import Schema.Include.Book (BookInclude (..), BookWith (..))
+import Schema.Include.Shelf (ShelfInclude (..), ShelfWith (..), ShelfWithPicked (..))
+import Schema.Shelf (ShelfPicked (..), ShelfRow (..), shelfId, shelfName)
 import Schema.Widget
   ( WidgetPicked (..),
     WidgetRow (..),
@@ -245,9 +246,5 @@ selectSpec = do
       map ((.name) . (.shelf)) rows `shouldBe` ["Pantry"]
       map ((.id) . (.shelf)) rows `shouldBe` [created.id]
 
-shelfInclude :: Shelf.ShelfInclude
 shelfInclude =
-  Shelf.ShelfInclude
-    { books = Just (Shelf.BookInclude {chapters = Just (Shelf.ChapterInclude {sections = True})}),
-      tags = True
-    }
+  ShelfInclude {books = loadWith (BookInclude {chapters = skip}), tags = skip}

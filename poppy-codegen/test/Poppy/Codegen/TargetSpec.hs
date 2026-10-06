@@ -9,6 +9,7 @@ import Data.List (nub, sort)
 import qualified Data.Text as T
 import Poppy.Codegen.Run (allOutputs, schemasForTargets)
 import Poppy.Codegen.Spec.Author (authorSchema)
+import Poppy.Codegen.Spec.Comment (commentSchema)
 import Poppy.Codegen.Spec.Editor (editorSchema)
 import Poppy.Codegen.Spec.Shelf (shelfSchema)
 import Poppy.Codegen.Spec.Widget (widgetSchema)
@@ -29,17 +30,20 @@ schemaGoldenNames =
   [ "Article",
     "Author",
     "Book",
-    "BookInclude",
     "Chapter",
-    "ChapterInclude",
+    "Comment",
     "Editor",
-    "EditorInclude",
+    "Include/Author",
+    "Include/Book",
+    "Include/Chapter",
+    "Include/Comment",
+    "Include/Editor",
+    "Include/Post",
+    "Include/Shelf",
     "Post",
-    "PostInclude",
     "PostStatus",
     "Section",
     "Shelf",
-    "ShelfInclude",
     "Tag",
     "Widget"
   ]
@@ -52,7 +56,8 @@ targetSpec =
         `shouldMatchList` [ widgetSchema,
                             shelfSchema,
                             authorSchema,
-                            editorSchema
+                            editorSchema,
+                            commentSchema
                           ]
 
     it "writes table types under the output dir and clients under Client/" $ do
@@ -62,17 +67,20 @@ targetSpec =
           [ "test/Schema/Article.hs",
             "test/Schema/Author.hs",
             "test/Schema/Book.hs",
-            "test/Schema/BookInclude.hs",
             "test/Schema/Chapter.hs",
-            "test/Schema/ChapterInclude.hs",
+            "test/Schema/Comment.hs",
             "test/Schema/Editor.hs",
-            "test/Schema/EditorInclude.hs",
+            "test/Schema/Include/Author.hs",
+            "test/Schema/Include/Book.hs",
+            "test/Schema/Include/Chapter.hs",
+            "test/Schema/Include/Comment.hs",
+            "test/Schema/Include/Editor.hs",
+            "test/Schema/Include/Post.hs",
+            "test/Schema/Include/Shelf.hs",
             "test/Schema/Post.hs",
-            "test/Schema/PostInclude.hs",
             "test/Schema/PostStatus.hs",
             "test/Schema/Section.hs",
             "test/Schema/Shelf.hs",
-            "test/Schema/ShelfInclude.hs",
             "test/Schema/Tag.hs",
             "test/Schema/Widget.hs"
           ]
@@ -85,12 +93,12 @@ targetSpec =
     it "emits one Client per model" $ do
       outputPaths (simpleTarget "src/Schema" shelfSchema)
         `shouldMatchList` [ "src/Schema/Book.hs",
-                            "src/Schema/BookInclude.hs",
                             "src/Schema/Chapter.hs",
-                            "src/Schema/ChapterInclude.hs",
+                            "src/Schema/Include/Book.hs",
+                            "src/Schema/Include/Chapter.hs",
+                            "src/Schema/Include/Shelf.hs",
                             "src/Schema/Section.hs",
                             "src/Schema/Shelf.hs",
-                            "src/Schema/ShelfInclude.hs",
                             "src/Schema/Tag.hs",
                             "src/Schema/Client/Book.hs",
                             "src/Schema/Client/Chapter.hs",

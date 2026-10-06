@@ -19,9 +19,9 @@ library
   exposed-modules:
       Schema.ArticleStatus
       Schema.Author
-      Schema.AuthorInclude
       Schema.Client.Author
       Schema.Client.Post
+      Schema.Include.Author
       Schema.Post
   other-modules:
       Paths_blog

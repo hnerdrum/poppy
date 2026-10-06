@@ -9,12 +9,13 @@ where
 
 import Data.List (sort)
 import qualified Data.UUID.V4 as V4
-import Poppy (ORMError (..), runDb)
+import Poppy (ORMError (..), load, loadWith, runDb, skip)
 import qualified Poppy.Operations as Ops
 import Schema.Book (BookRow (..), BookTable)
 import qualified Schema.Client.Shelf as Shelf
+import Schema.Include.Book (BookInclude (..), BookWith (..))
+import Schema.Include.Shelf (ShelfInclude (..), ShelfWith (..))
 import Schema.Shelf (ShelfRow (..), ShelfTable)
-import Schema.ShelfInclude (BookWithChapters (..), ShelfWithBooksTags (..))
 import Support.Assert (assertRight)
 import Support.TestDb (TestEnv (..))
 import Test.Hspec (SpecWith, describe, expectationFailure, it, shouldBe)
@@ -38,9 +39,8 @@ nestedWriteSpec =
                 }
           )
           >>= assertRight
-      let nested = result :: ShelfWithBooksTags
-      nested.shelf.name `shouldBe` "fiction"
-      sort (map ((.title) . (.book)) nested.books) `shouldBe` ["Dune", "Neuromancer"]
+      result.shelf.name `shouldBe` "fiction"
+      sort (map ((.title) . (.book)) result.books) `shouldBe` ["Dune", "Neuromancer"]
 
     it "Set replaces all children" $ \TestEnv {envPool = pool} -> do
       created <-
@@ -58,21 +58,19 @@ nestedWriteSpec =
                 }
           )
           >>= assertRight
-      let createdNested = created :: ShelfWithBooksTags
       updated <-
         runDb
           pool
           ( Shelf.updateNested
               shelfInclude
-              createdNested.shelf.id
+              created.shelf.id
               Shelf.ShelfWriteUpdate
                 { root = Shelf.ShelfUpdate {name = Nothing},
                   books = Just (Shelf.Set [Shelf.BookNestedCreate {id = Nothing, title = "Hyperion"}])
                 }
           )
           >>= assertRight
-      let updatedNested = updated :: ShelfWithBooksTags
-      map ((.title) . (.book)) updatedNested.books `shouldBe` ["Hyperion"]
+      map ((.title) . (.book)) updated.books `shouldBe` ["Hyperion"]
 
     it "Ops create adds a child without wiping existing ones" $ \TestEnv {envPool = pool} -> do
       created <-
@@ -86,13 +84,12 @@ nestedWriteSpec =
                 }
           )
           >>= assertRight
-      let createdNested = created :: ShelfWithBooksTags
       _ <-
         runDb
           pool
           ( Shelf.updateNested
               shelfInclude
-              createdNested.shelf.id
+              created.shelf.id
               Shelf.ShelfWriteUpdate
                 { root = Shelf.ShelfUpdate {name = Nothing},
                   books =
@@ -130,14 +127,13 @@ nestedWriteSpec =
                 }
           )
           >>= assertRight
-      let createdNested = created :: ShelfWithBooksTags
-          duneId = head [b.book.id | b <- createdNested.books, b.book.title == "Dune"]
+      let duneId = head [b.book.id | b <- created.books, b.book.title == "Dune"]
       _ <-
         runDb
           pool
           ( Shelf.updateNested
               shelfInclude
-              createdNested.shelf.id
+              created.shelf.id
               Shelf.ShelfWriteUpdate
                 { root = Shelf.ShelfUpdate {name = Nothing},
                   books =
@@ -175,15 +171,12 @@ nestedWriteSpec =
               }
       case result of
         Left (UniqueViolation _) -> pure ()
-        other -> expectationFailure ("expected UniqueViolation, got " <> show other)
+        Left other -> expectationFailure ("expected UniqueViolation, got " <> show other)
+        Right _ -> expectationFailure "expected UniqueViolation, got a written shelf"
       shelves <- runDb pool (Ops.findMany @ShelfTable @ShelfRow id)
       books <- runDb pool (Ops.findMany @BookTable @BookRow id)
       shelves `shouldBe` []
       books `shouldBe` []
 
-shelfInclude :: Shelf.ShelfInclude
 shelfInclude =
-  Shelf.ShelfInclude
-    { books = Just (Shelf.BookInclude {chapters = Just (Shelf.ChapterInclude {sections = True})}),
-      tags = True
-    }
+  ShelfInclude {books = loadWith (BookInclude {chapters = skip}), tags = skip}

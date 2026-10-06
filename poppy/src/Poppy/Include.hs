@@ -1,94 +1,76 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
+-- | Include edges for generated @Schema.Include.*@ modules.
+--
+-- 'skip' omits a relation, 'load' fetches its rows, and 'loadWith' nests
+-- another include. 'Skipped' is a type error. Import the result constructor
+-- (@BookWith (..)@), or a skipped field is reported as a missing @HasField@
+-- instance.
 module Poppy.Include
-  ( IncludesJoin (..),
-    NestInclude (..),
-    ExecuteInclude (..),
-    findMany,
-    findUnique,
-    findUniqueOrFail,
+  ( Skip (..),
+    Load (..),
+    load,
+    loadWith,
+    skip,
+    skipped,
+    Skipped,
+    IncludeFor,
+    ValidEdge,
+    requireRelated,
   )
 where
 
-import Data.Kind (Type)
-import qualified Data.Text as Text
-import Database.PostgreSQL.Simple.FromRow (FromRow)
-import Database.PostgreSQL.Simple.ToField (ToField)
-import Poppy.Core (Entity (..), PrimaryKeyType)
-import Poppy.Db (Db (..))
-import Poppy.Errors (ORMError (..), requireFound)
-import qualified Poppy.Operations as Ops
-import Poppy.Query (QueryBuilder, matching)
-import Poppy.SelectIn (prepareIncludeRootQuery)
-import Poppy.Where (eq)
+import Data.Kind (Constraint, Type)
+import GHC.TypeLits (ErrorMessage (..), Symbol, TypeError)
 
-class IncludesJoin include where
-  includesJoin :: include -> Bool
+data Skip = Skip
+  deriving (Show, Eq)
 
-class (IncludesJoin include) => NestInclude include result | include -> result where
-  type RootRow include :: Type
-  wrapRoot :: include -> RootRow include -> result
+newtype Load include = Load include
+  deriving (Show, Eq)
 
-class ExecuteInclude root include result | include -> result where
-  executeInclude ::
-    include ->
-    (QueryBuilder root -> QueryBuilder root) ->
-    Db [result]
+load :: Load ()
+load = Load ()
 
-instance
-  {-# OVERLAPPABLE #-}
-  ( Entity root,
-    NestInclude include result,
-    FromRow (RootRow include)
-  ) =>
-  ExecuteInclude root include result
-  where
-  executeInclude include modifier = do
-    roots <-
-      Ops.findMany @root @(RootRow include) (prepareIncludeRootQuery @root modifier)
-    pure $ map (wrapRoot include) roots
+loadWith :: include -> Load include
+loadWith = Load
 
-findMany ::
-  (ExecuteInclude root include result) =>
-  include ->
-  (QueryBuilder root -> QueryBuilder root) ->
-  Db [result]
-findMany = executeInclude
+skip :: Skip
+skip = Skip
 
-findUnique ::
-  forall root include result.
-  ( Entity root,
-    ToField (PrimaryKeyType root),
-    ExecuteInclude root include result
-  ) =>
-  include ->
-  PrimaryKeyType root ->
-  Db (Maybe result)
-findUnique include pk = do
-  results <- findMany include (matching (eq (primaryKey @root) pk))
-  pure $ case results of
-    [] -> Nothing
-    (row : _) -> Just row
+-- | Placeholder stored in a skipped field. Forcing it is a type error
+-- ('Skipped'), so this value is only for constructing the result.
+skipped :: a
+skipped = error "Poppy: relation was not included"
 
-findUniqueOrFail ::
-  forall root include result.
-  ( Entity root,
-    ToField (PrimaryKeyType root),
-    Show (PrimaryKeyType root),
-    ExecuteInclude root include result
-  ) =>
-  include ->
-  PrimaryKeyType root ->
-  Db (Either ORMError result)
-findUniqueOrFail include pk = do
-  result <- findUnique @root include pk
-  pure $
-    requireFound result $
-      RecordNotFound $
-        "Record not found with primary key: " <> Text.pack (show pk)
+type Skipped (name :: Symbol) (loaded :: Type) =
+  TypeError
+    ( Text "'"
+        :<>: Text name
+        :<>: Text "' was skipped: NotIncluded vs "
+        :<>: ShowType loaded
+    )
+
+class IncludeFor (model :: Symbol) (include :: Type)
+
+type family ValidEdge (model :: Symbol) (edge :: Type) :: Constraint where
+  ValidEdge _ Skip = ()
+  ValidEdge _ (Load ()) = ()
+  ValidEdge model (Load include) = IncludeFor model include
+  ValidEdge model other =
+    TypeError
+      ( Text "A "
+          :<>: Text model
+          :<>: Text " relation is skip or load, got "
+          :<>: ShowType other
+      )
+
+-- | A required belongs-to whose parent row is missing.
+requireRelated :: String -> Maybe a -> a
+requireRelated name Nothing =
+  error ("Poppy: required relation '" ++ name ++ "' row was missing")
+requireRelated _ (Just row) = row

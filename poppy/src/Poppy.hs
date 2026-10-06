@@ -100,6 +100,9 @@ module Poppy
     catchDb,
     applyMigrations,
     MigrateError (..),
+    load,
+    loadWith,
+    skip,
   )
 where
 
@@ -109,6 +112,7 @@ import Poppy.Core
 import Poppy.Db (Db (..), DbPool (..), PoolConfig (..), SqlLogger, closePool, connect, connectWith, defaultPool, runDb, transaction, transactionEither, withTransaction)
 import Poppy.Delete
 import Poppy.Errors
+import Poppy.Include (load, loadWith, skip)
 import Poppy.Insert
 import Poppy.Migrate (MigrateError (..), applyMigrations)
 import Poppy.Operations

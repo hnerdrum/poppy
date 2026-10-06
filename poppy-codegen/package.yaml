@@ -55,7 +55,6 @@ library:
     - Poppy.Codegen.Emit.Client
     - Poppy.Codegen.Emit.Include
     - Poppy.Codegen.Emit.Schema
-    - Poppy.Codegen.Emit.SelectIn
     - Poppy.Codegen.EmitCommon
     - Poppy.Codegen.Introspect
     - Poppy.Codegen.Lookup

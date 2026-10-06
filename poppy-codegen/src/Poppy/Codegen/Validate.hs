@@ -10,11 +10,9 @@ import Data.List (find, nub)
 import Data.Maybe (catMaybes, isNothing)
 import Data.Text (Text)
 import Poppy.Codegen.IR
-import Poppy.Codegen.Schema (fullGraphIncludeName, isFullGraphInclude)
 
 data ValidationError
   = DuplicateModelName Text
-  | DuplicateIncludeName Text
   | DuplicateEnumName Text
   | EnumHasNoVariants Text
   | DuplicateEnumVariant Text Text
@@ -23,37 +21,27 @@ data ValidationError
   | ModelMultiplePrimaryKeys Text
   | UnknownRelationModel Text Text Text
   | UnknownRelationField Text Text Text
-  | UnknownIncludeRoot Text Text
-  | UnknownIncludeRelation Text Text Text
-  | DuplicateIncludeRelation Text Text Text
   | DuplicateRelationName Text Text
   | RelationNameClashesWithField Text Text
   | UnknownUniqueModel Text
   | UnknownUniqueField Text Text
   | EmptyUniqueConstraint Text
-  | LeftoverIncludeDeclaration Text
   deriving (Show, Eq)
 
 validateSchema :: Schema -> [ValidationError]
 validateSchema schema =
   concat
     [ duplicateModelNames schema,
-      duplicateIncludeNames schema,
       duplicateEnumNames schema,
       concatMap validateEnum (schemaEnums schema),
       concatMap (validateModel schema) (schemaModels schema),
       concatMap (validateRelation schema) (concatMap modelRelations (schemaModels schema)),
-      concatMap (validateInclude schema) (schemaIncludes schema),
       concatMap (validateUnique schema) (schemaUniques schema)
     ]
 
 duplicateModelNames :: Schema -> [ValidationError]
 duplicateModelNames schema =
   map DuplicateModelName (duplicates (map modelName (schemaModels schema)))
-
-duplicateIncludeNames :: Schema -> [ValidationError]
-duplicateIncludeNames schema =
-  map DuplicateIncludeName (duplicates (map includeName (schemaIncludes schema)))
 
 duplicateEnumNames :: Schema -> [ValidationError]
 duplicateEnumNames schema =
@@ -118,47 +106,9 @@ validateRelation schema rel =
         _ -> []
    in modelErrs ++ fieldErrs
 
-validateInclude :: Schema -> ModelInclude -> [ValidationError]
-validateInclude schema incl =
-  case findModel schema (includeRootModel incl) of
-    Nothing ->
-      [UnknownIncludeRoot (includeName incl) (includeRootModel incl)]
-    Just root ->
-      let treeErrs = validateIncludeTree schema (includeName incl) root (includeTree incl)
-       in if null treeErrs
-            then leftoverIncludeDeclaration schema incl
-            else treeErrs
-
-leftoverIncludeDeclaration :: Schema -> ModelInclude -> [ValidationError]
-leftoverIncludeDeclaration schema incl =
-  [ LeftoverIncludeDeclaration (includeName incl)
-    | not (isFullGraphInclude (schemaModels schema) incl)
-        || includeName incl /= fullGraphIncludeName (includeRootModel incl)
-  ]
-
-validateIncludeTree :: Schema -> Text -> Model -> [IncludeTree] -> [ValidationError]
-validateIncludeTree schema includeName current edges =
-  map (DuplicateIncludeRelation includeName (modelName current)) (duplicates (map includeRelation edges))
-    ++ concatMap go edges
-  where
-    go tree =
-      case findRelation current (includeRelation tree) of
-        Nothing ->
-          [UnknownIncludeRelation includeName (modelName current) (includeRelation tree)]
-        Just rel ->
-          case findModel schema (relToModel rel) of
-            Nothing ->
-              [UnknownRelationModel (relName rel) "to" (relToModel rel)]
-            Just childModel ->
-              validateIncludeTree schema includeName childModel (includeChildren tree)
-
 findModel :: Schema -> Text -> Maybe Model
 findModel schema name =
   find ((== name) . modelName) (schemaModels schema)
-
-findRelation :: Model -> Text -> Maybe RelationSpec
-findRelation model name =
-  find ((== name) . relName) (modelRelations model)
 
 validateUnique :: Schema -> UniqueConstraint -> [ValidationError]
 validateUnique schema UniqueConstraint {uniqueModel, uniqueFields} =

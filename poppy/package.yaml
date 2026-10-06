@@ -15,7 +15,7 @@ description: |
 
 extra-source-files:
   - test/migrations/*.sql
-  - include-spike-fail/*.hs
+  - include-fail/*.hs
 
 extra-doc-files:
   - README.md

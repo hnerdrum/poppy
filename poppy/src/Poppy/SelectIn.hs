@@ -8,6 +8,7 @@ module Poppy.SelectIn
     findByIn,
     emptyGroups,
     indexHasMany,
+    indexHasManyMaybe,
     lookupGroups,
     emptyByPk,
     indexByPk,
@@ -56,6 +57,12 @@ indexHasMany :: (Ord k) => (a -> k) -> [a] -> GroupIndex k a
 indexHasMany keyFn rows =
   GroupIndex . Map.fromList $
     [(keyFn (head group), group) | group <- groupByKey keyFn rows]
+
+-- | Like 'indexHasMany', dropping rows whose key is 'Nothing'.
+indexHasManyMaybe :: (Ord k) => (a -> Maybe k) -> [a] -> GroupIndex k a
+indexHasManyMaybe keyFn rows =
+  GroupIndex $
+    Map.fromListWith (flip (<>)) [(key, [row]) | row <- rows, Just key <- [keyFn row]]
 
 lookupGroups :: (Ord k) => k -> GroupIndex k a -> [a]
 lookupGroups key (GroupIndex groups) =

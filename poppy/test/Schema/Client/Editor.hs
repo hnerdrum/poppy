@@ -9,6 +9,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 {- | Generated Client. Do not edit.
 
@@ -38,10 +39,6 @@ module Schema.Client.Editor
     WrittenPostsWrite (..),
     ArticleNestedOps (..),
     emptyArticleNestedOps,
-    noInclude,
-    EditorInclude (..),
-    NoInclude (..),
-    ResolveInclude,
     EditorQuery (..),
     emptyQuery,
     OmitSelect (..),
@@ -53,8 +50,7 @@ module Schema.Client.Editor
     editorSelect,
     EditorUpdate (..),
     EditorTable,
-    editorId,
-    EditorWithWrittenPostsEditedPostsPicked (..)
+    editorId
   )
 where
 
@@ -66,15 +62,15 @@ import Poppy.PG (toField)
 import Poppy.Db (Db, liftIO, transactionEither)
 import qualified Poppy.Delete as Delete
 import Poppy.Errors (ORMError (..), requireFound)
-import qualified Poppy.Include as Include
 import qualified Poppy.Insert as Insert
 import qualified Poppy.Operations as Ops
 import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)
 import Poppy.Select (OmitSelect (..), Picked (..))
+import Poppy.SelectIn (prepareIncludeRootQuery)
 import qualified Poppy.Update as Update
 import Poppy.Where (Where, and_, eq, in_)
-import Schema.Editor (EditorCreate (..), EditorRow (..), EditorSelect (..), EditorPicked (..), editorSelect, editorSelectColumns, parseEditorPicked, toEditorPicked, EditorTable, EditorUpdate (..), editorId)
-import Schema.EditorInclude ( EditorInclude (..), EditorWithWrittenPostsEditedPosts (..), NoInclude (..), ResolveInclude)
+import Schema.Editor (EditorCreate (..), EditorRow (..), EditorSelect (..), EditorPicked (..), editorSelect, editorSelectColumns, parseEditorPicked, EditorTable, EditorUpdate (..), editorId)
+import Schema.Include.Editor (LoadEditor (..), EditorInclude (..), EditorRead, EditorWith (..), toEditorWithPicked)
 import Schema.Article (ArticleCreate (..), ArticleRow (..), ArticleUpdate (..), ArticleTable, articleId, articleAuthorId)
 
 create :: EditorCreate -> Db (Either ORMError EditorRow)
@@ -255,10 +251,10 @@ connectNested parentId = go
         Right _ -> go rest
 
 createNested ::
-  (Include.ExecuteInclude EditorTable include result) =>
-  include ->
+  (LoadEditor writtenPosts editedPosts) =>
+  EditorInclude writtenPosts editedPosts ->
   EditorWriteCreate ->
-  Db (Either ORMError result)
+  Db (Either ORMError (EditorWith writtenPosts editedPosts))
 createNested include input = transactionEither $ do
   rootId <- liftIO $ maybe V4.nextRandom pure input.root.id
   let rootInput =
@@ -271,14 +267,14 @@ createNested include input = transactionEither $ do
       nestedResult <- applyWrittenPostsWrite rootId input.writtenPosts
       case nestedResult of
         Left err -> pure (Left err)
-        Right () -> Include.findUniqueOrFail @EditorTable include rootId
+        Right () -> reload include rootId
 
 updateNested ::
-  (Include.ExecuteInclude EditorTable include result) =>
-  include ->
+  (LoadEditor writtenPosts editedPosts) =>
+  EditorInclude writtenPosts editedPosts ->
   UUID ->
   EditorWriteUpdate ->
-  Db (Either ORMError result)
+  Db (Either ORMError (EditorWith writtenPosts editedPosts))
 updateNested include rootId input = transactionEither $ do
   updateResult <-
     Update.update @EditorTable @EditorRow rootId input.root
@@ -290,25 +286,7 @@ updateNested include rootId input = transactionEither $ do
         Just write -> applyWrittenPostsWrite rootId write
       case nestedResult of
         Left err -> pure (Left err)
-        Right () -> Include.findUniqueOrFail @EditorTable include rootId
-
-noInclude :: NoInclude
-noInclude = NoInclude EditorInclude {writtenPosts = False, editedPosts = False}
-
-data EditorWithWrittenPostsEditedPostsPicked = EditorWithWrittenPostsEditedPostsPicked
-  { editor :: EditorPicked,
-    writtenPosts :: [ArticleRow],
-    editedPosts :: [ArticleRow]
-  }
-  deriving (Show, Eq)
-
-toEditorWithWrittenPostsEditedPostsPicked :: EditorSelect -> EditorWithWrittenPostsEditedPosts -> EditorWithWrittenPostsEditedPostsPicked
-toEditorWithWrittenPostsEditedPostsPicked select_ EditorWithWrittenPostsEditedPosts {editor, writtenPosts, editedPosts} =
-  EditorWithWrittenPostsEditedPostsPicked
-    { editor = toEditorPicked select_ editor
-    , writtenPosts = writtenPosts
-    , editedPosts = editedPosts
-    }
+        Right () -> reload include rootId
 
 data EditorQuery include select = EditorQuery
   { include_ :: include
@@ -319,30 +297,27 @@ data EditorQuery include select = EditorQuery
   , offset_ :: Maybe Int
   }
 
-emptyQuery :: EditorQuery NoInclude OmitSelect
+emptyQuery :: EditorQuery () OmitSelect
 emptyQuery =
-  EditorQuery {include_ = noInclude, select_ = OmitSelect, where_ = Nothing, orderBy_ = [], limit_ = Nothing, offset_ = Nothing}
-
-type instance ResolveInclude (EditorQuery EditorInclude OmitSelect) = EditorWithWrittenPostsEditedPosts
-type instance ResolveInclude (EditorQuery NoInclude OmitSelect) = EditorRow
-type instance ResolveInclude (EditorQuery EditorInclude EditorSelect) = EditorWithWrittenPostsEditedPostsPicked
-type instance ResolveInclude (EditorQuery NoInclude EditorSelect) = EditorPicked
+  EditorQuery {include_ = (), select_ = OmitSelect, where_ = Nothing, orderBy_ = [], limit_ = Nothing, offset_ = Nothing}
 
 class ReadEditor include select where
-  findMany :: EditorQuery include select -> Db [ResolveInclude (EditorQuery include select)]
-  findUnique :: EditorQuery include select -> Db (Either ORMError (Maybe (ResolveInclude (EditorQuery include select))))
-  findUniqueOrFail :: EditorQuery include select -> Db (Either ORMError (ResolveInclude (EditorQuery include select)))
-  findFirst :: EditorQuery include select -> Db (Maybe (ResolveInclude (EditorQuery include select)))
-  findFirstOrFail :: EditorQuery include select -> Db (Either ORMError (ResolveInclude (EditorQuery include select)))
+  findMany :: EditorQuery include select -> Db [EditorRead include select]
+  findUnique :: EditorQuery include select -> Db (Either ORMError (Maybe (EditorRead include select)))
+  findUniqueOrFail :: EditorQuery include select -> Db (Either ORMError (EditorRead include select))
+  findFirst :: EditorQuery include select -> Db (Maybe (EditorRead include select))
+  findFirstOrFail :: EditorQuery include select -> Db (Either ORMError (EditorRead include select))
 
-instance ReadEditor EditorInclude OmitSelect where
-  findMany EditorQuery {include_, where_, orderBy_, limit_, offset_} =
-    Include.findMany @EditorTable include_ (applyQueryModifiers where_ orderBy_ limit_ offset_)
+instance (LoadEditor writtenPosts editedPosts) => ReadEditor (EditorInclude writtenPosts editedPosts) OmitSelect where
+  findMany EditorQuery {include_, where_, orderBy_, limit_, offset_} = do
+    roots <- Ops.findMany @EditorTable @EditorRow (prepareIncludeRootQuery @EditorTable (applyQueryModifiers where_ orderBy_ limit_ offset_))
+    loadEditor include_ roots
   findUnique EditorQuery {include_, where_} =
     case Ops.requireUniqueWhere @EditorTable where_ of
       Left err -> pure (Left err)
       Right w -> do
-        rows <- Include.findMany @EditorTable include_ (matching w)
+        roots <- Ops.findMany @EditorTable @EditorRow (prepareIncludeRootQuery @EditorTable (matching w))
+        rows <- loadEditor include_ roots
         pure $ case rows of
           [] -> Right Nothing
           [row] -> Right (Just row)
@@ -353,15 +328,16 @@ instance ReadEditor EditorInclude OmitSelect where
       Left err -> pure (Left err)
       Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
   findFirst EditorQuery {include_, where_, orderBy_, offset_} = do
-    rows <- Include.findMany @EditorTable include_ (applyQueryModifiers where_ orderBy_ (Just 1) offset_)
-    pure $ case rows of
+    roots <- Ops.findMany @EditorTable @EditorRow (prepareIncludeRootQuery @EditorTable (applyQueryModifiers where_ orderBy_ (Just 1) offset_))
+    loaded <- loadEditor include_ roots
+    pure $ case loaded of
       [] -> Nothing
       (row : _) -> Just row
   findFirstOrFail q = do
     result <- findFirst q
     pure $ requireFound result (RecordNotFound "No record found matching query")
 
-instance ReadEditor NoInclude OmitSelect where
+instance ReadEditor () OmitSelect where
   findMany EditorQuery {where_, orderBy_, limit_, offset_} =
     Ops.findMany @EditorTable @EditorRow (applyQueryModifiers where_ orderBy_ limit_ offset_)
   findUnique EditorQuery {where_} =
@@ -377,16 +353,18 @@ instance ReadEditor NoInclude OmitSelect where
     result <- findFirst q
     pure $ requireFound result (RecordNotFound "No record found matching query")
 
-instance ReadEditor EditorInclude EditorSelect where
+instance (LoadEditor writtenPosts editedPosts) => ReadEditor (EditorInclude writtenPosts editedPosts) EditorSelect where
   findMany EditorQuery {include_, select_, where_, orderBy_, limit_, offset_} = do
-    rows <- Include.findMany @EditorTable include_ (applyQueryModifiers where_ orderBy_ limit_ offset_)
-    pure $ map (toEditorWithWrittenPostsEditedPostsPicked select_) rows
+    roots <- Ops.findMany @EditorTable @EditorRow (prepareIncludeRootQuery @EditorTable (applyQueryModifiers where_ orderBy_ limit_ offset_))
+    loaded <- loadEditor include_ roots
+    pure $ map (toEditorWithPicked select_) loaded
   findUnique EditorQuery {include_, select_, where_} =
     case Ops.requireUniqueWhere @EditorTable where_ of
       Left err -> pure (Left err)
       Right w -> do
-        nested <- Include.findMany @EditorTable include_ (matching w)
-        let rows = map (toEditorWithWrittenPostsEditedPostsPicked select_) nested
+        roots <- Ops.findMany @EditorTable @EditorRow (prepareIncludeRootQuery @EditorTable (matching w))
+        loaded <- loadEditor include_ roots
+        let rows = map (toEditorWithPicked select_) loaded
         pure $ case rows of
           [] -> Right Nothing
           [row] -> Right (Just row)
@@ -397,15 +375,16 @@ instance ReadEditor EditorInclude EditorSelect where
       Left err -> pure (Left err)
       Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
   findFirst EditorQuery {select_, include_, where_, orderBy_, offset_} = do
-    rows <- Include.findMany @EditorTable include_ (applyQueryModifiers where_ orderBy_ (Just 1) offset_)
-    pure $ case rows of
+    roots <- Ops.findMany @EditorTable @EditorRow (prepareIncludeRootQuery @EditorTable (applyQueryModifiers where_ orderBy_ (Just 1) offset_))
+    loaded <- loadEditor include_ roots
+    pure $ case loaded of
       [] -> Nothing
-      (row : _) -> Just (toEditorWithWrittenPostsEditedPostsPicked select_ row)
+      (row : _) -> Just (toEditorWithPicked select_ row)
   findFirstOrFail q = do
     result <- findFirst q
     pure $ requireFound result (RecordNotFound "No record found matching query")
 
-instance ReadEditor NoInclude EditorSelect where
+instance ReadEditor () EditorSelect where
   findMany EditorQuery {select_, where_, orderBy_, limit_, offset_} =
     Ops.findManyWith
       (parseEditorPicked select_)
@@ -438,6 +417,21 @@ instance ReadEditor NoInclude EditorSelect where
 count :: EditorQuery include select -> Db Int
 count EditorQuery {where_, orderBy_, limit_, offset_} =
   Ops.count @EditorTable (applyQueryModifiers where_ orderBy_ limit_ offset_)
+
+reload ::
+  (LoadEditor writtenPosts editedPosts) =>
+  EditorInclude writtenPosts editedPosts ->
+  UUID ->
+  Db (Either ORMError (EditorWith writtenPosts editedPosts))
+reload include rootId = do
+  found <- Ops.findUnique @EditorTable @EditorRow rootId
+  case found of
+    Nothing -> pure (Left (RecordNotFound "Record not found with primary key"))
+    Just row -> do
+      loaded <- loadEditor include [row]
+      pure $ case loaded of
+        (one : _) -> Right one
+        [] -> Left (RecordNotFound "Record not found with primary key")
 
 delete :: UUID -> Db (Either ORMError Int)
 delete = Ops.delete @EditorTable

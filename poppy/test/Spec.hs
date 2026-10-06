@@ -2,12 +2,13 @@ module Main (main) where
 
 import Poppy.BelongsToSpec (belongsToSpec)
 import Poppy.ClientWriteSpec (clientWriteSpec)
+import Poppy.CommentSpec (commentSpec)
 import Poppy.DbSpec (dbSpec)
 import Poppy.EnumSpec (enumSpec)
 import Poppy.ErrorsSpec (errorsSpec)
 import Poppy.GroupSpec (groupSpec)
+import Poppy.IncludeFailSpec (includeFailSpec)
 import Poppy.IncludeSpec (includeSpec)
-import Poppy.IncludeSpikeSpec (includeSpikeSpec)
 import Poppy.MigrateSpec (migrateSpec)
 import Poppy.NestedWriteSpec (nestedWriteSpec)
 import Poppy.OperationsSpec (operationsSpec)
@@ -20,13 +21,14 @@ import Test.Hspec
 
 main :: IO ()
 main = hspec $ do
-  includeSpikeSpec
+  includeFailSpec
   errorsSpec
   groupSpec
   whereSpec
   withTestDb $
     operationsSpec
       >> includeSpec
+      >> commentSpec
       >> belongsToSpec
       >> enumSpec
       >> rawSpec

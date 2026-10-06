@@ -9,6 +9,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 {- | Generated Client. Do not edit.
 
@@ -38,10 +39,6 @@ module Schema.Client.Author
     PostsWrite (..),
     PostNestedOps (..),
     emptyPostNestedOps,
-    noInclude,
-    AuthorInclude (..),
-    NoInclude (..),
-    ResolveInclude,
     AuthorQuery (..),
     emptyQuery,
     OmitSelect (..),
@@ -53,8 +50,7 @@ module Schema.Client.Author
     authorSelect,
     AuthorUpdate (..),
     AuthorTable,
-    authorId,
-    AuthorWithPostsPicked (..)
+    authorId
   )
 where
 
@@ -66,15 +62,15 @@ import Poppy.PG (toField)
 import Poppy.Db (Db, liftIO, transactionEither)
 import qualified Poppy.Delete as Delete
 import Poppy.Errors (ORMError (..), requireFound)
-import qualified Poppy.Include as Include
 import qualified Poppy.Insert as Insert
 import qualified Poppy.Operations as Ops
 import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)
 import Poppy.Select (OmitSelect (..), Picked (..))
+import Poppy.SelectIn (prepareIncludeRootQuery)
 import qualified Poppy.Update as Update
 import Poppy.Where (Where, and_, eq, in_)
-import Schema.Author (AuthorCreate (..), AuthorRow (..), AuthorSelect (..), AuthorPicked (..), authorSelect, authorSelectColumns, parseAuthorPicked, toAuthorPicked, AuthorTable, AuthorUpdate (..), authorId)
-import Schema.AuthorInclude ( AuthorInclude (..), AuthorWithPosts (..), NoInclude (..), ResolveInclude)
+import Schema.Author (AuthorCreate (..), AuthorRow (..), AuthorSelect (..), AuthorPicked (..), authorSelect, authorSelectColumns, parseAuthorPicked, AuthorTable, AuthorUpdate (..), authorId)
+import Schema.Include.Author (LoadAuthor (..), AuthorInclude (..), AuthorRead, AuthorWith (..), toAuthorWithPicked)
 import Schema.Post (PostCreate (..), PostRow (..), PostUpdate (..), PostTable, postId, postAuthorId)
 import Schema.ArticleStatus (ArticleStatus (..))
 
@@ -258,10 +254,10 @@ connectNested parentId = go
         Right _ -> go rest
 
 createNested ::
-  (Include.ExecuteInclude AuthorTable include result) =>
-  include ->
+  (LoadAuthor posts) =>
+  AuthorInclude posts ->
   AuthorWriteCreate ->
-  Db (Either ORMError result)
+  Db (Either ORMError (AuthorWith posts))
 createNested include input = transactionEither $ do
   rootId <- liftIO $ maybe V4.nextRandom pure input.root.id
   let rootInput =
@@ -274,14 +270,14 @@ createNested include input = transactionEither $ do
       nestedResult <- applyPostsWrite rootId input.posts
       case nestedResult of
         Left err -> pure (Left err)
-        Right () -> Include.findUniqueOrFail @AuthorTable include rootId
+        Right () -> reload include rootId
 
 updateNested ::
-  (Include.ExecuteInclude AuthorTable include result) =>
-  include ->
+  (LoadAuthor posts) =>
+  AuthorInclude posts ->
   UUID ->
   AuthorWriteUpdate ->
-  Db (Either ORMError result)
+  Db (Either ORMError (AuthorWith posts))
 updateNested include rootId input = transactionEither $ do
   updateResult <-
     Update.update @AuthorTable @AuthorRow rootId input.root
@@ -293,23 +289,7 @@ updateNested include rootId input = transactionEither $ do
         Just write -> applyPostsWrite rootId write
       case nestedResult of
         Left err -> pure (Left err)
-        Right () -> Include.findUniqueOrFail @AuthorTable include rootId
-
-noInclude :: NoInclude
-noInclude = NoInclude AuthorInclude {posts = False}
-
-data AuthorWithPostsPicked = AuthorWithPostsPicked
-  { author :: AuthorPicked,
-    posts :: [PostRow]
-  }
-  deriving (Show, Eq)
-
-toAuthorWithPostsPicked :: AuthorSelect -> AuthorWithPosts -> AuthorWithPostsPicked
-toAuthorWithPostsPicked select_ AuthorWithPosts {author, posts} =
-  AuthorWithPostsPicked
-    { author = toAuthorPicked select_ author
-    , posts = posts
-    }
+        Right () -> reload include rootId
 
 data AuthorQuery include select = AuthorQuery
   { include_ :: include
@@ -320,30 +300,27 @@ data AuthorQuery include select = AuthorQuery
   , offset_ :: Maybe Int
   }
 
-emptyQuery :: AuthorQuery NoInclude OmitSelect
+emptyQuery :: AuthorQuery () OmitSelect
 emptyQuery =
-  AuthorQuery {include_ = noInclude, select_ = OmitSelect, where_ = Nothing, orderBy_ = [], limit_ = Nothing, offset_ = Nothing}
-
-type instance ResolveInclude (AuthorQuery AuthorInclude OmitSelect) = AuthorWithPosts
-type instance ResolveInclude (AuthorQuery NoInclude OmitSelect) = AuthorRow
-type instance ResolveInclude (AuthorQuery AuthorInclude AuthorSelect) = AuthorWithPostsPicked
-type instance ResolveInclude (AuthorQuery NoInclude AuthorSelect) = AuthorPicked
+  AuthorQuery {include_ = (), select_ = OmitSelect, where_ = Nothing, orderBy_ = [], limit_ = Nothing, offset_ = Nothing}
 
 class ReadAuthor include select where
-  findMany :: AuthorQuery include select -> Db [ResolveInclude (AuthorQuery include select)]
-  findUnique :: AuthorQuery include select -> Db (Either ORMError (Maybe (ResolveInclude (AuthorQuery include select))))
-  findUniqueOrFail :: AuthorQuery include select -> Db (Either ORMError (ResolveInclude (AuthorQuery include select)))
-  findFirst :: AuthorQuery include select -> Db (Maybe (ResolveInclude (AuthorQuery include select)))
-  findFirstOrFail :: AuthorQuery include select -> Db (Either ORMError (ResolveInclude (AuthorQuery include select)))
+  findMany :: AuthorQuery include select -> Db [AuthorRead include select]
+  findUnique :: AuthorQuery include select -> Db (Either ORMError (Maybe (AuthorRead include select)))
+  findUniqueOrFail :: AuthorQuery include select -> Db (Either ORMError (AuthorRead include select))
+  findFirst :: AuthorQuery include select -> Db (Maybe (AuthorRead include select))
+  findFirstOrFail :: AuthorQuery include select -> Db (Either ORMError (AuthorRead include select))
 
-instance ReadAuthor AuthorInclude OmitSelect where
-  findMany AuthorQuery {include_, where_, orderBy_, limit_, offset_} =
-    Include.findMany @AuthorTable include_ (applyQueryModifiers where_ orderBy_ limit_ offset_)
+instance (LoadAuthor posts) => ReadAuthor (AuthorInclude posts) OmitSelect where
+  findMany AuthorQuery {include_, where_, orderBy_, limit_, offset_} = do
+    roots <- Ops.findMany @AuthorTable @AuthorRow (prepareIncludeRootQuery @AuthorTable (applyQueryModifiers where_ orderBy_ limit_ offset_))
+    loadAuthor include_ roots
   findUnique AuthorQuery {include_, where_} =
     case Ops.requireUniqueWhere @AuthorTable where_ of
       Left err -> pure (Left err)
       Right w -> do
-        rows <- Include.findMany @AuthorTable include_ (matching w)
+        roots <- Ops.findMany @AuthorTable @AuthorRow (prepareIncludeRootQuery @AuthorTable (matching w))
+        rows <- loadAuthor include_ roots
         pure $ case rows of
           [] -> Right Nothing
           [row] -> Right (Just row)
@@ -354,15 +331,16 @@ instance ReadAuthor AuthorInclude OmitSelect where
       Left err -> pure (Left err)
       Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
   findFirst AuthorQuery {include_, where_, orderBy_, offset_} = do
-    rows <- Include.findMany @AuthorTable include_ (applyQueryModifiers where_ orderBy_ (Just 1) offset_)
-    pure $ case rows of
+    roots <- Ops.findMany @AuthorTable @AuthorRow (prepareIncludeRootQuery @AuthorTable (applyQueryModifiers where_ orderBy_ (Just 1) offset_))
+    loaded <- loadAuthor include_ roots
+    pure $ case loaded of
       [] -> Nothing
       (row : _) -> Just row
   findFirstOrFail q = do
     result <- findFirst q
     pure $ requireFound result (RecordNotFound "No record found matching query")
 
-instance ReadAuthor NoInclude OmitSelect where
+instance ReadAuthor () OmitSelect where
   findMany AuthorQuery {where_, orderBy_, limit_, offset_} =
     Ops.findMany @AuthorTable @AuthorRow (applyQueryModifiers where_ orderBy_ limit_ offset_)
   findUnique AuthorQuery {where_} =
@@ -378,16 +356,18 @@ instance ReadAuthor NoInclude OmitSelect where
     result <- findFirst q
     pure $ requireFound result (RecordNotFound "No record found matching query")
 
-instance ReadAuthor AuthorInclude AuthorSelect where
+instance (LoadAuthor posts) => ReadAuthor (AuthorInclude posts) AuthorSelect where
   findMany AuthorQuery {include_, select_, where_, orderBy_, limit_, offset_} = do
-    rows <- Include.findMany @AuthorTable include_ (applyQueryModifiers where_ orderBy_ limit_ offset_)
-    pure $ map (toAuthorWithPostsPicked select_) rows
+    roots <- Ops.findMany @AuthorTable @AuthorRow (prepareIncludeRootQuery @AuthorTable (applyQueryModifiers where_ orderBy_ limit_ offset_))
+    loaded <- loadAuthor include_ roots
+    pure $ map (toAuthorWithPicked select_) loaded
   findUnique AuthorQuery {include_, select_, where_} =
     case Ops.requireUniqueWhere @AuthorTable where_ of
       Left err -> pure (Left err)
       Right w -> do
-        nested <- Include.findMany @AuthorTable include_ (matching w)
-        let rows = map (toAuthorWithPostsPicked select_) nested
+        roots <- Ops.findMany @AuthorTable @AuthorRow (prepareIncludeRootQuery @AuthorTable (matching w))
+        loaded <- loadAuthor include_ roots
+        let rows = map (toAuthorWithPicked select_) loaded
         pure $ case rows of
           [] -> Right Nothing
           [row] -> Right (Just row)
@@ -398,15 +378,16 @@ instance ReadAuthor AuthorInclude AuthorSelect where
       Left err -> pure (Left err)
       Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
   findFirst AuthorQuery {select_, include_, where_, orderBy_, offset_} = do
-    rows <- Include.findMany @AuthorTable include_ (applyQueryModifiers where_ orderBy_ (Just 1) offset_)
-    pure $ case rows of
+    roots <- Ops.findMany @AuthorTable @AuthorRow (prepareIncludeRootQuery @AuthorTable (applyQueryModifiers where_ orderBy_ (Just 1) offset_))
+    loaded <- loadAuthor include_ roots
+    pure $ case loaded of
       [] -> Nothing
-      (row : _) -> Just (toAuthorWithPostsPicked select_ row)
+      (row : _) -> Just (toAuthorWithPicked select_ row)
   findFirstOrFail q = do
     result <- findFirst q
     pure $ requireFound result (RecordNotFound "No record found matching query")
 
-instance ReadAuthor NoInclude AuthorSelect where
+instance ReadAuthor () AuthorSelect where
   findMany AuthorQuery {select_, where_, orderBy_, limit_, offset_} =
     Ops.findManyWith
       (parseAuthorPicked select_)
@@ -439,6 +420,21 @@ instance ReadAuthor NoInclude AuthorSelect where
 count :: AuthorQuery include select -> Db Int
 count AuthorQuery {where_, orderBy_, limit_, offset_} =
   Ops.count @AuthorTable (applyQueryModifiers where_ orderBy_ limit_ offset_)
+
+reload ::
+  (LoadAuthor posts) =>
+  AuthorInclude posts ->
+  UUID ->
+  Db (Either ORMError (AuthorWith posts))
+reload include rootId = do
+  found <- Ops.findUnique @AuthorTable @AuthorRow rootId
+  case found of
+    Nothing -> pure (Left (RecordNotFound "Record not found with primary key"))
+    Just row -> do
+      loaded <- loadAuthor include [row]
+      pure $ case loaded of
+        (one : _) -> Right one
+        [] -> Left (RecordNotFound "Record not found with primary key")
 
 delete :: UUID -> Db (Either ORMError Int)
 delete = Ops.delete @AuthorTable

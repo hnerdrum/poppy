@@ -1,9 +1,10 @@
 module Main (main) where
 
-import Poppy (applyMigrations, closePool, connect, runDb)
+import Poppy (applyMigrations, closePool, connect, load, runDb)
 import Schema.ArticleStatus (ArticleStatus (..))
-import Schema.AuthorInclude (AuthorWithPosts (..))
+import Schema.Author (AuthorRow (..))
 import qualified Schema.Client.Author as Author
+import Schema.Include.Author (AuthorInclude (..), AuthorWith (..))
 import Schema.Post (PostRow)
 import System.Environment (getEnv)
 
@@ -18,7 +19,7 @@ main = do
       created <-
         runDb pool $
           Author.createNested
-            Author.AuthorInclude {posts = True}
+            (AuthorInclude {posts = load})
             Author.AuthorWriteCreate
               { root = Author.AuthorCreate {id = Nothing, name = "Ada"},
                 posts =
@@ -29,13 +30,12 @@ main = do
               }
       case created of
         Left err -> print err
-        Right nested -> do
-          let loaded = nested :: AuthorWithPosts
+        Right loaded -> do
           putStrLn $ "author: " <> show loaded.author.name
           putStrLn $ "posts: " <> show (loaded.posts :: [PostRow])
           listed <-
             runDb
               pool
-              (Author.findMany Author.emptyQuery {Author.include_ = Author.AuthorInclude {posts = True}})
-          putStrLn $ "authors with posts: " <> show (length (listed :: [AuthorWithPosts]))
+              (Author.findMany Author.emptyQuery {Author.include_ = AuthorInclude {posts = load}})
+          putStrLn $ "authors with posts: " <> show (length listed)
   closePool pool

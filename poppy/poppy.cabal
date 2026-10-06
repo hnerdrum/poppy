@@ -28,12 +28,11 @@ extra-source-files:
     test/migrations/005-test-tag.sql
     test/migrations/006-test-author-post.sql
     test/migrations/007-test-packet.sql
-    include-spike-fail/RecordUpdateAmbiguous.hs
-    include-spike-fail/RecordUpdateOther.hs
-    include-spike-fail/RecordUpdateSame.hs
-    include-spike-fail/SkippedPosts.hs
-    include-spike-fail/SkippedPostsNoSelectors.hs
-    include-spike-fail/WrongChild.hs
+    test/migrations/008-test-comment.sql
+    include-fail/RecordUpdateAmbiguous.hs
+    include-fail/SkippedChapters.hs
+    include-fail/SkippedChaptersNoSelectors.hs
+    include-fail/WrongChild.hs
 extra-doc-files:
     README.md
     CHANGELOG.md
@@ -93,20 +92,17 @@ test-suite poppy-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
-      IncludeSpike.Author
-      IncludeSpike.Examples
-      IncludeSpike.Rows
-      IncludeSpike.Runtime
-      IncludeSpike.Shelf
       Poppy.AuthorFixtures
       Poppy.BelongsToSpec
       Poppy.ClientWriteSpec
+      Poppy.CommentSpec
       Poppy.DbSpec
       Poppy.EnumSpec
       Poppy.ErrorsSpec
       Poppy.GroupSpec
+      Poppy.IncludeFailSpec
       Poppy.IncludeSpec
-      Poppy.IncludeSpikeSpec
+      Poppy.IncludeUpdate
       Poppy.MigrateSpec
       Poppy.NestedWriteSpec
       Poppy.OperationsSpec
@@ -119,28 +115,32 @@ test-suite poppy-test
       Schema.Article
       Schema.Author
       Schema.Book
-      Schema.BookInclude
       Schema.Chapter
-      Schema.ChapterInclude
       Schema.Client.Article
       Schema.Client.Author
       Schema.Client.Book
       Schema.Client.Chapter
+      Schema.Client.Comment
       Schema.Client.Editor
       Schema.Client.Post
       Schema.Client.Section
       Schema.Client.Shelf
       Schema.Client.Tag
       Schema.Client.Widget
+      Schema.Comment
       Schema.Editor
-      Schema.EditorInclude
+      Schema.Include.Author
+      Schema.Include.Book
+      Schema.Include.Chapter
+      Schema.Include.Comment
+      Schema.Include.Editor
+      Schema.Include.Post
+      Schema.Include.Shelf
       Schema.Packet
       Schema.Post
-      Schema.PostInclude
       Schema.PostStatus
       Schema.Section
       Schema.Shelf
-      Schema.ShelfInclude
       Schema.Tag
       Schema.Widget
       Support.Assert

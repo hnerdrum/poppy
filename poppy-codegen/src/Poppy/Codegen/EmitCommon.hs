@@ -15,15 +15,12 @@ module Poppy.Codegen.EmitCommon
     selectColumnsFnName,
     parsePickedName,
     toPickedName,
-    resultTypeName,
-    includeRecordValue,
   )
 where
 
 import Data.Text (Text)
 import qualified Data.Text as T
 import Poppy.Codegen.IR
-import Poppy.Codegen.Lookup (lookupModel, lookupRelation)
 import Poppy.Codegen.TextUtil (lowerFirst, upperFirst)
 
 fieldBinder :: Model -> FieldSpec -> Text
@@ -82,66 +79,3 @@ parsePickedName model = "parse" <> modelName model <> "Picked"
 
 toPickedName :: Model -> Text
 toPickedName model = "to" <> modelName model <> "Picked"
-
-resultTypeName :: Schema -> Model -> [IncludeTree] -> Text
-resultTypeName _schema model edges =
-  modelName model
-    <> "With"
-    <> T.concat (map (upperFirst . fieldOf) edges)
-  where
-    fieldOf edge =
-      includeFieldName model (lookupRelation model (includeRelation edge))
-
--- | Include record literal with flags set for @selected@ edges of @parent@.
-includeRecordValue :: Schema -> Model -> [IncludeTree] -> Text
-includeRecordValue schema parent = includeRecordLiteral schema parent (includeTree (fullInclude schema parent))
-
-fullInclude :: Schema -> Model -> ModelInclude
-fullInclude schema model =
-  case [incl | incl <- schemaIncludes schema, includeRootModel incl == modelName model] of
-    (incl : _) -> incl
-    [] ->
-      ModelInclude
-        { includeName = modelName model <> "Include",
-          includeRootModel = modelName model,
-          includeTree = []
-        }
-
-includeRecordLiteral :: Schema -> Model -> [IncludeTree] -> [IncludeTree] -> Text
-includeRecordLiteral schema parent fullEdges selected =
-  includeNameFor parent
-    <> " {"
-    <> T.intercalate ", " (map (fieldAssign schema parent selected) fullEdges)
-    <> "}"
-
-includeNameFor :: Model -> Text
-includeNameFor model = modelName model <> "Include"
-
-fieldAssign :: Schema -> Model -> [IncludeTree] -> IncludeTree -> Text
-fieldAssign schema parent selected fullEdge =
-  fld <> " = " <> value
-  where
-    fld = includeFieldName parent (lookupRelation parent (includeRelation fullEdge))
-    child = lookupModel schema (relToModel (lookupRelation parent (includeRelation fullEdge)))
-    match = findEdge (includeRelation fullEdge) selected
-    value = case match of
-      Nothing
-        | null (includeChildren fullEdge) -> "False"
-        | otherwise -> "Nothing"
-      Just sel
-        | null (includeChildren fullEdge) -> "True"
-        | null (includeChildren sel) ->
-            "Just ("
-              <> includeRecordLiteral schema child (includeChildren fullEdge) []
-              <> ")"
-        | otherwise ->
-            "Just ("
-              <> includeRecordLiteral schema child (includeChildren fullEdge) (includeChildren sel)
-              <> ")"
-
-findEdge :: Text -> [IncludeTree] -> Maybe IncludeTree
-findEdge name = foldr go Nothing
-  where
-    go edge acc
-      | includeRelation edge == name = Just edge
-      | otherwise = acc

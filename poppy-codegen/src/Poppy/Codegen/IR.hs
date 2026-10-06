@@ -10,8 +10,6 @@ module Poppy.Codegen.IR
     RelationSpec (..),
     RelationKind (..),
     JoinKind (..),
-    ModelInclude (..),
-    IncludeTree (..),
     UniqueConstraint (..),
     field,
     uuid,
@@ -39,11 +37,10 @@ where
 
 import Data.Text (Text)
 
--- | Enums, models, generated includes, and uniques.
+-- | Enums, models, and uniques.
 data Schema = Schema
   { schemaEnums :: [EnumSpec],
     schemaModels :: [Model],
-    schemaIncludes :: [ModelInclude],
     schemaUniques :: [UniqueConstraint]
   }
   deriving (Show, Eq)
@@ -126,21 +123,6 @@ data RelationSpec = RelationSpec
     relLocalField :: Text,
     relForeignField :: Text,
     relJoin :: JoinKind
-  }
-  deriving (Show, Eq)
-
--- | Named include tree rooted at a model (full-graph includes are generated).
-data ModelInclude = ModelInclude
-  { includeName :: Text,
-    includeRootModel :: Text,
-    includeTree :: [IncludeTree]
-  }
-  deriving (Show, Eq)
-
--- | One edge in an include tree, with optional nested children.
-data IncludeTree = IncludeTree
-  { includeRelation :: Text,
-    includeChildren :: [IncludeTree]
   }
   deriving (Show, Eq)
 

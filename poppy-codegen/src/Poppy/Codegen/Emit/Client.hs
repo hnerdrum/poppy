@@ -14,34 +14,25 @@ import Poppy.Codegen.EmitCommon
     fieldBinder,
     hsType,
     includeFieldName,
-    includeRecordValue,
     parsePickedName,
     pickedTypeName,
     primaryKeyField,
-    resultTypeName,
     rowTypeName,
     selectColumnsFnName,
     selectDefaultName,
     selectTypeName,
     tableTypeName,
-    toPickedName,
     updateTypeName,
   )
 import Poppy.Codegen.IR
-import Poppy.Codegen.Lookup (lookupField, lookupModel, lookupRelation, lookupUniques)
-import Poppy.Codegen.TextUtil (lowerFirst, upperFirst)
+import Poppy.Codegen.Lookup (lookupField, lookupModel, lookupUniques)
+import Poppy.Codegen.TextUtil (upperFirst)
 
 emitClientModule :: Text -> Schema -> Model -> Text
 emitClientModule moduleName schema model =
-  case lookupModelInclude schema model of
-    Just incl -> emitIncludeClientModule moduleName schema incl
-    Nothing -> emitSimpleClientModule moduleName schema model
-
-lookupModelInclude :: Schema -> Model -> Maybe ModelInclude
-lookupModelInclude schema model =
-  case [incl | incl <- schemaIncludes schema, includeRootModel incl == modelName model] of
-    (incl : _) -> Just incl
-    [] -> Nothing
+  if null (modelRelations model)
+    then emitSimpleClientModule moduleName schema model
+    else emitIncludeClientModule moduleName schema model
 
 emitSimpleClientModule :: Text -> Schema -> Model -> Text
 emitSimpleClientModule moduleName schema model =
@@ -115,8 +106,8 @@ emitSimpleClientModule moduleName schema model =
       emitDeleteManyFn model
     ]
 
-emitIncludeClientModule :: Text -> Schema -> ModelInclude -> Text
-emitIncludeClientModule moduleName schema incl =
+emitIncludeClientModule :: Text -> Schema -> Model -> Text
+emitIncludeClientModule moduleName schema root =
   T.unlines
     ( [ "{-# LANGUAGE AllowAmbiguousTypes #-}",
         "{-# LANGUAGE DuplicateRecordFields #-}",
@@ -129,13 +120,14 @@ emitIncludeClientModule moduleName schema incl =
         "{-# LANGUAGE RecordWildCards #-}",
         "{-# LANGUAGE TypeApplications #-}",
         "{-# LANGUAGE TypeFamilies #-}",
+        "{-# LANGUAGE UndecidableInstances #-}",
         "",
-        emitIncludeClientHeader schema root incl,
+        emitIncludeClientHeader schema root,
         "module " <> moduleName
       ]
-        ++ exportLinesFromItems (includeClientExportItems schema incl)
+        ++ exportLinesFromItems (includeClientExportItems schema root)
         ++ ["where", ""]
-        ++ includeClientImportLines moduleName schema incl
+        ++ includeClientImportLines moduleName schema root
     )
     <> "\n"
     <> intercalateSections
@@ -146,15 +138,14 @@ emitIncludeClientModule moduleName schema incl =
           emitClientUpsertFn schema root
         ]
           ++ nestedWriteSections
-          ++ emitIncludeReadDefinitions schema incl False
+          ++ emitIncludeReadDefinitions schema root
           ++ [ emitDeleteFn root,
                emitDeleteManyFn root
              ]
       )
   where
-    root = lookupModel schema (includeRootModel incl)
     nestedWriteSections =
-      case nestedWriteRelation schema root incl of
+      case nestedWriteRelation schema root of
         Nothing -> []
         Just (rel, child) ->
           [ emitWriteCreateType root child rel,
@@ -162,19 +153,19 @@ emitIncludeClientModule moduleName schema incl =
             emitNestedToChildCreate child rel,
             emitNestedToChildUpdate child rel,
             emitNestedWriteHelpers schema root child rel,
-            emitWriteCreate schema root incl rel,
-            emitWriteUpdate schema root incl rel
+            emitWriteCreate schema root rel,
+            emitWriteUpdate schema root rel
           ]
 
-emitIncludeClientHeader :: Schema -> Model -> ModelInclude -> Text
-emitIncludeClientHeader schema root incl =
+emitIncludeClientHeader :: Schema -> Model -> Text
+emitIncludeClientHeader schema root =
   T.intercalate "\n" $
     ["{- | Generated Client. Do not edit."]
       ++ nestedDocs
       ++ ["-}"]
   where
     nestedDocs =
-      case nestedWriteRelation schema root incl of
+      case nestedWriteRelation schema root of
         Nothing -> []
         Just _ ->
           [ "",
@@ -269,9 +260,13 @@ emitNestedToChildCreate child rel =
              not (fieldIsPrimaryKey f),
              fieldName f /= relForeignField rel
          ]
-      ++ ["      " <> relForeignField rel <> " = parentId", "    }"]
+      ++ ["      " <> relForeignField rel <> " = " <> fkAssign, "    }"]
   where
     pkField = primaryKeyField child
+    fkAssign =
+      if fieldNullable (lookupField child (relForeignField rel))
+        then "Value parentId"
+        else "parentId"
 
 emitNestedToChildUpdate :: Model -> RelationSpec -> Text
 emitNestedToChildUpdate child rel =
@@ -285,11 +280,17 @@ emitNestedToChildUpdate child rel =
   where
     updateFields =
       [ if fieldName f == relForeignField rel
-          then fieldName f <> " = Nothing"
-          else fieldName f <> " = Just nested." <> fieldName f
+          then fieldName f <> " = " <> leaveUnchanged f
+          else fieldName f <> " = " <> assignUpdate f
         | f <- modelFields child,
           not (fieldIsPrimaryKey f)
       ]
+    leaveUnchanged f =
+      if fieldNullable f then "Omit" else "Nothing"
+    assignUpdate f =
+      if fieldNullable f
+        then "Value nested." <> fieldName f
+        else "Just nested." <> fieldName f
 
 emitNestedWriteHelpers :: Schema -> Model -> Model -> RelationSpec -> Text
 emitNestedWriteHelpers schema root child rel =
@@ -453,43 +454,45 @@ listLit :: [Text] -> Text
 listLit cols =
   "[" <> T.intercalate ", " ["\"" <> col <> "\"" | col <- cols] <> "]"
 
-emitWriteCreate :: Schema -> Model -> ModelInclude -> RelationSpec -> Text
-emitWriteCreate _schema root _incl rel =
+emitWriteCreate :: Schema -> Model -> RelationSpec -> Text
+emitWriteCreate _schema root rel =
   let childrenField = childrenFieldName root rel
       applyWrite = applyWriteFnName root rel
       table = tableTypeName root
+      row = rowTypeName root
       createBody =
         [ "  rootId <- liftIO $ maybe V4.nextRandom pure input.root.id",
           "  let rootInput =",
           "        " <> createRootInputExpr root,
           "  rootResult <-",
-          "    Insert.insert @" <> table <> " @" <> rowTypeName root <> " rootInput",
+          "    Insert.insert @" <> table <> " @" <> row <> " rootInput",
           "  case rootResult of",
           "    Left err -> pure (Left err)",
           "    Right _ -> do",
           "      nestedResult <- " <> applyWrite <> " rootId input." <> childrenField,
           "      case nestedResult of",
           "        Left err -> pure (Left err)",
-          "        Right () -> Include.findUniqueOrFail @" <> table <> " include rootId"
+          "        Right () -> reload include rootId"
         ]
    in T.unlines $
         [ "createNested ::",
-          "  (Include.ExecuteInclude " <> table <> " include result) =>",
-          "  include ->",
+          "  (" <> loadClass root <> ") =>",
+          "  " <> includeApplied root <> " ->",
           "  " <> writeCreateTypeName root <> " ->",
-          "  Db (Either ORMError result)",
+          "  Db (Either ORMError (" <> withApplied root <> "))",
           "createNested include input = transactionEither $ do"
         ]
           ++ createBody
 
-emitWriteUpdate :: Schema -> Model -> ModelInclude -> RelationSpec -> Text
-emitWriteUpdate _schema root _incl rel =
+emitWriteUpdate :: Schema -> Model -> RelationSpec -> Text
+emitWriteUpdate _schema root rel =
   let childrenField = childrenFieldName root rel
       applyWrite = applyWriteFnName root rel
       table = tableTypeName root
+      row = rowTypeName root
       updateBody =
         [ "  updateResult <-",
-          "    Update.update @" <> table <> " @" <> rowTypeName root <> " rootId input.root",
+          "    Update.update @" <> table <> " @" <> row <> " rootId input.root",
           "  case updateResult of",
           "    Left err -> pure (Left err)",
           "    Right _ -> do",
@@ -498,18 +501,37 @@ emitWriteUpdate _schema root _incl rel =
           "        Just write -> " <> applyWrite <> " rootId write",
           "      case nestedResult of",
           "        Left err -> pure (Left err)",
-          "        Right () -> Include.findUniqueOrFail @" <> table <> " include rootId"
+          "        Right () -> reload include rootId"
         ]
    in T.unlines $
         [ "updateNested ::",
-          "  (Include.ExecuteInclude " <> table <> " include result) =>",
-          "  include ->",
+          "  (" <> loadClass root <> ") =>",
+          "  " <> includeApplied root <> " ->",
           "  UUID ->",
           "  " <> writeUpdateTypeName root <> " ->",
-          "  Db (Either ORMError result)",
+          "  Db (Either ORMError (" <> withApplied root <> "))",
           "updateNested include rootId input = transactionEither $ do"
         ]
           ++ updateBody
+
+emitReload :: Model -> Text
+emitReload root =
+  T.unlines
+    [ "reload ::",
+      "  (" <> loadClass root <> ") =>",
+      "  " <> includeApplied root <> " ->",
+      "  UUID ->",
+      "  Db (Either ORMError (" <> withApplied root <> "))",
+      "reload include rootId = do",
+      "  found <- Ops.findUnique @" <> tableTypeName root <> " @" <> rowTypeName root <> " rootId",
+      "  case found of",
+      "    Nothing -> pure (Left (RecordNotFound \"Record not found with primary key\"))",
+      "    Just row -> do",
+      "      loaded <- " <> loadMethod root <> " include [row]",
+      "      pure $ case loaded of",
+      "        (one : _) -> Right one",
+      "        [] -> Left (RecordNotFound \"Record not found with primary key\")"
+    ]
 
 writeCreateTypeName :: Model -> Text
 writeCreateTypeName model = modelName model <> "WriteCreate"
@@ -541,11 +563,10 @@ childrenFieldName = includeFieldName
 -- Nested writes are inferred from hasMany + child FK (the field named on
 -- the relation). `replaceChildren` was dropped; there is no opt-in for
 -- non-FK patterns.
-nestedWriteRelation :: Schema -> Model -> ModelInclude -> Maybe (RelationSpec, Model)
-nestedWriteRelation schema root incl =
+nestedWriteRelation :: Schema -> Model -> Maybe (RelationSpec, Model)
+nestedWriteRelation schema root =
   case [ (rel, lookupModel schema (relToModel rel))
-         | edge <- includeTree incl,
-           let rel = lookupRelation root (includeRelation edge),
+         | rel <- modelRelations root,
            relKind rel == RelHasMany,
            childHasForeignKey schema rel
        ] of
@@ -628,41 +649,35 @@ exportLinesFromItems items =
     (first : rest) ->
       ("  ( " <> first) : map ("    " <>) rest ++ ["  )"]
 
-includeClientExportItems :: Schema -> ModelInclude -> [Text]
-includeClientExportItems schema incl =
-  let root = lookupModel schema (includeRootModel incl)
-   in includeReadFunctionExportItems
-        ++ [ "create,",
-             "createMany,",
-             "update,",
-             "updateMany,",
-             "upsert,",
-             "delete,",
-             "deleteMany,"
-           ]
-        ++ nestedWriteExportItems schema root incl
-        ++ includeReadPresetExportItems
-        ++ includeRecordExportItems schema incl
-        ++ [ "NoInclude (..),",
-             "ResolveInclude,",
-             queryTypeName root <> " (..),",
-             "emptyQuery,",
-             "OmitSelect (..),",
-             "Picked (..),",
-             createTypeName root <> " (..),",
-             rowTypeName root <> " (..),",
-             selectTypeName root <> " (..),",
-             pickedTypeName root <> " (..),",
-             selectDefaultName root <> ",",
-             updateTypeName root <> " (..),",
-             tableTypeName root <> ",",
-             fieldBinder root (primaryKeyField root) <> ",",
-             pickedIncludeTypeName root incl <> " (..)"
-           ]
+includeClientExportItems :: Schema -> Model -> [Text]
+includeClientExportItems schema root =
+  includeReadFunctionExportItems
+    ++ [ "create,",
+         "createMany,",
+         "update,",
+         "updateMany,",
+         "upsert,",
+         "delete,",
+         "deleteMany,"
+       ]
+    ++ nestedWriteExportItems schema root
+    ++ [ queryTypeName root <> " (..),",
+         "emptyQuery,",
+         "OmitSelect (..),",
+         "Picked (..),",
+         createTypeName root <> " (..),",
+         rowTypeName root <> " (..),",
+         selectTypeName root <> " (..),",
+         pickedTypeName root <> " (..),",
+         selectDefaultName root <> ",",
+         updateTypeName root <> " (..),",
+         tableTypeName root <> ",",
+         fieldBinder root (primaryKeyField root)
+       ]
 
-nestedWriteExportItems :: Schema -> Model -> ModelInclude -> [Text]
-nestedWriteExportItems schema root incl =
-  case nestedWriteRelation schema root incl of
+nestedWriteExportItems :: Schema -> Model -> [Text]
+nestedWriteExportItems schema root =
+  case nestedWriteRelation schema root of
     Nothing -> []
     Just (rel, child) ->
       [ "createNested,",
@@ -685,25 +700,17 @@ includeReadFunctionExportItems =
     "count,"
   ]
 
-includeReadPresetExportItems :: [Text]
-includeReadPresetExportItems =
-  ["noInclude,"]
-
-includeRecordExportItems :: Schema -> ModelInclude -> [Text]
-includeRecordExportItems schema incl =
-  (includeName incl <> " (..),") : [name <> " (..)," | name <- nestedIncludeTypeNames schema incl]
-
-includeClientImportLines :: Text -> Schema -> ModelInclude -> [Text]
-includeClientImportLines moduleName schema incl =
+includeClientImportLines :: Text -> Schema -> Model -> [Text]
+includeClientImportLines moduleName schema root =
   nestedPreludeImports nested
     ++ [ dbImport nested,
          "import qualified Poppy.Delete as Delete",
          "import Poppy.Errors (ORMError (..), requireFound)",
-         "import qualified Poppy.Include as Include",
          "import qualified Poppy.Insert as Insert",
          "import qualified Poppy.Operations as Ops",
          "import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)",
          "import Poppy.Select (OmitSelect (..), Picked (..))",
+         "import Poppy.SelectIn (prepareIncludeRootQuery)",
          "import qualified Poppy.Update as Update",
          whereImport nested,
          "import "
@@ -723,34 +730,51 @@ includeClientImportLines moduleName schema incl =
            <> ", "
            <> parsePickedName root
            <> ", "
-           <> toPickedName root
-           <> ", "
            <> tableTypeName root
            <> ", "
            <> updateTypeName root
            <> " (..), "
            <> fieldBinder root (primaryKeyField root)
            <> ")",
-         includeModuleImportLine moduleName schema incl
+         includeModuleImportLine moduleName root
        ]
     ++ nestedChildImport moduleName nested
-    ++ includeLeafRowImportLines moduleName schema root incl excludeNames
     ++ nestedChildEnumImports moduleName schema nested
   where
-    root = lookupModel schema (includeRootModel incl)
-    nested = nestedWriteRelation schema root incl
-    excludeNames = maybe [] (\(_, child) -> [modelName child]) nested
+    nested = nestedWriteRelation schema root
+
+includeModuleImportLine :: Text -> Model -> Text
+includeModuleImportLine moduleName model =
+  "import "
+    <> includeModule moduleName model
+    <> " ("
+    <> T.intercalate ", " names
+    <> ")"
+  where
+    names =
+      [ "Load" <> modelName model <> " (..)",
+        includeType model <> " (..)",
+        readType model,
+        withType model <> " (..)",
+        toWithPickedName model
+      ]
 
 nestedPreludeImports :: Maybe (RelationSpec, Model) -> [Text]
 nestedPreludeImports Nothing =
   ["import Data.UUID (UUID)"]
-nestedPreludeImports (Just _) =
+nestedPreludeImports (Just (rel, child)) =
   [ "import Data.Text (Text)",
     "import Data.UUID (UUID)",
     "import qualified Data.UUID.V4 as V4",
-    "import Poppy.Core (fieldColumn)",
+    "import Poppy.Core (" <> T.intercalate ", " coreNames <> ")",
     "import Poppy.PG (toField)"
   ]
+  where
+    coreNames =
+      "fieldColumn"
+        : [ "NullableValue (Omit, Value)"
+            | fieldNullable (lookupField child (relForeignField rel))
+          ]
 
 dbImport :: Maybe (RelationSpec, Model) -> Text
 dbImport Nothing = "import Poppy.Db (Db)"
@@ -784,153 +808,6 @@ nestedChildEnumImports :: Text -> Schema -> Maybe (RelationSpec, Model) -> [Text
 nestedChildEnumImports _ _ Nothing = []
 nestedChildEnumImports moduleName schema (Just (_, child)) =
   nestedEnumImports moduleName schema child
-
-includeLeafRowImportLines :: Text -> Schema -> Model -> ModelInclude -> [Text] -> [Text]
-includeLeafRowImportLines moduleName schema root incl excludeNames =
-  [ "import "
-      <> schemaModule moduleName model
-      <> " ("
-      <> rowTypeName model
-      <> " (..))"
-    | model <- leafRowModels schema root (includeTree incl),
-      modelName model `notElem` excludeNames
-  ]
-
-leafRowModels :: Schema -> Model -> [IncludeTree] -> [Model]
-leafRowModels schema parent edges =
-  [ lookupModel schema (relToModel (lookupRelation parent (includeRelation edge)))
-    | edge <- edges,
-      null (includeChildren edge)
-  ]
-
-includeModuleImportLine :: Text -> Schema -> ModelInclude -> Text
-includeModuleImportLine moduleName schema incl =
-  let root = lookupModel schema (includeRootModel incl)
-      includeTypes =
-        [includeName incl <> " (..)"]
-          ++ [name <> " (..)" | name <- nestedIncludeTypeNames schema incl]
-          ++ [resultTypeName schema root (includeTree incl) <> " (..)"]
-          ++ nestedWithTypeImportNames schema root (includeTree incl)
-          ++ ["NoInclude (..)", "ResolveInclude"]
-   in "import "
-        <> includeModule moduleName incl
-        <> " ( "
-        <> T.intercalate ", " includeTypes
-        <> ")"
-
-nestedWithTypeImportNames :: Schema -> Model -> [IncludeTree] -> [Text]
-nestedWithTypeImportNames schema parent edges =
-  [ resultTypeName schema child kids <> " (..)"
-    | edge <- edges,
-      let rel = lookupRelation parent (includeRelation edge),
-      let child = lookupModel schema (relToModel rel),
-      let kids = includeChildren edge,
-      not (null kids)
-  ]
-
-nestedIncludeTypeNames :: Schema -> ModelInclude -> [Text]
-nestedIncludeTypeNames schema incl =
-  let root = lookupModel schema (includeRootModel incl)
-   in collectNestedIncludeNames schema root (includeTree incl)
-
-collectNestedIncludeNames :: Schema -> Model -> [IncludeTree] -> [Text]
-collectNestedIncludeNames schema current =
-  concatMap go
-  where
-    go edge =
-      let rel = lookupRelation current (includeRelation edge)
-          child = lookupModel schema (relToModel rel)
-          kids = includeChildren edge
-       in [modelName child <> "Include" | not (null kids)]
-            ++ collectNestedIncludeNames schema child kids
-
-emitIncludeReadDefinitions :: Schema -> ModelInclude -> Bool -> [Text]
-emitIncludeReadDefinitions schema incl useRecordDot =
-  let root = lookupModel schema (includeRootModel incl)
-   in [ emitNoIncludePreset schema incl,
-        emitPickedIncludeType schema root incl useRecordDot,
-        emitIncludeQueryType root incl,
-        emitIncludeEmptyQueryFn root,
-        emitIncludeQueryResolveInstances schema root incl,
-        emitIncludeFindManyClass root incl,
-        emitIncludeFindManyInstances schema root incl,
-        emitIncludeCountFn root
-      ]
-
-emitPickedIncludeType :: Schema -> Model -> ModelInclude -> Bool -> Text
-emitPickedIncludeType schema model incl useRecordDot =
-  let pickedName = pickedIncludeTypeName model incl
-      nested = includeResultName model incl
-      rootVar = lowerFirst (modelName model)
-      relFields = map (pickedIncludeRelField schema model) (includeTree incl)
-      copyFields = map (includeRelName schema model) (includeTree incl)
-      pickedBody
-        | useRecordDot =
-            [ toPickedIncludeFnName model incl <> " select_ nested =",
-              "  " <> pickedName,
-              "    { " <> rootVar <> " = " <> toPickedName model <> " select_ nested." <> rootVar,
-              if null copyFields
-                then "    }"
-                else "    , " <> T.intercalate "\n    , " (map (\f -> f <> " = nested." <> f) copyFields) <> "\n    }"
-            ]
-        | otherwise =
-            [ toPickedIncludeFnName model incl <> " select_ " <> nested <> " {" <> T.intercalate ", " (rootVar : copyFields) <> "} =",
-              "  " <> pickedName,
-              "    { " <> rootVar <> " = " <> toPickedName model <> " select_ " <> rootVar,
-              if null copyFields
-                then "    }"
-                else "    , " <> T.intercalate "\n    , " (map (\f -> f <> " = " <> f) copyFields) <> "\n    }"
-            ]
-   in T.unlines $
-        [ "data " <> pickedName <> " = " <> pickedName,
-          "  { " <> T.intercalate ",\n    " ((rootVar <> " :: " <> pickedTypeName model) : relFields),
-          "  }",
-          "  deriving (Show, Eq)",
-          "",
-          toPickedIncludeFnName model incl <> " :: " <> selectTypeName model <> " -> " <> nested <> " -> " <> pickedName
-        ]
-          ++ pickedBody
-
-includeRelName :: Schema -> Model -> IncludeTree -> Text
-includeRelName _schema parent edge =
-  includeFieldName parent (lookupRelation parent (includeRelation edge))
-
-pickedIncludeRelField :: Schema -> Model -> IncludeTree -> Text
-pickedIncludeRelField schema parent edge =
-  name <> " :: " <> ty
-  where
-    rel = lookupRelation parent (includeRelation edge)
-    child = lookupModel schema (relToModel rel)
-    name = includeFieldName parent rel
-    kids = includeChildren edge
-    ty
-      | not (null kids) =
-          "[" <> resultTypeName schema child kids <> "]"
-      | RelHasMany <- relKind rel =
-          "[" <> modelName child <> "Row]"
-      | otherwise =
-          "Maybe " <> modelName child <> "Row"
-
-pickedIncludeTypeName :: Model -> ModelInclude -> Text
-pickedIncludeTypeName model incl = includeResultName model incl <> "Picked"
-
-toPickedIncludeFnName :: Model -> ModelInclude -> Text
-toPickedIncludeFnName model incl = "to" <> includeResultName model incl <> "Picked"
-
-emitIncludeQueryResolveInstances :: Schema -> Model -> ModelInclude -> Text
-emitIncludeQueryResolveInstances _schema model incl =
-  let includeTy = includeName incl
-      nested = includeResultName model incl
-      nestedPicked = pickedIncludeTypeName model incl
-      row = rowTypeName model
-      picked = pickedTypeName model
-      query = queryTypeName model
-   in T.unlines
-        [ "type instance ResolveInclude (" <> query <> " " <> includeTy <> " OmitSelect) = " <> nested,
-          "type instance ResolveInclude (" <> query <> " NoInclude OmitSelect) = " <> row,
-          "type instance ResolveInclude (" <> query <> " " <> includeTy <> " " <> selectTypeName model <> ") = " <> nestedPicked,
-          "type instance ResolveInclude (" <> query <> " NoInclude " <> selectTypeName model <> ") = " <> picked
-        ]
 
 intercalateSections :: [Text] -> Text
 intercalateSections sections =
@@ -1042,17 +919,6 @@ emitFindFirstOrFailLines =
     "    pure $ requireFound result (RecordNotFound \"No record found matching query\")"
   ]
 
-emitFindFirstFromIncludeLines :: Text -> Text -> Text -> Text -> [Text] -> [Text]
-emitFindFirstFromIncludeLines table query includeExpr toRow extraFields =
-  [ "  findFirst " <> query <> " {" <> T.intercalate ", " fields <> "} = do",
-    "    rows <- Include.findMany @" <> table <> " " <> includeExpr <> " (applyQueryModifiers where_ orderBy_ (Just 1) offset_)",
-    "    pure $ case rows of",
-    "      [] -> Nothing",
-    "      (row : _) -> Just " <> toRow
-  ]
-  where
-    fields = extraFields ++ ["include_", "where_", "orderBy_", "offset_"]
-
 emitCountFn :: Model -> Text
 emitCountFn model =
   T.unlines
@@ -1124,15 +990,20 @@ emitDeleteManyFn model =
       "deleteMany = Delete.deleteMany @" <> tableTypeName model
     ]
 
-emitNoIncludePreset :: Schema -> ModelInclude -> Text
-emitNoIncludePreset schema incl =
-  T.unlines
-    [ "noInclude :: NoInclude",
-      "noInclude = NoInclude " <> noIncludeValue schema incl
-    ]
+emitIncludeReadDefinitions :: Schema -> Model -> [Text]
+emitIncludeReadDefinitions schema model =
+  [ emitIncludeQueryType model,
+    emitIncludeEmptyQueryFn model,
+    emitIncludeFindManyClass model,
+    emitIncludeFindManyInstances model,
+    emitIncludeCountFn model
+  ]
+    ++ case nestedWriteRelation schema model of
+      Nothing -> []
+      Just _ -> [emitReload model]
 
-emitIncludeQueryType :: Model -> ModelInclude -> Text
-emitIncludeQueryType model _incl =
+emitIncludeQueryType :: Model -> Text
+emitIncludeQueryType model =
   T.unlines
     [ "data " <> queryTypeName model <> " include select = " <> queryTypeName model,
       "  { include_ :: include",
@@ -1147,42 +1018,47 @@ emitIncludeQueryType model _incl =
 emitIncludeEmptyQueryFn :: Model -> Text
 emitIncludeEmptyQueryFn model =
   T.unlines
-    [ "emptyQuery :: " <> queryTypeName model <> " NoInclude OmitSelect",
+    [ "emptyQuery :: " <> queryTypeName model <> " () OmitSelect",
       "emptyQuery =",
-      "  " <> queryTypeName model <> " {include_ = noInclude, select_ = OmitSelect, where_ = Nothing, orderBy_ = [], limit_ = Nothing, offset_ = Nothing}"
+      "  " <> queryTypeName model <> " {include_ = (), select_ = OmitSelect, where_ = Nothing, orderBy_ = [], limit_ = Nothing, offset_ = Nothing}"
     ]
 
-emitIncludeFindManyClass :: Model -> ModelInclude -> Text
-emitIncludeFindManyClass model _incl =
+emitIncludeFindManyClass :: Model -> Text
+emitIncludeFindManyClass model =
   let query = queryTypeName model
+      result = readType model <> " include select"
    in T.unlines
         [ "class Read" <> modelName model <> " include select where",
-          "  findMany :: " <> query <> " include select -> Db [ResolveInclude (" <> query <> " include select)]",
-          "  findUnique :: " <> query <> " include select -> Db (Either ORMError (Maybe (ResolveInclude (" <> query <> " include select))))",
-          "  findUniqueOrFail :: " <> query <> " include select -> Db (Either ORMError (ResolveInclude (" <> query <> " include select)))",
-          "  findFirst :: " <> query <> " include select -> Db (Maybe (ResolveInclude (" <> query <> " include select)))",
-          "  findFirstOrFail :: " <> query <> " include select -> Db (Either ORMError (ResolveInclude (" <> query <> " include select)))"
+          "  findMany :: " <> query <> " include select -> Db [" <> result <> "]",
+          "  findUnique :: " <> query <> " include select -> Db (Either ORMError (Maybe (" <> result <> ")))",
+          "  findUniqueOrFail :: " <> query <> " include select -> Db (Either ORMError (" <> result <> "))",
+          "  findFirst :: " <> query <> " include select -> Db (Maybe (" <> result <> "))",
+          "  findFirstOrFail :: " <> query <> " include select -> Db (Either ORMError (" <> result <> "))"
         ]
 
-emitIncludeFindManyInstances :: Schema -> Model -> ModelInclude -> Text
-emitIncludeFindManyInstances _schema model incl =
+emitIncludeFindManyInstances :: Model -> Text
+emitIncludeFindManyInstances model =
   let table = tableTypeName model
       row = rowTypeName model
-      includeTy = includeName incl
       query = queryTypeName model
       selectTy = selectTypeName model
       parseFn = parsePickedName model
       colsFn = selectColumnsFnName model
-      toPickedIncl = toPickedIncludeFnName model incl
+      toPicked = toWithPickedName model
       modelNm = modelName model
+      includeTy = includeApplied model
+      load = loadMethod model
+      rootFetch modifier =
+        "Ops.findMany @" <> table <> " @" <> row <> " (prepareIncludeRootQuery @" <> table <> " (" <> modifier <> "))"
       uniqueFromInclude =
         emitFindUniqueByRowsLines
           table
           (query <> " {include_, where_}")
-          [ "rows <- Include.findMany @" <> table <> " include_ (matching w)"
+          [ "roots <- " <> rootFetch "matching w",
+            "rows <- " <> load <> " include_ roots"
           ]
           ++ emitFindUniqueOrFailLines
-          ++ emitFindFirstFromIncludeLines table query "include_" "row" []
+          ++ emitLoadedFindFirstFor model load False
           ++ emitFindFirstOrFailLines
       uniqueFromWhere =
         [ "  findUnique " <> query <> " {where_} =",
@@ -1213,33 +1089,36 @@ emitIncludeFindManyInstances _schema model incl =
         emitFindUniqueByRowsLines
           table
           (query <> " {include_, select_, where_}")
-          [ "nested <- Include.findMany @" <> table <> " include_ (matching w)",
-            "let rows = map (" <> toPickedIncl <> " select_) nested"
+          [ "roots <- " <> rootFetch "matching w",
+            "loaded <- " <> load <> " include_ roots",
+            "let rows = map (" <> toPicked <> " select_) loaded"
           ]
           ++ emitFindUniqueOrFailLines
-          ++ emitFindFirstFromIncludeLines table query "include_" ("(" <> toPickedIncl <> " select_ row)") ["select_"]
+          ++ emitLoadedFindFirstFor model load True
           ++ emitFindFirstOrFailLines
    in T.unlines $
-        [ "instance Read" <> modelNm <> " " <> includeTy <> " OmitSelect where",
-          "  findMany " <> query <> " {include_, where_, orderBy_, limit_, offset_} =",
-          "    Include.findMany @" <> table <> " include_ (applyQueryModifiers where_ orderBy_ limit_ offset_)"
+        [ "instance (" <> loadClass model <> ") => Read" <> modelNm <> " (" <> includeTy <> ") OmitSelect where",
+          "  findMany " <> query <> " {include_, where_, orderBy_, limit_, offset_} = do",
+          "    roots <- " <> rootFetch "applyQueryModifiers where_ orderBy_ limit_ offset_",
+          "    " <> load <> " include_ roots"
         ]
           ++ uniqueFromInclude
           ++ [ "",
-               "instance Read" <> modelNm <> " NoInclude OmitSelect where",
+               "instance Read" <> modelNm <> " () OmitSelect where",
                "  findMany " <> query <> " {where_, orderBy_, limit_, offset_} =",
                "    Ops.findMany @" <> table <> " @" <> row <> " (applyQueryModifiers where_ orderBy_ limit_ offset_)"
              ]
           ++ uniqueFromWhere
           ++ [ "",
-               "instance Read" <> modelNm <> " " <> includeTy <> " " <> selectTy <> " where",
+               "instance (" <> loadClass model <> ") => Read" <> modelNm <> " (" <> includeTy <> ") " <> selectTy <> " where",
                "  findMany " <> query <> " {include_, select_, where_, orderBy_, limit_, offset_} = do",
-               "    rows <- Include.findMany @" <> table <> " include_ (applyQueryModifiers where_ orderBy_ limit_ offset_)",
-               "    pure $ map (" <> toPickedIncl <> " select_) rows"
+               "    roots <- " <> rootFetch "applyQueryModifiers where_ orderBy_ limit_ offset_",
+               "    loaded <- " <> load <> " include_ roots",
+               "    pure $ map (" <> toPicked <> " select_) loaded"
              ]
           ++ uniqueFromIncludeSelect
           ++ [ "",
-               "instance Read" <> modelNm <> " NoInclude " <> selectTy <> " where",
+               "instance Read" <> modelNm <> " () " <> selectTy <> " where",
                "  findMany " <> query <> " {select_, where_, orderBy_, limit_, offset_} =",
                "    Ops.findManyWith",
                "      (" <> parseFn <> " select_)",
@@ -1247,28 +1126,65 @@ emitIncludeFindManyInstances _schema model incl =
              ]
           ++ uniqueFromSelect
 
+emitLoadedFindFirstFor :: Model -> Text -> Bool -> [Text]
+emitLoadedFindFirstFor model load picked =
+  [ "  findFirst " <> query <> " {" <> T.intercalate ", " fields <> "} = do",
+    "    roots <- Ops.findMany @" <> table <> " @" <> row <> " (prepareIncludeRootQuery @" <> table <> " (applyQueryModifiers where_ orderBy_ (Just 1) offset_))",
+    "    loaded <- " <> load <> " include_ roots",
+    "    pure $ case loaded of",
+    "      [] -> Nothing",
+    "      (row : _) -> Just " <> value
+  ]
+  where
+    query = queryTypeName model
+    table = tableTypeName model
+    row = rowTypeName model
+    fields = (["select_" | picked]) ++ ["include_", "where_", "orderBy_", "offset_"]
+    value =
+      if picked
+        then "(" <> toWithPickedName model <> " select_ row)"
+        else "row"
+
 queryTypeName :: Model -> Text
 queryTypeName model = modelName model <> "Query"
-
-includeResultName :: Model -> ModelInclude -> Text
-includeResultName model incl =
-  resultTypeName stubSchema model (includeTree incl)
-  where
-    stubSchema = Schema {schemaEnums = [], schemaModels = [model], schemaIncludes = [incl], schemaUniques = []}
-
-noIncludeValue :: Schema -> ModelInclude -> Text
-noIncludeValue schema incl =
-  includeRecordValue schema root []
-  where
-    root = lookupModel schema (includeRootModel incl)
 
 schemaModule :: Text -> Model -> Text
 schemaModule clientModule model =
   clientSchemaPrefix clientModule <> modelName model
 
-includeModule :: Text -> ModelInclude -> Text
-includeModule clientModule incl =
-  clientSchemaPrefix clientModule <> includeName incl
+includeModule :: Text -> Model -> Text
+includeModule clientModule model =
+  clientSchemaPrefix clientModule <> "Include." <> modelName model
+
+paramsOf :: Model -> Text
+paramsOf model = T.unwords (map relName (modelRelations model))
+
+includeType :: Model -> Text
+includeType model = modelName model <> "Include"
+
+includeApplied :: Model -> Text
+includeApplied model = includeType model <> " " <> paramsOf model
+
+withType :: Model -> Text
+withType model = modelName model <> "With"
+
+withApplied :: Model -> Text
+withApplied model = withType model <> " " <> paramsOf model
+
+withPickedType :: Model -> Text
+withPickedType model = modelName model <> "WithPicked"
+
+readType :: Model -> Text
+readType model = modelName model <> "Read"
+
+loadClass :: Model -> Text
+loadClass model = "Load" <> modelName model <> " " <> paramsOf model
+
+loadMethod :: Model -> Text
+loadMethod model = "load" <> modelName model
+
+toWithPickedName :: Model -> Text
+toWithPickedName model = "to" <> withPickedType model
 
 -- | Schema types live next to the Client unless the Client is nested under Schema.
 --

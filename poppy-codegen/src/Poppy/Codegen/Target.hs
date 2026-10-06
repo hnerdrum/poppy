@@ -21,15 +21,13 @@ import Poppy.Codegen.Emit.Include (emitIncludeModule)
 import Poppy.Codegen.Emit.Schema (emitEnumModule, emitModelModule)
 import Poppy.Codegen.IR
   ( EnumSpec (..),
-    Model,
-    ModelInclude (..),
+    Model (..),
     Schema (..),
     enumImport,
     enumName,
-    includeName,
     modelName,
+    modelRelations,
     schemaEnums,
-    schemaIncludes,
     schemaModels,
   )
 import System.FilePath (dropTrailingPathSeparator, splitDirectories, (</>))
@@ -136,15 +134,15 @@ modelOutput target schema model =
 
 includeOutputs :: CodegenTarget -> Schema -> [GenOutput]
 includeOutputs target schema =
-  concatMap (includeOutput target schema) (schemaIncludes schema)
+  concatMap (includeOutput target schema) (filter (not . null . modelRelations) (schemaModels schema))
 
-includeOutput :: CodegenTarget -> Schema -> ModelInclude -> [GenOutput]
-includeOutput target schema incl =
+includeOutput :: CodegenTarget -> Schema -> Model -> [GenOutput]
+includeOutput target schema model =
   let layout = target.ctLayout
-      name = includeName incl
-      moduleName = layout.slModulePrefix <> name
-      path = layout.slOutputDir </> T.unpack name <> ".hs"
-   in [gen path (emitIncludeModule moduleName schema incl)]
+      name = modelName model
+      moduleName = layout.slModulePrefix <> "Include." <> name
+      path = layout.slOutputDir </> "Include" </> T.unpack name <> ".hs"
+   in [gen path (emitIncludeModule moduleName schema model)]
 
 clientOutputs :: CodegenTarget -> Schema -> [GenOutput]
 clientOutputs target schema =
