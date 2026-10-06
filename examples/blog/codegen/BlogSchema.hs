@@ -12,7 +12,7 @@ blogSchema =
   schema
     [enum_ "ArticleStatus" [variant "Draft", variant "Published"]]
     [authorModel, postModel]
-    []
+    [unique_ "Post" ["title"]]
 
 authorModel :: Model
 authorModel =

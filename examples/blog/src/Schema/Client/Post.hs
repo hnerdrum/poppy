@@ -1,5 +1,8 @@
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -29,23 +32,49 @@ module Schema.Client.Post
     PostUpdate (..),
     PostTable,
     PostQuery (..),
+    PostUnique (..),
+    PostUniqueKey (..),
+    PostUniqueQuery (..),
     emptyQuery,
+    uniqueQuery,
     postId
   )
 
 where
 
+import Data.Text (Text)
 import Data.UUID (UUID)
 import Poppy.Db (Db)
-import Poppy.Errors (ORMError (..), requireFound)
+import Poppy.Errors (ORMError (..), fromUniqueRows, requireFound, uniqueOrFail)
 import qualified Poppy.Delete as Delete
 import qualified Poppy.Insert as Insert
 import qualified Poppy.Operations as Ops
 import Poppy.Query (OrderBy, QueryBuilder, applyQueryModifiers, matching, selectColumns)
 import Poppy.Select (OmitSelect (..), Picked (..))
-import Poppy.Where (Where)
-import Schema.Post (PostCreate (..), PostRow (..), PostSelect (..), PostPicked (..), postSelect, postSelectColumns, parsePostPicked, PostTable, PostUpdate (..), postId)
+import Poppy.Where (Where, eq)
+import Schema.Post (PostCreate (..), PostRow (..), PostSelect (..), PostPicked (..), postSelect, postSelectColumns, parsePostPicked, PostTable, PostUpdate (..), postId, postTitle)
 import qualified Poppy.Update as Update
+
+data PostUnique
+  = ById UUID
+  | ByTitle Text
+  deriving (Eq, Show)
+
+data PostUniqueKey
+  = OnId
+  | OnTitle
+  deriving (Eq, Show)
+
+postUniqueWhere :: PostUnique -> Where PostTable
+postUniqueWhere = \case
+  ById v1 -> eq postId v1
+  ByTitle v1 -> eq postTitle v1
+
+postConflictCols :: PostUniqueKey -> [Text]
+postConflictCols = \case
+  OnId -> ["id"]
+  OnTitle -> ["title"]
+
 
 create :: PostCreate -> Db (Either ORMError PostRow)
 create = Insert.insert @PostTable @PostRow
@@ -55,16 +84,18 @@ createMany :: [PostCreate] -> Db (Either ORMError Int)
 createMany = Insert.insertMany @PostTable
 
 
-update :: UUID -> PostUpdate -> Db (Either ORMError PostRow)
-update = Update.update @PostTable @PostRow
+update :: PostUnique -> PostUpdate -> Db (Either ORMError PostRow)
+update key input =
+  Update.updateWhere @PostTable @PostRow (postUniqueWhere key) input
 
 
 updateMany :: Where PostTable -> PostUpdate -> Db (Either ORMError Int)
 updateMany = Update.updateMany @PostTable
 
 
-upsert :: PostCreate -> PostUpdate -> Db (Either ORMError PostRow)
-upsert = Insert.upsert @PostTable @PostRow ["id"]
+upsert :: PostUniqueKey -> PostCreate -> PostUpdate -> Db (Either ORMError PostRow)
+upsert key createInput updateInput =
+  Insert.upsert @PostTable @PostRow (postConflictCols key) createInput updateInput
 
 
 data PostQuery select = PostQuery
@@ -76,9 +107,20 @@ data PostQuery select = PostQuery
   }
 
 
+data PostUniqueQuery select = PostUniqueQuery
+  { select_ :: select
+  , where_ :: PostUnique
+  }
+
+
 emptyQuery :: PostQuery OmitSelect
 emptyQuery =
   PostQuery {select_ = OmitSelect, where_ = Nothing, orderBy_ = [], limit_ = Nothing, offset_ = Nothing}
+
+
+uniqueQuery :: PostUnique -> PostUniqueQuery OmitSelect
+uniqueQuery key =
+  PostUniqueQuery {select_ = OmitSelect, where_ = key}
 
 
 type family ResolveSelect select
@@ -88,21 +130,19 @@ type instance ResolveSelect PostSelect = PostPicked
 
 class ReadPost select where
   findMany :: PostQuery select -> Db [ResolveSelect select]
-  findUnique :: PostQuery select -> Db (Either ORMError (Maybe (ResolveSelect select)))
-  findUniqueOrFail :: PostQuery select -> Db (Either ORMError (ResolveSelect select))
+  findUnique :: PostUniqueQuery select -> Db (Either ORMError (Maybe (ResolveSelect select)))
+  findUniqueOrFail :: PostUniqueQuery select -> Db (Either ORMError (ResolveSelect select))
   findFirst :: PostQuery select -> Db (Maybe (ResolveSelect select))
   findFirstOrFail :: PostQuery select -> Db (Either ORMError (ResolveSelect select))
 
 instance ReadPost OmitSelect where
   findMany q =
     Ops.findMany @PostTable @PostRow (applyQuery q)
-  findUnique PostQuery {where_} =
-    Ops.findUniqueWhere @PostTable @PostRow where_
-  findUniqueOrFail q = do
-    result <- findUnique q
-    case result of
-      Left err -> pure (Left err)
-      Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findUnique PostUniqueQuery {where_} = do
+    let w = postUniqueWhere where_
+    rows <- Ops.findMany @PostTable @PostRow (matching w)
+    pure (fromUniqueRows rows)
+  findUniqueOrFail q = uniqueOrFail <$> findUnique q
   findFirst q =
     Ops.findFirst @PostTable @PostRow (applyQuery q)
   findFirstOrFail q = do
@@ -114,23 +154,14 @@ instance ReadPost PostSelect where
     Ops.findManyWith
       (parsePostPicked select_)
       (selectColumns (postSelectColumns select_) . applyQuery q)
-  findUnique PostQuery {select_, where_} =
-    case Ops.requireUniqueWhere @PostTable where_ of
-      Left err -> pure (Left err)
-      Right w -> do
-        rows <-
-          Ops.findManyWith
-            (parsePostPicked select_)
-            (selectColumns (postSelectColumns select_) . matching w)
-        pure $ case rows of
-          [] -> Right Nothing
-          [row] -> Right (Just row)
-          _ -> Left (MultipleRecordsFound "findUnique matched multiple rows")
-  findUniqueOrFail q = do
-    result <- findUnique q
-    case result of
-      Left err -> pure (Left err)
-      Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findUnique PostUniqueQuery {where_, select_} = do
+    let w = postUniqueWhere where_
+    rows <-
+      Ops.findManyWith
+        (parsePostPicked select_)
+        (selectColumns (postSelectColumns select_) . matching w)
+    pure (fromUniqueRows rows)
+  findUniqueOrFail q = uniqueOrFail <$> findUnique q
   findFirst q@PostQuery {select_} =
     Ops.findFirstWith
       (parsePostPicked select_)
@@ -148,8 +179,9 @@ count :: PostQuery select -> Db Int
 count q = Ops.count @PostTable (applyQuery q)
 
 
-delete :: UUID -> Db (Either ORMError Int)
-delete = Ops.delete @PostTable
+delete :: PostUnique -> Db (Either ORMError Int)
+delete key =
+  Delete.deleteMany @PostTable (postUniqueWhere key)
 
 
 deleteMany :: Where PostTable -> Db (Either ORMError Int)

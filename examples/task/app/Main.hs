@@ -4,7 +4,7 @@ import Data.UUID (UUID)
 import Poppy (Db, DbPool, ORMError, applyMigrations, closePool, connect, runDb)
 import Poppy.Where (eq)
 import qualified Schema.Client.Task as Task
-import Schema.Task (TaskCreate (..), TaskRow (..), taskDone, taskId)
+import Schema.Task (TaskCreate (..), TaskRow (..), taskDone)
 import System.Environment (getEnv)
 
 listOpenTasks :: Db [TaskRow]
@@ -14,8 +14,7 @@ listOpenTasks =
 
 getTask :: UUID -> Db (Either ORMError TaskRow)
 getTask taskKey =
-  Task.findUniqueOrFail
-    Task.emptyQuery {Task.where_ = Just (eq taskId taskKey)}
+  Task.findUniqueOrFail (Task.uniqueQuery (Task.ById taskKey))
 
 main :: IO ()
 main = do

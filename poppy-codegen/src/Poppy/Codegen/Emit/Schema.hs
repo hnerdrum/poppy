@@ -4,6 +4,7 @@ module Poppy.Codegen.Emit.Schema
   ( emitModelModule,
     emitEnumModule,
     enumImportLine,
+    schemaEnumPrefix,
   )
 where
 

@@ -11,7 +11,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
 import Poppy.Codegen.Drift
-import Poppy.Codegen.IR (FieldDefault (..), Schema (..), schemaUniques, unique_)
+import Poppy.Codegen.IR (FieldDefault (..), Schema (..), schemaUniques)
 import Poppy.Codegen.Introspect (canonicalizeColumnType, introspectCatalog)
 import qualified Poppy.Codegen.Schema as Builder
 import Poppy.Codegen.Spec.Author (authorSchema)
@@ -38,11 +38,11 @@ driftSpec =
         `shouldBe` [DriftNullability "test_widget" "name" False True]
 
     it "reports a missing unique from the IR" $
-      checkSchema widgetSchemaWithNameUnique (widgetCatalog False)
+      checkSchema widgetSchema widgetCatalogWithoutUnique
         `shouldBe` [DriftMissingUnique "test_widget" ["name"]]
 
     it "reports a database unique that is not in the IR" $
-      checkSchema widgetSchema widgetCatalogWithUnique
+      checkSchema widgetSchemaWithoutNameUnique (widgetCatalog False)
         `shouldBe` [DriftUnexpectedUnique "test_widget" ["name"]]
 
     it "reports enum label drift" $
@@ -100,9 +100,9 @@ driftDbSpec =
       checkSchema authorSchema catalog `shouldBe` []
       checkSchema packetSchema catalog `shouldBe` []
 
-widgetSchemaWithNameUnique :: Schema
-widgetSchemaWithNameUnique =
-  widgetSchema {schemaUniques = [unique_ "Widget" ["name"]]}
+widgetSchemaWithoutNameUnique :: Schema
+widgetSchemaWithoutNameUnique =
+  widgetSchema {schemaUniques = []}
 
 widgetCatalog :: Bool -> DbCatalog
 widgetCatalog nameNullable =
@@ -121,15 +121,15 @@ widgetCatalog nameNullable =
                     col "description" "text" True Nothing
                   ],
               dbPrimaryKey = ["id"],
-              dbUniques = []
+              dbUniques = [Set.singleton "name"]
             }
     }
 
-widgetCatalogWithUnique :: DbCatalog
-widgetCatalogWithUnique =
+widgetCatalogWithoutUnique :: DbCatalog
+widgetCatalogWithoutUnique =
   let base = widgetCatalog False
       table = dbTables base Map.! "test_widget"
-   in base {dbTables = Map.singleton "test_widget" table {dbUniques = [Set.singleton "name"]}}
+   in base {dbTables = Map.singleton "test_widget" table {dbUniques = []}}
 
 widgetCatalogWithoutIdDefault :: DbCatalog
 widgetCatalogWithoutIdDefault =

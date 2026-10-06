@@ -2,6 +2,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NoFieldSelectors #-}
@@ -40,7 +41,11 @@ module Schema.Client.Chapter
     SectionNestedOps (..),
     emptySectionNestedOps,
     ChapterQuery (..),
+    ChapterUnique (..),
+    ChapterUniqueKey (..),
+    ChapterUniqueQuery (..),
     emptyQuery,
+    uniqueQuery,
     OmitSelect (..),
     Picked (..),
     ChapterCreate (..),
@@ -61,7 +66,7 @@ import Poppy.Core (fieldColumn)
 import Poppy.PG (toField)
 import Poppy.Db (Db, liftIO, transactionEither)
 import qualified Poppy.Delete as Delete
-import Poppy.Errors (ORMError (..), requireFound)
+import Poppy.Errors (ORMError (..), fromUniqueRows, requireFound, uniqueOrFail)
 import qualified Poppy.Insert as Insert
 import qualified Poppy.Operations as Ops
 import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)
@@ -70,8 +75,24 @@ import Poppy.SelectIn (prepareIncludeRootQuery)
 import qualified Poppy.Update as Update
 import Poppy.Where (Where, and_, eq, in_)
 import Schema.Chapter (ChapterCreate (..), ChapterRow (..), ChapterSelect (..), ChapterPicked (..), chapterSelect, chapterSelectColumns, parseChapterPicked, ChapterTable, ChapterUpdate (..), chapterId)
-import Schema.Include.Chapter (LoadChapter (..), ChapterInclude (..), ChapterRead, ChapterWith (..), toChapterWithPicked)
+import Schema.Include.Chapter (LoadChapter (..), ChapterInclude (..), ChapterRead, toChapterWithPicked, ChapterWith (..))
 import Schema.Section (SectionCreate (..), SectionRow (..), SectionUpdate (..), SectionTable, sectionId, sectionChapterRef)
+
+data ChapterUnique
+  = ById UUID
+  deriving (Eq, Show)
+
+data ChapterUniqueKey
+  = OnId
+  deriving (Eq, Show)
+
+chapterUniqueWhere :: ChapterUnique -> Where ChapterTable
+chapterUniqueWhere = \case
+  ById v1 -> eq chapterId v1
+
+chapterConflictCols :: ChapterUniqueKey -> [Text]
+chapterConflictCols = \case
+  OnId -> ["id"]
 
 create :: ChapterCreate -> Db (Either ORMError ChapterRow)
 create = Insert.insert @ChapterTable @ChapterRow
@@ -79,14 +100,16 @@ create = Insert.insert @ChapterTable @ChapterRow
 createMany :: [ChapterCreate] -> Db (Either ORMError Int)
 createMany = Insert.insertMany @ChapterTable
 
-update :: UUID -> ChapterUpdate -> Db (Either ORMError ChapterRow)
-update = Update.update @ChapterTable @ChapterRow
+update :: ChapterUnique -> ChapterUpdate -> Db (Either ORMError ChapterRow)
+update key input =
+  Update.updateWhere @ChapterTable @ChapterRow (chapterUniqueWhere key) input
 
 updateMany :: Where ChapterTable -> ChapterUpdate -> Db (Either ORMError Int)
 updateMany = Update.updateMany @ChapterTable
 
-upsert :: ChapterCreate -> ChapterUpdate -> Db (Either ORMError ChapterRow)
-upsert = Insert.upsert @ChapterTable @ChapterRow ["id"]
+upsert :: ChapterUniqueKey -> ChapterCreate -> ChapterUpdate -> Db (Either ORMError ChapterRow)
+upsert key createInput updateInput =
+  Insert.upsert @ChapterTable @ChapterRow (chapterConflictCols key) createInput updateInput
 
 data SectionNestedCreate = SectionNestedCreate
   { id :: Maybe UUID, label :: Text
@@ -297,14 +320,24 @@ data ChapterQuery include select = ChapterQuery
   , offset_ :: Maybe Int
   }
 
+data ChapterUniqueQuery include select = ChapterUniqueQuery
+  { include_ :: include
+  , select_ :: select
+  , where_ :: ChapterUnique
+  }
+
 emptyQuery :: ChapterQuery () OmitSelect
 emptyQuery =
   ChapterQuery {include_ = (), select_ = OmitSelect, where_ = Nothing, orderBy_ = [], limit_ = Nothing, offset_ = Nothing}
 
+uniqueQuery :: ChapterUnique -> ChapterUniqueQuery () OmitSelect
+uniqueQuery key =
+  ChapterUniqueQuery {include_ = (), select_ = OmitSelect, where_ = key}
+
 class ReadChapter include select where
   findMany :: ChapterQuery include select -> Db [ChapterRead include select]
-  findUnique :: ChapterQuery include select -> Db (Either ORMError (Maybe (ChapterRead include select)))
-  findUniqueOrFail :: ChapterQuery include select -> Db (Either ORMError (ChapterRead include select))
+  findUnique :: ChapterUniqueQuery include select -> Db (Either ORMError (Maybe (ChapterRead include select)))
+  findUniqueOrFail :: ChapterUniqueQuery include select -> Db (Either ORMError (ChapterRead include select))
   findFirst :: ChapterQuery include select -> Db (Maybe (ChapterRead include select))
   findFirstOrFail :: ChapterQuery include select -> Db (Either ORMError (ChapterRead include select))
 
@@ -312,21 +345,12 @@ instance (LoadChapter sections) => ReadChapter (ChapterInclude sections) OmitSel
   findMany ChapterQuery {include_, where_, orderBy_, limit_, offset_} = do
     roots <- Ops.findMany @ChapterTable @ChapterRow (prepareIncludeRootQuery @ChapterTable (applyQueryModifiers where_ orderBy_ limit_ offset_))
     loadChapter include_ roots
-  findUnique ChapterQuery {include_, where_} =
-    case Ops.requireUniqueWhere @ChapterTable where_ of
-      Left err -> pure (Left err)
-      Right w -> do
-        roots <- Ops.findMany @ChapterTable @ChapterRow (prepareIncludeRootQuery @ChapterTable (matching w))
-        rows <- loadChapter include_ roots
-        pure $ case rows of
-          [] -> Right Nothing
-          [row] -> Right (Just row)
-          _ -> Left (MultipleRecordsFound "findUnique matched multiple rows")
-  findUniqueOrFail q = do
-    result <- findUnique q
-    case result of
-      Left err -> pure (Left err)
-      Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findUnique ChapterUniqueQuery {where_, include_} = do
+    let w = chapterUniqueWhere where_
+    roots <- Ops.findMany @ChapterTable @ChapterRow (prepareIncludeRootQuery @ChapterTable (matching w))
+    rows <- loadChapter include_ roots
+    pure (fromUniqueRows rows)
+  findUniqueOrFail q = uniqueOrFail <$> findUnique q
   findFirst ChapterQuery {include_, where_, orderBy_, offset_} = do
     roots <- Ops.findMany @ChapterTable @ChapterRow (prepareIncludeRootQuery @ChapterTable (applyQueryModifiers where_ orderBy_ (Just 1) offset_))
     loaded <- loadChapter include_ roots
@@ -340,13 +364,11 @@ instance (LoadChapter sections) => ReadChapter (ChapterInclude sections) OmitSel
 instance ReadChapter () OmitSelect where
   findMany ChapterQuery {where_, orderBy_, limit_, offset_} =
     Ops.findMany @ChapterTable @ChapterRow (applyQueryModifiers where_ orderBy_ limit_ offset_)
-  findUnique ChapterQuery {where_} =
-    Ops.findUniqueWhere @ChapterTable @ChapterRow where_
-  findUniqueOrFail q = do
-    result <- findUnique q
-    case result of
-      Left err -> pure (Left err)
-      Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findUnique ChapterUniqueQuery {where_} = do
+    let w = chapterUniqueWhere where_
+    rows <- Ops.findMany @ChapterTable @ChapterRow (matching w)
+    pure (fromUniqueRows rows)
+  findUniqueOrFail q = uniqueOrFail <$> findUnique q
   findFirst ChapterQuery {where_, orderBy_, limit_, offset_} =
     Ops.findFirst @ChapterTable @ChapterRow (applyQueryModifiers where_ orderBy_ limit_ offset_)
   findFirstOrFail q = do
@@ -358,22 +380,13 @@ instance (LoadChapter sections) => ReadChapter (ChapterInclude sections) Chapter
     roots <- Ops.findMany @ChapterTable @ChapterRow (prepareIncludeRootQuery @ChapterTable (applyQueryModifiers where_ orderBy_ limit_ offset_))
     loaded <- loadChapter include_ roots
     pure $ map (toChapterWithPicked select_) loaded
-  findUnique ChapterQuery {include_, select_, where_} =
-    case Ops.requireUniqueWhere @ChapterTable where_ of
-      Left err -> pure (Left err)
-      Right w -> do
-        roots <- Ops.findMany @ChapterTable @ChapterRow (prepareIncludeRootQuery @ChapterTable (matching w))
-        loaded <- loadChapter include_ roots
-        let rows = map (toChapterWithPicked select_) loaded
-        pure $ case rows of
-          [] -> Right Nothing
-          [row] -> Right (Just row)
-          _ -> Left (MultipleRecordsFound "findUnique matched multiple rows")
-  findUniqueOrFail q = do
-    result <- findUnique q
-    case result of
-      Left err -> pure (Left err)
-      Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findUnique ChapterUniqueQuery {where_, include_, select_} = do
+    let w = chapterUniqueWhere where_
+    roots <- Ops.findMany @ChapterTable @ChapterRow (prepareIncludeRootQuery @ChapterTable (matching w))
+    loaded <- loadChapter include_ roots
+    let rows = map (toChapterWithPicked select_) loaded
+    pure (fromUniqueRows rows)
+  findUniqueOrFail q = uniqueOrFail <$> findUnique q
   findFirst ChapterQuery {select_, include_, where_, orderBy_, offset_} = do
     roots <- Ops.findMany @ChapterTable @ChapterRow (prepareIncludeRootQuery @ChapterTable (applyQueryModifiers where_ orderBy_ (Just 1) offset_))
     loaded <- loadChapter include_ roots
@@ -389,23 +402,14 @@ instance ReadChapter () ChapterSelect where
     Ops.findManyWith
       (parseChapterPicked select_)
       (selectColumns (chapterSelectColumns select_) . applyQueryModifiers where_ orderBy_ limit_ offset_)
-  findUnique ChapterQuery {select_, where_} =
-    case Ops.requireUniqueWhere @ChapterTable where_ of
-      Left err -> pure (Left err)
-      Right w -> do
-        rows <-
-          Ops.findManyWith
-            (parseChapterPicked select_)
-            (selectColumns (chapterSelectColumns select_) . matching w)
-        pure $ case rows of
-          [] -> Right Nothing
-          [row] -> Right (Just row)
-          _ -> Left (MultipleRecordsFound "findUnique matched multiple rows")
-  findUniqueOrFail q = do
-    result <- findUnique q
-    case result of
-      Left err -> pure (Left err)
-      Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findUnique ChapterUniqueQuery {where_, select_} = do
+    let w = chapterUniqueWhere where_
+    rows <-
+      Ops.findManyWith
+        (parseChapterPicked select_)
+        (selectColumns (chapterSelectColumns select_) . matching w)
+    pure (fromUniqueRows rows)
+  findUniqueOrFail q = uniqueOrFail <$> findUnique q
   findFirst ChapterQuery {select_, where_, orderBy_, limit_, offset_} =
     Ops.findFirstWith
       (parseChapterPicked select_)
@@ -433,8 +437,9 @@ reload include rootId = do
         (one : _) -> Right one
         [] -> Left (RecordNotFound "Record not found with primary key")
 
-delete :: UUID -> Db (Either ORMError Int)
-delete = Ops.delete @ChapterTable
+delete :: ChapterUnique -> Db (Either ORMError Int)
+delete key =
+  Delete.deleteMany @ChapterTable (chapterUniqueWhere key)
 
 deleteMany :: Where ChapterTable -> Db (Either ORMError Int)
 deleteMany = Delete.deleteMany @ChapterTable

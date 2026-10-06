@@ -28,6 +28,7 @@ extra-source-files:
     test/migrations/005-test-tag.sql
     test/migrations/006-test-author-post.sql
     test/migrations/007-test-packet.sql
+    test/migrations/009-test-widget-name-unique.sql
     test/Poppy/Codegen/golden/Article.hs.golden
     test/Poppy/Codegen/golden/Author.hs.golden
     test/Poppy/Codegen/golden/Book.hs.golden

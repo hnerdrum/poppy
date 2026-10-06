@@ -26,7 +26,7 @@ import Schema.Include.Book (BookInclude (..), BookWith (..))
 import Schema.Include.Chapter (ChapterInclude (..), ChapterWith (..))
 import Schema.Include.Shelf (ShelfInclude (..), ShelfWith (..))
 import Schema.Section (SectionRow (..))
-import Schema.Shelf (ShelfRow (..), ShelfTable, shelfId, shelfName)
+import Schema.Shelf (ShelfRow (..), ShelfTable, shelfName)
 import Schema.Tag (TagRow (..))
 import Support.TestDb (TestEnv (..))
 import Test.Hspec (SpecWith, describe, it, shouldBe)
@@ -61,7 +61,7 @@ shelvesWhere include predicate =
   Shelf.findMany (Shelf.emptyQuery {Shelf.include_ = include, Shelf.where_ = Just predicate})
 
 shelfById include pk =
-  Shelf.findUnique (Shelf.emptyQuery {Shelf.include_ = include, Shelf.where_ = Just (eq shelfId pk)})
+  Shelf.findUnique ((Shelf.uniqueQuery (Shelf.ById pk)) {Shelf.include_ = include})
 
 includeSpec :: SpecWith TestEnv
 includeSpec =

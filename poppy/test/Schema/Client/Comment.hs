@@ -2,6 +2,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NoFieldSelectors #-}
@@ -40,7 +41,11 @@ module Schema.Client.Comment
     CommentNestedOps (..),
     emptyCommentNestedOps,
     CommentQuery (..),
+    CommentUnique (..),
+    CommentUniqueKey (..),
+    CommentUniqueQuery (..),
     emptyQuery,
+    uniqueQuery,
     OmitSelect (..),
     Picked (..),
     CommentCreate (..),
@@ -61,7 +66,7 @@ import Poppy.Core (fieldColumn, NullableValue (Omit, Value))
 import Poppy.PG (toField)
 import Poppy.Db (Db, liftIO, transactionEither)
 import qualified Poppy.Delete as Delete
-import Poppy.Errors (ORMError (..), requireFound)
+import Poppy.Errors (ORMError (..), fromUniqueRows, requireFound, uniqueOrFail)
 import qualified Poppy.Insert as Insert
 import qualified Poppy.Operations as Ops
 import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)
@@ -70,8 +75,24 @@ import Poppy.SelectIn (prepareIncludeRootQuery)
 import qualified Poppy.Update as Update
 import Poppy.Where (Where, and_, eq, in_)
 import Schema.Comment (CommentCreate (..), CommentRow (..), CommentSelect (..), CommentPicked (..), commentSelect, commentSelectColumns, parseCommentPicked, CommentTable, CommentUpdate (..), commentId)
-import Schema.Include.Comment (LoadComment (..), CommentInclude (..), CommentRead, CommentWith (..), toCommentWithPicked)
+import Schema.Include.Comment (LoadComment (..), CommentInclude (..), CommentRead, toCommentWithPicked, CommentWith (..))
 import Schema.Comment (CommentCreate (..), CommentRow (..), CommentUpdate (..), CommentTable, commentId, commentParentId)
+
+data CommentUnique
+  = ById UUID
+  deriving (Eq, Show)
+
+data CommentUniqueKey
+  = OnId
+  deriving (Eq, Show)
+
+commentUniqueWhere :: CommentUnique -> Where CommentTable
+commentUniqueWhere = \case
+  ById v1 -> eq commentId v1
+
+commentConflictCols :: CommentUniqueKey -> [Text]
+commentConflictCols = \case
+  OnId -> ["id"]
 
 create :: CommentCreate -> Db (Either ORMError CommentRow)
 create = Insert.insert @CommentTable @CommentRow
@@ -79,14 +100,16 @@ create = Insert.insert @CommentTable @CommentRow
 createMany :: [CommentCreate] -> Db (Either ORMError Int)
 createMany = Insert.insertMany @CommentTable
 
-update :: UUID -> CommentUpdate -> Db (Either ORMError CommentRow)
-update = Update.update @CommentTable @CommentRow
+update :: CommentUnique -> CommentUpdate -> Db (Either ORMError CommentRow)
+update key input =
+  Update.updateWhere @CommentTable @CommentRow (commentUniqueWhere key) input
 
 updateMany :: Where CommentTable -> CommentUpdate -> Db (Either ORMError Int)
 updateMany = Update.updateMany @CommentTable
 
-upsert :: CommentCreate -> CommentUpdate -> Db (Either ORMError CommentRow)
-upsert = Insert.upsert @CommentTable @CommentRow ["id"]
+upsert :: CommentUniqueKey -> CommentCreate -> CommentUpdate -> Db (Either ORMError CommentRow)
+upsert key createInput updateInput =
+  Insert.upsert @CommentTable @CommentRow (commentConflictCols key) createInput updateInput
 
 data CommentNestedCreate = CommentNestedCreate
   { id :: Maybe UUID, body :: Text
@@ -297,14 +320,24 @@ data CommentQuery include select = CommentQuery
   , offset_ :: Maybe Int
   }
 
+data CommentUniqueQuery include select = CommentUniqueQuery
+  { include_ :: include
+  , select_ :: select
+  , where_ :: CommentUnique
+  }
+
 emptyQuery :: CommentQuery () OmitSelect
 emptyQuery =
   CommentQuery {include_ = (), select_ = OmitSelect, where_ = Nothing, orderBy_ = [], limit_ = Nothing, offset_ = Nothing}
 
+uniqueQuery :: CommentUnique -> CommentUniqueQuery () OmitSelect
+uniqueQuery key =
+  CommentUniqueQuery {include_ = (), select_ = OmitSelect, where_ = key}
+
 class ReadComment include select where
   findMany :: CommentQuery include select -> Db [CommentRead include select]
-  findUnique :: CommentQuery include select -> Db (Either ORMError (Maybe (CommentRead include select)))
-  findUniqueOrFail :: CommentQuery include select -> Db (Either ORMError (CommentRead include select))
+  findUnique :: CommentUniqueQuery include select -> Db (Either ORMError (Maybe (CommentRead include select)))
+  findUniqueOrFail :: CommentUniqueQuery include select -> Db (Either ORMError (CommentRead include select))
   findFirst :: CommentQuery include select -> Db (Maybe (CommentRead include select))
   findFirstOrFail :: CommentQuery include select -> Db (Either ORMError (CommentRead include select))
 
@@ -312,21 +345,12 @@ instance (LoadComment replies) => ReadComment (CommentInclude replies) OmitSelec
   findMany CommentQuery {include_, where_, orderBy_, limit_, offset_} = do
     roots <- Ops.findMany @CommentTable @CommentRow (prepareIncludeRootQuery @CommentTable (applyQueryModifiers where_ orderBy_ limit_ offset_))
     loadComment include_ roots
-  findUnique CommentQuery {include_, where_} =
-    case Ops.requireUniqueWhere @CommentTable where_ of
-      Left err -> pure (Left err)
-      Right w -> do
-        roots <- Ops.findMany @CommentTable @CommentRow (prepareIncludeRootQuery @CommentTable (matching w))
-        rows <- loadComment include_ roots
-        pure $ case rows of
-          [] -> Right Nothing
-          [row] -> Right (Just row)
-          _ -> Left (MultipleRecordsFound "findUnique matched multiple rows")
-  findUniqueOrFail q = do
-    result <- findUnique q
-    case result of
-      Left err -> pure (Left err)
-      Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findUnique CommentUniqueQuery {where_, include_} = do
+    let w = commentUniqueWhere where_
+    roots <- Ops.findMany @CommentTable @CommentRow (prepareIncludeRootQuery @CommentTable (matching w))
+    rows <- loadComment include_ roots
+    pure (fromUniqueRows rows)
+  findUniqueOrFail q = uniqueOrFail <$> findUnique q
   findFirst CommentQuery {include_, where_, orderBy_, offset_} = do
     roots <- Ops.findMany @CommentTable @CommentRow (prepareIncludeRootQuery @CommentTable (applyQueryModifiers where_ orderBy_ (Just 1) offset_))
     loaded <- loadComment include_ roots
@@ -340,13 +364,11 @@ instance (LoadComment replies) => ReadComment (CommentInclude replies) OmitSelec
 instance ReadComment () OmitSelect where
   findMany CommentQuery {where_, orderBy_, limit_, offset_} =
     Ops.findMany @CommentTable @CommentRow (applyQueryModifiers where_ orderBy_ limit_ offset_)
-  findUnique CommentQuery {where_} =
-    Ops.findUniqueWhere @CommentTable @CommentRow where_
-  findUniqueOrFail q = do
-    result <- findUnique q
-    case result of
-      Left err -> pure (Left err)
-      Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findUnique CommentUniqueQuery {where_} = do
+    let w = commentUniqueWhere where_
+    rows <- Ops.findMany @CommentTable @CommentRow (matching w)
+    pure (fromUniqueRows rows)
+  findUniqueOrFail q = uniqueOrFail <$> findUnique q
   findFirst CommentQuery {where_, orderBy_, limit_, offset_} =
     Ops.findFirst @CommentTable @CommentRow (applyQueryModifiers where_ orderBy_ limit_ offset_)
   findFirstOrFail q = do
@@ -358,22 +380,13 @@ instance (LoadComment replies) => ReadComment (CommentInclude replies) CommentSe
     roots <- Ops.findMany @CommentTable @CommentRow (prepareIncludeRootQuery @CommentTable (applyQueryModifiers where_ orderBy_ limit_ offset_))
     loaded <- loadComment include_ roots
     pure $ map (toCommentWithPicked select_) loaded
-  findUnique CommentQuery {include_, select_, where_} =
-    case Ops.requireUniqueWhere @CommentTable where_ of
-      Left err -> pure (Left err)
-      Right w -> do
-        roots <- Ops.findMany @CommentTable @CommentRow (prepareIncludeRootQuery @CommentTable (matching w))
-        loaded <- loadComment include_ roots
-        let rows = map (toCommentWithPicked select_) loaded
-        pure $ case rows of
-          [] -> Right Nothing
-          [row] -> Right (Just row)
-          _ -> Left (MultipleRecordsFound "findUnique matched multiple rows")
-  findUniqueOrFail q = do
-    result <- findUnique q
-    case result of
-      Left err -> pure (Left err)
-      Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findUnique CommentUniqueQuery {where_, include_, select_} = do
+    let w = commentUniqueWhere where_
+    roots <- Ops.findMany @CommentTable @CommentRow (prepareIncludeRootQuery @CommentTable (matching w))
+    loaded <- loadComment include_ roots
+    let rows = map (toCommentWithPicked select_) loaded
+    pure (fromUniqueRows rows)
+  findUniqueOrFail q = uniqueOrFail <$> findUnique q
   findFirst CommentQuery {select_, include_, where_, orderBy_, offset_} = do
     roots <- Ops.findMany @CommentTable @CommentRow (prepareIncludeRootQuery @CommentTable (applyQueryModifiers where_ orderBy_ (Just 1) offset_))
     loaded <- loadComment include_ roots
@@ -389,23 +402,14 @@ instance ReadComment () CommentSelect where
     Ops.findManyWith
       (parseCommentPicked select_)
       (selectColumns (commentSelectColumns select_) . applyQueryModifiers where_ orderBy_ limit_ offset_)
-  findUnique CommentQuery {select_, where_} =
-    case Ops.requireUniqueWhere @CommentTable where_ of
-      Left err -> pure (Left err)
-      Right w -> do
-        rows <-
-          Ops.findManyWith
-            (parseCommentPicked select_)
-            (selectColumns (commentSelectColumns select_) . matching w)
-        pure $ case rows of
-          [] -> Right Nothing
-          [row] -> Right (Just row)
-          _ -> Left (MultipleRecordsFound "findUnique matched multiple rows")
-  findUniqueOrFail q = do
-    result <- findUnique q
-    case result of
-      Left err -> pure (Left err)
-      Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findUnique CommentUniqueQuery {where_, select_} = do
+    let w = commentUniqueWhere where_
+    rows <-
+      Ops.findManyWith
+        (parseCommentPicked select_)
+        (selectColumns (commentSelectColumns select_) . matching w)
+    pure (fromUniqueRows rows)
+  findUniqueOrFail q = uniqueOrFail <$> findUnique q
   findFirst CommentQuery {select_, where_, orderBy_, limit_, offset_} =
     Ops.findFirstWith
       (parseCommentPicked select_)
@@ -433,8 +437,9 @@ reload include rootId = do
         (one : _) -> Right one
         [] -> Left (RecordNotFound "Record not found with primary key")
 
-delete :: UUID -> Db (Either ORMError Int)
-delete = Ops.delete @CommentTable
+delete :: CommentUnique -> Db (Either ORMError Int)
+delete key =
+  Delete.deleteMany @CommentTable (commentUniqueWhere key)
 
 deleteMany :: Where CommentTable -> Db (Either ORMError Int)
 deleteMany = Delete.deleteMany @CommentTable

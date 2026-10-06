@@ -16,6 +16,7 @@ description: |
 extra-source-files:
   - test/migrations/*.sql
   - include-fail/*.hs
+  - unique-fail/*.hs
 
 extra-doc-files:
   - README.md

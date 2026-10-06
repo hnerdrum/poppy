@@ -10,6 +10,7 @@ module Poppy.Update
   ( UpdateBuilder,
     Updatable (..),
     update,
+    updateWhere,
     updateBuilder,
     updateReturning,
     setField,
@@ -37,7 +38,7 @@ import Poppy.Core (Entity (..), Field (..), NullableValue (..), PrimaryKeyType)
 import Poppy.Db (Db (..), dbIO)
 import Poppy.Errors (ORMError (..), parseSingleton)
 import qualified Poppy.Operations as Ops
-import Poppy.Query (buildWhereClause)
+import Poppy.Query (buildWhereClause, matching)
 import Poppy.Sql (catchSql, quoteIdent)
 import Poppy.Where (Where, compileWhere)
 
@@ -128,6 +129,29 @@ update pkValue input = do
               (quoteIdent (fieldColumn pkField) <> " = ?")
               [toField pkValue]
               builderWithTouch
+      updateBuilder builderWithWhere
+
+updateWhere ::
+  forall table result.
+  (Updatable table, FromRow result) =>
+  Where table ->
+  UpdateInput table ->
+  Db (Either ORMError result)
+updateWhere clause input = do
+  let builder = toUpdateBuilder @table input
+  if null (ubSets builder)
+    then do
+      rows <- Ops.findMany @table @result (matching clause)
+      pure $
+        parseSingleton
+          rows
+          (RecordNotFound "No record found to update")
+          (MultipleRecordsFound "Update matched multiple rows")
+    else do
+      now <- liftCurrentTime
+      let (sql, params) = compileWhere clause
+          builderWithWhere =
+            whereUpdate sql params (touchUpdatedAt @table now builder)
       updateBuilder builderWithWhere
 
 updateBuilder ::

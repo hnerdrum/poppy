@@ -4,6 +4,8 @@ module Poppy.Errors
     DatabaseErrorInfo (..),
     DriverErrorKind (..),
     requireFound,
+    fromUniqueRows,
+    uniqueOrFail,
     parseSingleton,
   )
 where
@@ -35,8 +37,6 @@ data ORMError
   | NotNullViolation Text
   | -- | A write or lookup required a @WHERE@ and none was given.
     EmptyWhere Text
-  | -- | @findUnique@ @where_@ was not a primary key or declared unique.
-    InvalidUniqueInput Text
   | UnsupportedIncludeModifier Text
   | -- | Other Postgres @SqlError@ (includes SQLSTATE).
     DatabaseError DatabaseErrorInfo
@@ -48,6 +48,18 @@ instance Exception ORMError
 requireFound :: Maybe a -> ORMError -> Either ORMError a
 requireFound Nothing err = Left err
 requireFound (Just value) _ = Right value
+
+fromUniqueRows :: [a] -> Either ORMError (Maybe a)
+fromUniqueRows rows =
+  case rows of
+    [] -> Right Nothing
+    [row] -> Right (Just row)
+    _ -> Left (MultipleRecordsFound "findUnique matched multiple rows")
+
+uniqueOrFail :: Either ORMError (Maybe a) -> Either ORMError a
+uniqueOrFail (Left err) = Left err
+uniqueOrFail (Right found) =
+  requireFound found (RecordNotFound "No record found matching query")
 
 parseSingleton :: [a] -> ORMError -> ORMError -> Either ORMError a
 parseSingleton rows notFoundErr multipleErr =

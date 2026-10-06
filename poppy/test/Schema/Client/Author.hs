@@ -2,6 +2,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NoFieldSelectors #-}
@@ -40,7 +41,11 @@ module Schema.Client.Author
     PostNestedOps (..),
     emptyPostNestedOps,
     AuthorQuery (..),
+    AuthorUnique (..),
+    AuthorUniqueKey (..),
+    AuthorUniqueQuery (..),
     emptyQuery,
+    uniqueQuery,
     OmitSelect (..),
     Picked (..),
     AuthorCreate (..),
@@ -61,7 +66,7 @@ import Poppy.Core (fieldColumn)
 import Poppy.PG (toField)
 import Poppy.Db (Db, liftIO, transactionEither)
 import qualified Poppy.Delete as Delete
-import Poppy.Errors (ORMError (..), requireFound)
+import Poppy.Errors (ORMError (..), fromUniqueRows, requireFound, uniqueOrFail)
 import qualified Poppy.Insert as Insert
 import qualified Poppy.Operations as Ops
 import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)
@@ -70,9 +75,25 @@ import Poppy.SelectIn (prepareIncludeRootQuery)
 import qualified Poppy.Update as Update
 import Poppy.Where (Where, and_, eq, in_)
 import Schema.Author (AuthorCreate (..), AuthorRow (..), AuthorSelect (..), AuthorPicked (..), authorSelect, authorSelectColumns, parseAuthorPicked, AuthorTable, AuthorUpdate (..), authorId)
-import Schema.Include.Author (LoadAuthor (..), AuthorInclude (..), AuthorRead, AuthorWith (..), toAuthorWithPicked)
+import Schema.Include.Author (LoadAuthor (..), AuthorInclude (..), AuthorRead, toAuthorWithPicked, AuthorWith (..))
 import Schema.Post (PostCreate (..), PostRow (..), PostUpdate (..), PostTable, postId, postAuthorId)
 import Schema.PostStatus (PostStatus (..))
+
+data AuthorUnique
+  = ById UUID
+  deriving (Eq, Show)
+
+data AuthorUniqueKey
+  = OnId
+  deriving (Eq, Show)
+
+authorUniqueWhere :: AuthorUnique -> Where AuthorTable
+authorUniqueWhere = \case
+  ById v1 -> eq authorId v1
+
+authorConflictCols :: AuthorUniqueKey -> [Text]
+authorConflictCols = \case
+  OnId -> ["id"]
 
 create :: AuthorCreate -> Db (Either ORMError AuthorRow)
 create = Insert.insert @AuthorTable @AuthorRow
@@ -80,14 +101,16 @@ create = Insert.insert @AuthorTable @AuthorRow
 createMany :: [AuthorCreate] -> Db (Either ORMError Int)
 createMany = Insert.insertMany @AuthorTable
 
-update :: UUID -> AuthorUpdate -> Db (Either ORMError AuthorRow)
-update = Update.update @AuthorTable @AuthorRow
+update :: AuthorUnique -> AuthorUpdate -> Db (Either ORMError AuthorRow)
+update key input =
+  Update.updateWhere @AuthorTable @AuthorRow (authorUniqueWhere key) input
 
 updateMany :: Where AuthorTable -> AuthorUpdate -> Db (Either ORMError Int)
 updateMany = Update.updateMany @AuthorTable
 
-upsert :: AuthorCreate -> AuthorUpdate -> Db (Either ORMError AuthorRow)
-upsert = Insert.upsert @AuthorTable @AuthorRow ["id"]
+upsert :: AuthorUniqueKey -> AuthorCreate -> AuthorUpdate -> Db (Either ORMError AuthorRow)
+upsert key createInput updateInput =
+  Insert.upsert @AuthorTable @AuthorRow (authorConflictCols key) createInput updateInput
 
 data PostNestedCreate = PostNestedCreate
   { id :: Maybe UUID, title :: Text, status :: PostStatus
@@ -300,14 +323,24 @@ data AuthorQuery include select = AuthorQuery
   , offset_ :: Maybe Int
   }
 
+data AuthorUniqueQuery include select = AuthorUniqueQuery
+  { include_ :: include
+  , select_ :: select
+  , where_ :: AuthorUnique
+  }
+
 emptyQuery :: AuthorQuery () OmitSelect
 emptyQuery =
   AuthorQuery {include_ = (), select_ = OmitSelect, where_ = Nothing, orderBy_ = [], limit_ = Nothing, offset_ = Nothing}
 
+uniqueQuery :: AuthorUnique -> AuthorUniqueQuery () OmitSelect
+uniqueQuery key =
+  AuthorUniqueQuery {include_ = (), select_ = OmitSelect, where_ = key}
+
 class ReadAuthor include select where
   findMany :: AuthorQuery include select -> Db [AuthorRead include select]
-  findUnique :: AuthorQuery include select -> Db (Either ORMError (Maybe (AuthorRead include select)))
-  findUniqueOrFail :: AuthorQuery include select -> Db (Either ORMError (AuthorRead include select))
+  findUnique :: AuthorUniqueQuery include select -> Db (Either ORMError (Maybe (AuthorRead include select)))
+  findUniqueOrFail :: AuthorUniqueQuery include select -> Db (Either ORMError (AuthorRead include select))
   findFirst :: AuthorQuery include select -> Db (Maybe (AuthorRead include select))
   findFirstOrFail :: AuthorQuery include select -> Db (Either ORMError (AuthorRead include select))
 
@@ -315,21 +348,12 @@ instance (LoadAuthor posts) => ReadAuthor (AuthorInclude posts) OmitSelect where
   findMany AuthorQuery {include_, where_, orderBy_, limit_, offset_} = do
     roots <- Ops.findMany @AuthorTable @AuthorRow (prepareIncludeRootQuery @AuthorTable (applyQueryModifiers where_ orderBy_ limit_ offset_))
     loadAuthor include_ roots
-  findUnique AuthorQuery {include_, where_} =
-    case Ops.requireUniqueWhere @AuthorTable where_ of
-      Left err -> pure (Left err)
-      Right w -> do
-        roots <- Ops.findMany @AuthorTable @AuthorRow (prepareIncludeRootQuery @AuthorTable (matching w))
-        rows <- loadAuthor include_ roots
-        pure $ case rows of
-          [] -> Right Nothing
-          [row] -> Right (Just row)
-          _ -> Left (MultipleRecordsFound "findUnique matched multiple rows")
-  findUniqueOrFail q = do
-    result <- findUnique q
-    case result of
-      Left err -> pure (Left err)
-      Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findUnique AuthorUniqueQuery {where_, include_} = do
+    let w = authorUniqueWhere where_
+    roots <- Ops.findMany @AuthorTable @AuthorRow (prepareIncludeRootQuery @AuthorTable (matching w))
+    rows <- loadAuthor include_ roots
+    pure (fromUniqueRows rows)
+  findUniqueOrFail q = uniqueOrFail <$> findUnique q
   findFirst AuthorQuery {include_, where_, orderBy_, offset_} = do
     roots <- Ops.findMany @AuthorTable @AuthorRow (prepareIncludeRootQuery @AuthorTable (applyQueryModifiers where_ orderBy_ (Just 1) offset_))
     loaded <- loadAuthor include_ roots
@@ -343,13 +367,11 @@ instance (LoadAuthor posts) => ReadAuthor (AuthorInclude posts) OmitSelect where
 instance ReadAuthor () OmitSelect where
   findMany AuthorQuery {where_, orderBy_, limit_, offset_} =
     Ops.findMany @AuthorTable @AuthorRow (applyQueryModifiers where_ orderBy_ limit_ offset_)
-  findUnique AuthorQuery {where_} =
-    Ops.findUniqueWhere @AuthorTable @AuthorRow where_
-  findUniqueOrFail q = do
-    result <- findUnique q
-    case result of
-      Left err -> pure (Left err)
-      Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findUnique AuthorUniqueQuery {where_} = do
+    let w = authorUniqueWhere where_
+    rows <- Ops.findMany @AuthorTable @AuthorRow (matching w)
+    pure (fromUniqueRows rows)
+  findUniqueOrFail q = uniqueOrFail <$> findUnique q
   findFirst AuthorQuery {where_, orderBy_, limit_, offset_} =
     Ops.findFirst @AuthorTable @AuthorRow (applyQueryModifiers where_ orderBy_ limit_ offset_)
   findFirstOrFail q = do
@@ -361,22 +383,13 @@ instance (LoadAuthor posts) => ReadAuthor (AuthorInclude posts) AuthorSelect whe
     roots <- Ops.findMany @AuthorTable @AuthorRow (prepareIncludeRootQuery @AuthorTable (applyQueryModifiers where_ orderBy_ limit_ offset_))
     loaded <- loadAuthor include_ roots
     pure $ map (toAuthorWithPicked select_) loaded
-  findUnique AuthorQuery {include_, select_, where_} =
-    case Ops.requireUniqueWhere @AuthorTable where_ of
-      Left err -> pure (Left err)
-      Right w -> do
-        roots <- Ops.findMany @AuthorTable @AuthorRow (prepareIncludeRootQuery @AuthorTable (matching w))
-        loaded <- loadAuthor include_ roots
-        let rows = map (toAuthorWithPicked select_) loaded
-        pure $ case rows of
-          [] -> Right Nothing
-          [row] -> Right (Just row)
-          _ -> Left (MultipleRecordsFound "findUnique matched multiple rows")
-  findUniqueOrFail q = do
-    result <- findUnique q
-    case result of
-      Left err -> pure (Left err)
-      Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findUnique AuthorUniqueQuery {where_, include_, select_} = do
+    let w = authorUniqueWhere where_
+    roots <- Ops.findMany @AuthorTable @AuthorRow (prepareIncludeRootQuery @AuthorTable (matching w))
+    loaded <- loadAuthor include_ roots
+    let rows = map (toAuthorWithPicked select_) loaded
+    pure (fromUniqueRows rows)
+  findUniqueOrFail q = uniqueOrFail <$> findUnique q
   findFirst AuthorQuery {select_, include_, where_, orderBy_, offset_} = do
     roots <- Ops.findMany @AuthorTable @AuthorRow (prepareIncludeRootQuery @AuthorTable (applyQueryModifiers where_ orderBy_ (Just 1) offset_))
     loaded <- loadAuthor include_ roots
@@ -392,23 +405,14 @@ instance ReadAuthor () AuthorSelect where
     Ops.findManyWith
       (parseAuthorPicked select_)
       (selectColumns (authorSelectColumns select_) . applyQueryModifiers where_ orderBy_ limit_ offset_)
-  findUnique AuthorQuery {select_, where_} =
-    case Ops.requireUniqueWhere @AuthorTable where_ of
-      Left err -> pure (Left err)
-      Right w -> do
-        rows <-
-          Ops.findManyWith
-            (parseAuthorPicked select_)
-            (selectColumns (authorSelectColumns select_) . matching w)
-        pure $ case rows of
-          [] -> Right Nothing
-          [row] -> Right (Just row)
-          _ -> Left (MultipleRecordsFound "findUnique matched multiple rows")
-  findUniqueOrFail q = do
-    result <- findUnique q
-    case result of
-      Left err -> pure (Left err)
-      Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findUnique AuthorUniqueQuery {where_, select_} = do
+    let w = authorUniqueWhere where_
+    rows <-
+      Ops.findManyWith
+        (parseAuthorPicked select_)
+        (selectColumns (authorSelectColumns select_) . matching w)
+    pure (fromUniqueRows rows)
+  findUniqueOrFail q = uniqueOrFail <$> findUnique q
   findFirst AuthorQuery {select_, where_, orderBy_, limit_, offset_} =
     Ops.findFirstWith
       (parseAuthorPicked select_)
@@ -436,8 +440,9 @@ reload include rootId = do
         (one : _) -> Right one
         [] -> Left (RecordNotFound "Record not found with primary key")
 
-delete :: UUID -> Db (Either ORMError Int)
-delete = Ops.delete @AuthorTable
+delete :: AuthorUnique -> Db (Either ORMError Int)
+delete key =
+  Delete.deleteMany @AuthorTable (authorUniqueWhere key)
 
 deleteMany :: Where AuthorTable -> Db (Either ORMError Int)
 deleteMany = Delete.deleteMany @AuthorTable

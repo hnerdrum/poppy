@@ -8,6 +8,7 @@
 - An include or nested-write field is the relation name unchanged. A relation name used twice on one model, or equal to a scalar field on that model, fails validation.
 - Models with relations emit `Schema.Include.<Model>`. Edges are `skip`, `load`, and `loadWith`.
 - `load` and `loadWith` take `where_`, `orderBy_`, and `take_`. `take_` keeps that many included rows per parent.
+- `findUnique` takes `uniqueQuery` with a `ById` / `ByEmail` key. `update` and `delete` take that unique. `upsert` takes `OnId` / `OnEmail`.
 
 ## 0.1.0.0 — 2026-09-17
 

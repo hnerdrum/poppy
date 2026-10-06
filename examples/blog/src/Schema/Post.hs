@@ -43,6 +43,7 @@ instance Entity PostTable where
   tableName = "post"
   primaryKey = postId
   tableColumns = ["id", "author_id", "title", "status"]
+  uniqueKeys = [["id"], ["title"]]
 
 instance Insertable PostTable where
   type CreateInput PostTable = PostCreate

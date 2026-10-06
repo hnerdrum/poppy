@@ -32,6 +32,8 @@ emitClientSpec =
       actual `shouldSatisfy` T.isInfixOf "updateMany ::"
       actual `shouldSatisfy` T.isInfixOf "upsert ::"
       actual `shouldSatisfy` T.isInfixOf "emptyQuery"
+      actual `shouldSatisfy` T.isInfixOf "data TaskUniqueQuery"
+      actual `shouldSatisfy` T.isInfixOf "uniqueQuery ::"
 
     it "emits Shelf Client with include_ and writes" $ do
       expected <- TIO.readFile "test/Poppy/Codegen/golden/ShelfReadClient.hs.golden"

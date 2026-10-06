@@ -41,10 +41,10 @@ operationsSpec =
       result `shouldBe` Just widget
 
     it "findMany returns all elements that pass the filter" $ \TestEnv {envPool = pool} -> do
-      alpha1 <- WidgetFixtures.insertWidget pool "alpha"
-      alpha2 <- WidgetFixtures.insertWidget pool "alpha"
+      alpha1 <- insertDescribed pool "alpha-1" "pair"
+      alpha2 <- insertDescribed pool "alpha-2" "pair"
       _ <- WidgetFixtures.insertWidget pool "beta"
-      results <- runDb pool (Ops.findMany @WidgetTable @WidgetRow $ matching (eq widgetName "alpha"))
+      results <- runDb pool (Ops.findMany @WidgetTable @WidgetRow $ matching (eq widgetDescription "pair"))
       sort (map (.id) results) `shouldBe` sort [alpha1.id, alpha2.id]
 
     it "findUniqueOrFail returns an element by id" $ \TestEnv {envPool = pool} -> do
@@ -60,55 +60,13 @@ operationsSpec =
                             _ -> False
                         )
 
-    it "findUniqueWhere looks up by primary key where_" $ \TestEnv {envPool = pool} -> do
-      widget <- WidgetFixtures.insertWidget pool "test"
-      result <-
-        runDb
-          pool
-          (Ops.findUniqueWhere @WidgetTable @WidgetRow (Just (eq widgetId widget.id)))
-      result `shouldBe` Right (Just widget)
-
-    it "findUniqueWhere rejects a where_ that is not a unique key" $ \TestEnv {envPool = pool} -> do
-      _ <- WidgetFixtures.insertWidget pool "alpha"
-      result <-
-        runDb
-          pool
-          (Ops.findUniqueWhere @WidgetTable @WidgetRow (Just (eq widgetName "alpha")))
-      result
-        `shouldSatisfy` ( \case
-                            Left (InvalidUniqueInput _) -> True
-                            _ -> False
-                        )
-
-    it "findUniqueWhere rejects a missing where_" $ \TestEnv {envPool = pool} -> do
-      result <- runDb pool (Ops.findUniqueWhere @WidgetTable @WidgetRow Nothing)
-      result
-        `shouldSatisfy` ( \case
-                            Left (InvalidUniqueInput _) -> True
-                            _ -> False
-                        )
-
-    it "findUniqueWhere rejects a non-equality unique where_" $ \TestEnv {envPool = pool} -> do
-      widget <- WidgetFixtures.insertWidget pool "alpha"
-      result <-
-        runDb
-          pool
-          ( Ops.findUniqueWhere @WidgetTable @WidgetRow $
-              Just (eq widgetId widget.id `or_` eq widgetName "alpha")
-          )
-      result
-        `shouldSatisfy` ( \case
-                            Left (InvalidUniqueInput _) -> True
-                            _ -> False
-                        )
-
     it "findFirst returns the first element that passes the filter" $ \TestEnv {envPool = pool} -> do
-      alpha1 <- WidgetFixtures.insertWidget pool "alpha"
-      alpha2 <- WidgetFixtures.insertWidget pool "alpha"
+      alpha1 <- insertDescribed pool "alpha-1" "pair"
+      alpha2 <- insertDescribed pool "alpha-2" "pair"
       _ <- WidgetFixtures.insertWidget pool "beta"
-      result <- runDb pool (Ops.findFirst @WidgetTable @WidgetRow $ matching (eq widgetName "alpha"))
+      result <- runDb pool (Ops.findFirst @WidgetTable @WidgetRow $ matching (eq widgetDescription "pair"))
       row <- assertJust result
-      row.name `shouldBe` "alpha"
+      row.description `shouldBe` Just "pair"
       row.id `shouldSatisfy` (`elem` [alpha1.id, alpha2.id])
 
     it "findFirst returns Nothing when no row matches" $ \TestEnv {envPool = pool} -> do
@@ -116,10 +74,10 @@ operationsSpec =
       result `shouldBe` Nothing
 
     it "count returns the number of rows matching a filter" $ \TestEnv {envPool = pool} -> do
-      _ <- WidgetFixtures.insertWidget pool "alpha"
-      _ <- WidgetFixtures.insertWidget pool "alpha"
+      _ <- insertDescribed pool "alpha-1" "pair"
+      _ <- insertDescribed pool "alpha-2" "pair"
       _ <- WidgetFixtures.insertWidget pool "beta"
-      n <- runDb pool (Ops.count @WidgetTable $ matching (eq widgetName "alpha"))
+      n <- runDb pool (Ops.count @WidgetTable $ matching (eq widgetDescription "pair"))
       n `shouldBe` 2
 
     it "count returns 0 when no rows match" $ \TestEnv {envPool = pool} -> do
@@ -221,15 +179,15 @@ operationsSpec =
       updated.description `shouldBe` Nothing
 
     it "findMany supports offset" $ \TestEnv {envPool = pool} -> do
-      _ <- WidgetFixtures.insertWidget pool "alpha"
-      _ <- WidgetFixtures.insertWidget pool "alpha"
-      _ <- WidgetFixtures.insertWidget pool "alpha"
-      allAlpha <- runDb pool (Ops.findMany @WidgetTable @WidgetRow $ matching (eq widgetName "alpha"))
+      _ <- insertDescribed pool "alpha-1" "page"
+      _ <- insertDescribed pool "alpha-2" "page"
+      _ <- insertDescribed pool "alpha-3" "page"
+      allAlpha <- runDb pool (Ops.findMany @WidgetTable @WidgetRow $ matching (eq widgetDescription "page"))
       paged <-
         runDb
           pool
           ( Ops.findMany @WidgetTable @WidgetRow $
-              offset 1 . limit 1 . orderBy widgetCreatedAt Asc . matching (eq widgetName "alpha")
+              offset 1 . limit 1 . orderBy widgetCreatedAt Asc . matching (eq widgetDescription "page")
           )
       length allAlpha `shouldBe` 3
       length paged `shouldBe` 1
@@ -362,3 +320,17 @@ operationsSpec =
                             Left (ForeignKeyViolation _) -> True
                             _ -> False
                         )
+
+insertDescribed pool name description =
+  runDb
+    pool
+    ( Insert.insert @WidgetTable @WidgetRow
+        WidgetCreate
+          { id = Nothing,
+            createdAt = Nothing,
+            updatedAt = Nothing,
+            name,
+            description = Value description
+          }
+    )
+    >>= assertRight

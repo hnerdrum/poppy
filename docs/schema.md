@@ -72,7 +72,7 @@ The include and nested-write field is the relation name. `hasMany "posts" …` o
 unique_ "Post" ["title"]
 ```
 
-Pass the Schema field names (`title`), not the Postgres column. `findUnique` only accepts `eq` on the primary key, or `eq` on every field of one of these uniques. `upsert` conflicts on the first `unique_` you listed for that model; if there isn't one, it uses the primary key.
+Pass the Schema field names (`title`), not the Postgres column. Each unique, including the primary key, becomes a constructor on `PostUnique` (`ById`, `ByTitle`) and `PostUniqueKey` (`OnId`, `OnTitle`). `findUnique` uses `uniqueQuery (Post.ByTitle "Notes")`. `update` and `delete` take `PostUnique`. `upsert` takes `PostUniqueKey` and conflicts on that key.
 
 ## Validation
 

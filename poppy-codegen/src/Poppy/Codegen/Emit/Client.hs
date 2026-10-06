@@ -6,9 +6,11 @@ module Poppy.Codegen.Emit.Client
   )
 where
 
-import Data.Maybe (isNothing)
+import Data.List (nub)
+import Data.Maybe (isJust, isNothing)
 import Data.Text (Text)
 import qualified Data.Text as T
+import Poppy.Codegen.Emit.Schema (enumImportLine, schemaEnumPrefix)
 import Poppy.Codegen.EmitCommon
   ( createTypeName,
     fieldBinder,
@@ -26,7 +28,7 @@ import Poppy.Codegen.EmitCommon
   )
 import Poppy.Codegen.IR
 import Poppy.Codegen.Lookup (lookupField, lookupModel, lookupUniques)
-import Poppy.Codegen.TextUtil (upperFirst)
+import Poppy.Codegen.TextUtil (lowerFirst, upperFirst)
 
 emitClientModule :: Text -> Schema -> Model -> Text
 emitClientModule moduleName schema model =
@@ -37,8 +39,11 @@ emitClientModule moduleName schema model =
 emitSimpleClientModule :: Text -> Schema -> Model -> Text
 emitSimpleClientModule moduleName schema model =
   T.unlines
-    [ "{-# LANGUAGE FlexibleContexts #-}",
+    [       "{-# LANGUAGE DuplicateRecordFields #-}",
+      "{-# LANGUAGE FlexibleContexts #-}",
       "{-# LANGUAGE FlexibleInstances #-}",
+      "{-# LANGUAGE LambdaCase #-}",
+      "{-# LANGUAGE NamedFieldPuns #-}",
       "{-# LANGUAGE RecordWildCards #-}",
       "{-# LANGUAGE TypeApplications #-}",
       "{-# LANGUAGE TypeFamilies #-}",
@@ -47,15 +52,15 @@ emitSimpleClientModule moduleName schema model =
       emitSimpleExports model,
       "where",
       "",
-      "import Data.UUID (UUID)",
+      valueImportsBlock schema moduleName model,
       "import Poppy.Db (Db)",
-      "import Poppy.Errors (ORMError (..), requireFound)",
+      "import Poppy.Errors (ORMError (..), fromUniqueRows, requireFound, uniqueOrFail)",
       "import qualified Poppy.Delete as Delete",
       "import qualified Poppy.Insert as Insert",
       "import qualified Poppy.Operations as Ops",
       "import Poppy.Query (OrderBy, QueryBuilder, applyQueryModifiers, matching, selectColumns)",
       "import Poppy.Select (OmitSelect (..), Picked (..))",
-      "import Poppy.Where (Where)",
+      whereImport schema model Nothing,
       "import "
         <> schemaModule moduleName model
         <> " ("
@@ -77,9 +82,11 @@ emitSimpleClientModule moduleName schema model =
         <> ", "
         <> updateTypeName model
         <> " (..), "
-        <> fieldBinder model (primaryKeyField model)
+        <> uniqueFieldImportList schema model
         <> ")",
       "import qualified Poppy.Update as Update",
+      "",
+      emitUniqueDecls schema model,
       "",
       emitCreateFn model,
       "",
@@ -89,11 +96,15 @@ emitSimpleClientModule moduleName schema model =
       "",
       emitUpdateManyFn model,
       "",
-      emitClientUpsertFn schema model,
+      emitClientUpsertFn model,
       "",
       emitQueryType model,
       "",
+      emitUniqueQueryType False model,
+      "",
       emitEmptyQueryFn model,
+      "",
+      emitUniqueQueryFn False model,
       "",
       emitResolveSelect model,
       "",
@@ -113,6 +124,7 @@ emitIncludeClientModule moduleName schema root =
         "{-# LANGUAGE DuplicateRecordFields #-}",
         "{-# LANGUAGE FlexibleContexts #-}",
         "{-# LANGUAGE FlexibleInstances #-}",
+        "{-# LANGUAGE LambdaCase #-}",
         "{-# LANGUAGE MultiParamTypeClasses #-}",
         "{-# LANGUAGE NamedFieldPuns #-}",
         "{-# LANGUAGE NoFieldSelectors #-}",
@@ -131,11 +143,12 @@ emitIncludeClientModule moduleName schema root =
     )
     <> "\n"
     <> intercalateSections
-      ( [ emitCreateFn root,
+      ( emitUniqueDecls schema root
+          : [ emitCreateFn root,
           emitClientCreateManyFn root,
           emitUpdateFn root,
           emitUpdateManyFn root,
-          emitClientUpsertFn schema root
+          emitClientUpsertFn root
         ]
           ++ nestedWriteSections
           ++ emitIncludeReadDefinitions schema root
@@ -637,7 +650,11 @@ emitSimpleExports model =
       "    " <> updateTypeName model <> " (..),",
       "    " <> tableTypeName model <> ",",
       "    " <> queryTypeName model <> " (..),",
+      "    " <> uniqueTypeName model <> " (..),",
+      "    " <> uniqueKeyTypeName model <> " (..),",
+      "    " <> uniqueQueryName model <> " (..),",
       "    emptyQuery,",
+      "    uniqueQuery,",
       "    " <> fieldBinder model (primaryKeyField model),
       "  )"
     ]
@@ -661,8 +678,12 @@ includeClientExportItems schema root =
          "deleteMany,"
        ]
     ++ nestedWriteExportItems schema root
-    ++ [ queryTypeName root <> " (..),",
+    ++ [          queryTypeName root <> " (..),",
+         uniqueTypeName root <> " (..),",
+         uniqueKeyTypeName root <> " (..),",
+         uniqueQueryName root <> " (..),",
          "emptyQuery,",
+         "uniqueQuery,",
          "OmitSelect (..),",
          "Picked (..),",
          createTypeName root <> " (..),",
@@ -705,14 +726,14 @@ includeClientImportLines moduleName schema root =
   nestedPreludeImports nested
     ++ [ dbImport nested,
          "import qualified Poppy.Delete as Delete",
-         "import Poppy.Errors (ORMError (..), requireFound)",
+         "import Poppy.Errors (ORMError (..), fromUniqueRows, requireFound, uniqueOrFail)",
          "import qualified Poppy.Insert as Insert",
          "import qualified Poppy.Operations as Ops",
          "import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)",
          "import Poppy.Select (OmitSelect (..), Picked (..))",
          "import Poppy.SelectIn (prepareIncludeRootQuery)",
          "import qualified Poppy.Update as Update",
-         whereImport nested,
+         whereImport schema root nested,
          "import "
            <> schemaModule moduleName root
            <> " ("
@@ -734,17 +755,18 @@ includeClientImportLines moduleName schema root =
            <> ", "
            <> updateTypeName root
            <> " (..), "
-           <> fieldBinder root (primaryKeyField root)
+           <> uniqueFieldImportList schema root
            <> ")",
-         includeModuleImportLine moduleName root
+         includeModuleImportLine moduleName root nested
        ]
     ++ nestedChildImport moduleName nested
     ++ nestedChildEnumImports moduleName schema nested
+    ++ extraValueImports moduleName schema root nested
   where
     nested = nestedWriteRelation schema root
 
-includeModuleImportLine :: Text -> Model -> Text
-includeModuleImportLine moduleName model =
+includeModuleImportLine :: Text -> Model -> Maybe (RelationSpec, Model) -> Text
+includeModuleImportLine moduleName model nested =
   "import "
     <> includeModule moduleName model
     <> " ("
@@ -755,9 +777,9 @@ includeModuleImportLine moduleName model =
       [ "Load" <> modelName model <> " (..)",
         includeType model <> " (..)",
         readType model,
-        withType model <> " (..)",
         toWithPickedName model
       ]
+        ++ [withType model <> " (..)" | isJust nested]
 
 nestedPreludeImports :: Maybe (RelationSpec, Model) -> [Text]
 nestedPreludeImports Nothing =
@@ -780,9 +802,12 @@ dbImport :: Maybe (RelationSpec, Model) -> Text
 dbImport Nothing = "import Poppy.Db (Db)"
 dbImport (Just _) = "import Poppy.Db (Db, liftIO, transactionEither)"
 
-whereImport :: Maybe (RelationSpec, Model) -> Text
-whereImport Nothing = "import Poppy.Where (Where)"
-whereImport (Just _) = "import Poppy.Where (Where, and_, eq, in_)"
+whereImport :: Schema -> Model -> Maybe (RelationSpec, Model) -> Text
+whereImport schema model Nothing =
+  let needsAnd = any ((> 1) . length . emittedFields) (modelUniqueKeys schema model)
+      names = ["Where", "eq"] ++ ["and_" | needsAnd]
+   in "import Poppy.Where (" <> T.intercalate ", " names <> ")"
+whereImport _ _ (Just _) = "import Poppy.Where (Where, and_, eq, in_)"
 
 nestedChildImport :: Text -> Maybe (RelationSpec, Model) -> [Text]
 nestedChildImport _ Nothing = []
@@ -830,8 +855,9 @@ emitClientCreateManyFn model =
 emitUpdateFn :: Model -> Text
 emitUpdateFn model =
   T.unlines
-    [ "update :: UUID -> " <> updateTypeName model <> " -> Db (Either ORMError " <> rowTypeName model <> ")",
-      "update = Update.update @" <> tableTypeName model <> " @" <> rowTypeName model
+    [ "update :: " <> uniqueTypeName model <> " -> " <> updateTypeName model <> " -> Db (Either ORMError " <> rowTypeName model <> ")",
+      "update key input =",
+      "  Update.updateWhere @" <> tableTypeName model <> " @" <> rowTypeName model <> " (" <> uniqueWhereName model <> " key) input"
     ]
 
 emitUpdateManyFn :: Model -> Text
@@ -841,76 +867,81 @@ emitUpdateManyFn model =
       "updateMany = Update.updateMany @" <> tableTypeName model
     ]
 
-emitClientUpsertFn :: Schema -> Model -> Text
-emitClientUpsertFn schema model =
+emitClientUpsertFn :: Model -> Text
+emitClientUpsertFn model =
   T.unlines
-    [ "upsert :: " <> createTypeName model <> " -> " <> updateTypeName model <> " -> Db (Either ORMError " <> rowTypeName model <> ")",
-      "upsert = Insert.upsert @" <> tableTypeName model <> " @" <> rowTypeName model <> " " <> listLit (upsertConflictCols schema model)
+    [ "upsert :: " <> uniqueKeyTypeName model <> " -> " <> createTypeName model <> " -> " <> updateTypeName model <> " -> Db (Either ORMError " <> rowTypeName model <> ")",
+      "upsert key createInput updateInput =",
+      "  Insert.upsert @" <> tableTypeName model <> " @" <> rowTypeName model <> " (" <> uniqueConflictName model <> " key) createInput updateInput"
     ]
-
-upsertConflictCols :: Schema -> Model -> [Text]
-upsertConflictCols schema model =
-  case uniqueCols schema model of
-    [] -> [fieldColumn (primaryKeyField model)]
-    cols -> cols
 
 emitFindManyFn :: Model -> Text
 emitFindManyFn model =
-  T.unlines $
-    [ "class Read" <> modelName model <> " select where",
-      "  findMany :: " <> queryTypeName model <> " select -> Db [ResolveSelect select]",
-      "  findUnique :: " <> queryTypeName model <> " select -> Db (Either ORMError (Maybe (ResolveSelect select)))",
-      "  findUniqueOrFail :: " <> queryTypeName model <> " select -> Db (Either ORMError (ResolveSelect select))",
-      "  findFirst :: " <> queryTypeName model <> " select -> Db (Maybe (ResolveSelect select))",
-      "  findFirstOrFail :: " <> queryTypeName model <> " select -> Db (Either ORMError (ResolveSelect select))",
-      "",
-      "instance Read" <> modelName model <> " OmitSelect where",
-      "  findMany q =",
-      "    Ops.findMany @" <> tableTypeName model <> " @" <> rowTypeName model <> " (applyQuery q)",
-      "  findUnique " <> queryTypeName model <> " {where_} =",
-      "    Ops.findUniqueWhere @" <> tableTypeName model <> " @" <> rowTypeName model <> " where_"
-    ]
-      ++ emitFindUniqueOrFailLines
-      ++ [ "  findFirst q =",
-           "    Ops.findFirst @" <> tableTypeName model <> " @" <> rowTypeName model <> " (applyQuery q)"
-         ]
-      ++ emitFindFirstOrFailLines
-      ++ [ "",
-           "instance Read" <> modelName model <> " " <> selectTypeName model <> " where",
-           "  findMany q@" <> queryTypeName model <> " {select_} =",
-           "    Ops.findManyWith",
-           "      (" <> parsePickedName model <> " select_)",
-           "      (selectColumns (" <> selectColumnsFnName model <> " select_) . applyQuery q)"
-         ]
-      ++ emitFindUniqueByRowsLines
-        (tableTypeName model)
-        (queryTypeName model <> " {select_, where_}")
-        [ "rows <-",
-          "  Ops.findManyWith",
-          "    (" <> parsePickedName model <> " select_)",
-          "    (selectColumns (" <> selectColumnsFnName model <> " select_) . matching w)"
+  let q = queryTypeName model
+      uq = uniqueQueryName model
+      table = tableTypeName model
+      row = rowTypeName model
+      whereFn = uniqueWhereName model
+   in T.unlines $
+        [ "class Read" <> modelName model <> " select where",
+          "  findMany :: " <> q <> " select -> Db [ResolveSelect select]",
+          "  findUnique :: " <> uq <> " select -> Db (Either ORMError (Maybe (ResolveSelect select)))",
+          "  findUniqueOrFail :: " <> uq <> " select -> Db (Either ORMError (ResolveSelect select))",
+          "  findFirst :: " <> q <> " select -> Db (Maybe (ResolveSelect select))",
+          "  findFirstOrFail :: " <> q <> " select -> Db (Either ORMError (ResolveSelect select))",
+          "",
+          "instance Read" <> modelName model <> " OmitSelect where",
+          "  findMany q =",
+          "    Ops.findMany @" <> table <> " @" <> row <> " (applyQuery q)"
         ]
-      ++ emitFindUniqueOrFailLines
-      ++ [ "  findFirst q@" <> queryTypeName model <> " {select_} =",
-           "    Ops.findFirstWith",
-           "      (" <> parsePickedName model <> " select_)",
-           "      (selectColumns (" <> selectColumnsFnName model <> " select_) . applyQuery q)"
-         ]
-      ++ emitFindFirstOrFailLines
-      ++ [ "",
-           "applyQuery :: " <> queryTypeName model <> " select -> QueryBuilder " <> tableTypeName model <> " -> QueryBuilder " <> tableTypeName model,
-           "applyQuery " <> queryTypeName model <> " {where_, orderBy_, limit_, offset_} =",
-           "  applyQueryModifiers where_ orderBy_ limit_ offset_"
-         ]
+          ++ emitFindUniqueByRowsLines
+            whereFn
+            (uq <> " {where_}")
+            ["rows <- Ops.findMany @" <> table <> " @" <> row <> " (matching w)"]
+          ++ emitFindUniqueOrFailLines
+          ++ [ "  findFirst q =",
+               "    Ops.findFirst @" <> table <> " @" <> row <> " (applyQuery q)"
+             ]
+          ++ emitFindFirstOrFailLines
+          ++ [ "",
+               "instance Read" <> modelName model <> " " <> selectTypeName model <> " where",
+               "  findMany q@" <> q <> " {select_} =",
+               "    Ops.findManyWith",
+               "      (" <> parsePickedName model <> " select_)",
+               "      (selectColumns (" <> selectColumnsFnName model <> " select_) . applyQuery q)"
+             ]
+          ++ emitFindUniqueByRowsLines
+            whereFn
+            (uq <> " {where_, select_}")
+            [ "rows <-",
+              "  Ops.findManyWith",
+              "    (" <> parsePickedName model <> " select_)",
+              "    (selectColumns (" <> selectColumnsFnName model <> " select_) . matching w)"
+            ]
+          ++ emitFindUniqueOrFailLines
+          ++ [ "  findFirst q@" <> q <> " {select_} =",
+               "    Ops.findFirstWith",
+               "      (" <> parsePickedName model <> " select_)",
+               "      (selectColumns (" <> selectColumnsFnName model <> " select_) . applyQuery q)"
+             ]
+          ++ emitFindFirstOrFailLines
+          ++ [ "",
+               "applyQuery :: " <> q <> " select -> QueryBuilder " <> table <> " -> QueryBuilder " <> table,
+               "applyQuery " <> q <> " {where_, orderBy_, limit_, offset_} =",
+               "  applyQueryModifiers where_ orderBy_ limit_ offset_"
+             ]
 
 emitFindUniqueOrFailLines :: [Text]
 emitFindUniqueOrFailLines =
-  [ "  findUniqueOrFail q = do",
-    "    result <- findUnique q",
-    "    case result of",
-    "      Left err -> pure (Left err)",
-    "      Right found -> pure $ requireFound found (RecordNotFound \"No record found matching query\")"
+  ["  findUniqueOrFail q = uniqueOrFail <$> findUnique q"]
+
+emitFindUniqueByRowsLines :: Text -> Text -> [Text] -> [Text]
+emitFindUniqueByRowsLines whereFn binding rowLines =
+  [ "  findUnique " <> binding <> " = do",
+    "    let w = " <> whereFn <> " where_"
   ]
+    ++ map ("    " <>) rowLines
+    ++ ["    pure (fromUniqueRows rows)"]
 
 emitFindFirstOrFailLines :: [Text]
 emitFindFirstOrFailLines =
@@ -933,20 +964,6 @@ emitIncludeCountFn model =
       "count " <> queryTypeName model <> " {where_, orderBy_, limit_, offset_} =",
       "  Ops.count @" <> tableTypeName model <> " (applyQueryModifiers where_ orderBy_ limit_ offset_)"
     ]
-
-emitFindUniqueByRowsLines :: Text -> Text -> [Text] -> [Text]
-emitFindUniqueByRowsLines table binding rowLines =
-  [ "  findUnique " <> binding <> " =",
-    "    case Ops.requireUniqueWhere @" <> table <> " where_ of",
-    "      Left err -> pure (Left err)",
-    "      Right w -> do"
-  ]
-    ++ map ("        " <>) rowLines
-    ++ [ "        pure $ case rows of",
-         "          [] -> Right Nothing",
-         "          [row] -> Right (Just row)",
-         "          _ -> Left (MultipleRecordsFound \"findUnique matched multiple rows\")"
-       ]
 
 emitResolveSelect :: Model -> Text
 emitResolveSelect model =
@@ -979,8 +996,9 @@ emitQueryType model =
 emitDeleteFn :: Model -> Text
 emitDeleteFn model =
   T.unlines
-    [ "delete :: UUID -> Db (Either ORMError Int)",
-      "delete = Ops.delete @" <> tableTypeName model
+    [ "delete :: " <> uniqueTypeName model <> " -> Db (Either ORMError Int)",
+      "delete key =",
+      "  Delete.deleteMany @" <> tableTypeName model <> " (" <> uniqueWhereName model <> " key)"
     ]
 
 emitDeleteManyFn :: Model -> Text
@@ -993,7 +1011,9 @@ emitDeleteManyFn model =
 emitIncludeReadDefinitions :: Schema -> Model -> [Text]
 emitIncludeReadDefinitions schema model =
   [ emitIncludeQueryType model,
+    emitUniqueQueryType True model,
     emitIncludeEmptyQueryFn model,
+    emitUniqueQueryFn True model,
     emitIncludeFindManyClass model,
     emitIncludeFindManyInstances model,
     emitIncludeCountFn model
@@ -1023,15 +1043,49 @@ emitIncludeEmptyQueryFn model =
       "  " <> queryTypeName model <> " {include_ = (), select_ = OmitSelect, where_ = Nothing, orderBy_ = [], limit_ = Nothing, offset_ = Nothing}"
     ]
 
+emitUniqueQueryType :: Bool -> Model -> Text
+emitUniqueQueryType withInclude model =
+  let name = uniqueQueryName model
+      params = if withInclude then " include select" else " select"
+      fields =
+        ["include_ :: include" | withInclude]
+          ++ [ "select_ :: select",
+               "where_ :: " <> uniqueTypeName model
+             ]
+   in T.unlines $
+        ["data " <> name <> params <> " = " <> name]
+          ++ zipWith fieldLine [0 :: Int ..] fields
+          ++ ["  }"]
+  where
+    fieldLine 0 f = "  { " <> f
+    fieldLine _ f = "  , " <> f
+
+emitUniqueQueryFn :: Bool -> Model -> Text
+emitUniqueQueryFn withInclude model =
+  let name = uniqueQueryName model
+      result =
+        if withInclude
+          then name <> " () OmitSelect"
+          else name <> " OmitSelect"
+      fields =
+        ["include_ = ()" | withInclude]
+          ++ ["select_ = OmitSelect", "where_ = key"]
+   in T.unlines
+        [ "uniqueQuery :: " <> uniqueTypeName model <> " -> " <> result,
+          "uniqueQuery key =",
+          "  " <> name <> " {" <> T.intercalate ", " fields <> "}"
+        ]
+
 emitIncludeFindManyClass :: Model -> Text
 emitIncludeFindManyClass model =
   let query = queryTypeName model
+      uniqueQuery = uniqueQueryName model
       result = readType model <> " include select"
    in T.unlines
         [ "class Read" <> modelName model <> " include select where",
           "  findMany :: " <> query <> " include select -> Db [" <> result <> "]",
-          "  findUnique :: " <> query <> " include select -> Db (Either ORMError (Maybe (" <> result <> ")))",
-          "  findUniqueOrFail :: " <> query <> " include select -> Db (Either ORMError (" <> result <> "))",
+          "  findUnique :: " <> uniqueQuery <> " include select -> Db (Either ORMError (Maybe (" <> result <> ")))",
+          "  findUniqueOrFail :: " <> uniqueQuery <> " include select -> Db (Either ORMError (" <> result <> "))",
           "  findFirst :: " <> query <> " include select -> Db (Maybe (" <> result <> "))",
           "  findFirstOrFail :: " <> query <> " include select -> Db (Either ORMError (" <> result <> "))"
         ]
@@ -1041,6 +1095,7 @@ emitIncludeFindManyInstances model =
   let table = tableTypeName model
       row = rowTypeName model
       query = queryTypeName model
+      uq = uniqueQueryName model
       selectTy = selectTypeName model
       parseFn = parsePickedName model
       colsFn = selectColumnsFnName model
@@ -1048,67 +1103,38 @@ emitIncludeFindManyInstances model =
       modelNm = modelName model
       includeTy = includeApplied model
       load = loadMethod model
+      whereFn = uniqueWhereName model
       rootFetch modifier =
         "Ops.findMany @" <> table <> " @" <> row <> " (prepareIncludeRootQuery @" <> table <> " (" <> modifier <> "))"
-      uniqueFromInclude =
-        emitFindUniqueByRowsLines
-          table
-          (query <> " {include_, where_}")
-          [ "roots <- " <> rootFetch "matching w",
-            "rows <- " <> load <> " include_ roots"
-          ]
-          ++ emitFindUniqueOrFailLines
-          ++ emitLoadedFindFirstFor model load False
-          ++ emitFindFirstOrFailLines
-      uniqueFromWhere =
-        [ "  findUnique " <> query <> " {where_} =",
-          "    Ops.findUniqueWhere @" <> table <> " @" <> row <> " where_"
-        ]
-          ++ emitFindUniqueOrFailLines
-          ++ [ "  findFirst " <> query <> " {where_, orderBy_, limit_, offset_} =",
-               "    Ops.findFirst @" <> table <> " @" <> row <> " (applyQueryModifiers where_ orderBy_ limit_ offset_)"
-             ]
-          ++ emitFindFirstOrFailLines
-      uniqueFromSelect =
-        emitFindUniqueByRowsLines
-          table
-          (query <> " {select_, where_}")
-          [ "rows <-",
-            "  Ops.findManyWith",
-            "    (" <> parseFn <> " select_)",
-            "    (selectColumns (" <> colsFn <> " select_) . matching w)"
-          ]
-          ++ emitFindUniqueOrFailLines
-          ++ [ "  findFirst " <> query <> " {select_, where_, orderBy_, limit_, offset_} =",
-               "    Ops.findFirstWith",
-               "      (" <> parseFn <> " select_)",
-               "      (selectColumns (" <> colsFn <> " select_) . applyQueryModifiers where_ orderBy_ limit_ offset_)"
-             ]
-          ++ emitFindFirstOrFailLines
-      uniqueFromIncludeSelect =
-        emitFindUniqueByRowsLines
-          table
-          (query <> " {include_, select_, where_}")
-          [ "roots <- " <> rootFetch "matching w",
-            "loaded <- " <> load <> " include_ roots",
-            "let rows = map (" <> toPicked <> " select_) loaded"
-          ]
-          ++ emitFindUniqueOrFailLines
-          ++ emitLoadedFindFirstFor model load True
-          ++ emitFindFirstOrFailLines
    in T.unlines $
         [ "instance (" <> loadClass model <> ") => Read" <> modelNm <> " (" <> includeTy <> ") OmitSelect where",
           "  findMany " <> query <> " {include_, where_, orderBy_, limit_, offset_} = do",
           "    roots <- " <> rootFetch "applyQueryModifiers where_ orderBy_ limit_ offset_",
           "    " <> load <> " include_ roots"
         ]
-          ++ uniqueFromInclude
+          ++ emitFindUniqueByRowsLines
+            whereFn
+            (uq <> " {where_, include_}")
+            [ "roots <- " <> rootFetch "matching w",
+              "rows <- " <> load <> " include_ roots"
+            ]
+          ++ emitFindUniqueOrFailLines
+          ++ emitLoadedFindFirstFor model load False
+          ++ emitFindFirstOrFailLines
           ++ [ "",
                "instance Read" <> modelNm <> " () OmitSelect where",
                "  findMany " <> query <> " {where_, orderBy_, limit_, offset_} =",
                "    Ops.findMany @" <> table <> " @" <> row <> " (applyQueryModifiers where_ orderBy_ limit_ offset_)"
              ]
-          ++ uniqueFromWhere
+          ++ emitFindUniqueByRowsLines
+            whereFn
+            (uq <> " {where_}")
+            ["rows <- Ops.findMany @" <> table <> " @" <> row <> " (matching w)"]
+          ++ emitFindUniqueOrFailLines
+          ++ [ "  findFirst " <> query <> " {where_, orderBy_, limit_, offset_} =",
+               "    Ops.findFirst @" <> table <> " @" <> row <> " (applyQueryModifiers where_ orderBy_ limit_ offset_)"
+             ]
+          ++ emitFindFirstOrFailLines
           ++ [ "",
                "instance (" <> loadClass model <> ") => Read" <> modelNm <> " (" <> includeTy <> ") " <> selectTy <> " where",
                "  findMany " <> query <> " {include_, select_, where_, orderBy_, limit_, offset_} = do",
@@ -1116,7 +1142,16 @@ emitIncludeFindManyInstances model =
                "    loaded <- " <> load <> " include_ roots",
                "    pure $ map (" <> toPicked <> " select_) loaded"
              ]
-          ++ uniqueFromIncludeSelect
+          ++ emitFindUniqueByRowsLines
+            whereFn
+            (uq <> " {where_, include_, select_}")
+            [ "roots <- " <> rootFetch "matching w",
+              "loaded <- " <> load <> " include_ roots",
+              "let rows = map (" <> toPicked <> " select_) loaded"
+            ]
+          ++ emitFindUniqueOrFailLines
+          ++ emitLoadedFindFirstFor model load True
+          ++ emitFindFirstOrFailLines
           ++ [ "",
                "instance Read" <> modelNm <> " () " <> selectTy <> " where",
                "  findMany " <> query <> " {select_, where_, orderBy_, limit_, offset_} =",
@@ -1124,7 +1159,21 @@ emitIncludeFindManyInstances model =
                "      (" <> parseFn <> " select_)",
                "      (selectColumns (" <> colsFn <> " select_) . applyQueryModifiers where_ orderBy_ limit_ offset_)"
              ]
-          ++ uniqueFromSelect
+          ++ emitFindUniqueByRowsLines
+            whereFn
+            (uq <> " {where_, select_}")
+            [ "rows <-",
+              "  Ops.findManyWith",
+              "    (" <> parseFn <> " select_)",
+              "    (selectColumns (" <> colsFn <> " select_) . matching w)"
+            ]
+          ++ emitFindUniqueOrFailLines
+          ++ [ "  findFirst " <> query <> " {select_, where_, orderBy_, limit_, offset_} =",
+               "    Ops.findFirstWith",
+               "      (" <> parseFn <> " select_)",
+               "      (selectColumns (" <> colsFn <> " select_) . applyQueryModifiers where_ orderBy_ limit_ offset_)"
+             ]
+          ++ emitFindFirstOrFailLines
 
 emitLoadedFindFirstFor :: Model -> Text -> Bool -> [Text]
 emitLoadedFindFirstFor model load picked =
@@ -1200,3 +1249,143 @@ clientSchemaPrefix clientModule =
                 then "Schema."
                 else parent <> ".Schema."
     _ -> "Schema."
+
+data EmittedUnique = EmittedUnique
+  { emittedCtor :: Text,
+    emittedKeyCtor :: Text,
+    emittedFields :: [FieldSpec]
+  }
+
+modelUniqueKeys :: Schema -> Model -> [EmittedUnique]
+modelUniqueKeys schema model =
+  emittedFrom (upperFirst (fieldName primary)) [primary]
+    : map fromConstraint (lookupUniques schema (modelName model))
+  where
+    primary = primaryKeyField model
+    fromConstraint constraint =
+      let fields = map (lookupField model) (uniqueFields constraint)
+       in emittedFrom (T.concat (map (upperFirst . fieldName) fields)) fields
+    emittedFrom label fields =
+      EmittedUnique
+        { emittedCtor = "By" <> label,
+          emittedKeyCtor = "On" <> label,
+          emittedFields = fields
+        }
+
+uniqueTypeName :: Model -> Text
+uniqueTypeName model = modelName model <> "Unique"
+
+uniqueQueryName :: Model -> Text
+uniqueQueryName model = modelName model <> "UniqueQuery"
+
+uniqueKeyTypeName :: Model -> Text
+uniqueKeyTypeName model = modelName model <> "UniqueKey"
+
+uniqueWhereName :: Model -> Text
+uniqueWhereName model = lowerFirst (modelName model) <> "UniqueWhere"
+
+uniqueConflictName :: Model -> Text
+uniqueConflictName model = lowerFirst (modelName model) <> "ConflictCols"
+
+uniqueFieldImportList :: Schema -> Model -> Text
+uniqueFieldImportList schema model =
+  T.intercalate ", " $
+    nub
+      [ fieldBinder model spec
+        | key <- modelUniqueKeys schema model,
+          spec <- emittedFields key
+      ]
+
+valueImportsBlock :: Schema -> Text -> Model -> Text
+valueImportsBlock schema moduleName model =
+  T.intercalate "\n" (valueImportLines schema moduleName model)
+
+valueImportLines :: Schema -> Text -> Model -> [Text]
+valueImportLines schema moduleName model =
+  nub $
+    "import Data.Text (Text)"
+      : concatMap (valueImport schema moduleName) (concatMap emittedFields (modelUniqueKeys schema model))
+
+extraValueImports :: Text -> Schema -> Model -> Maybe (RelationSpec, Model) -> [Text]
+extraValueImports moduleName schema model nested =
+  filter (`notElem` nestedPreludeImports nested) (valueImportLines schema moduleName model)
+
+valueImport :: Schema -> Text -> FieldSpec -> [Text]
+valueImport schema moduleName spec =
+  case fieldType spec of
+    TyText -> []
+    TyUuid -> ["import Data.UUID (UUID)"]
+    TyNumeric -> ["import Data.Scientific (Scientific)"]
+    TyJsonb -> ["import Data.Aeson (Value)"]
+    TyTimestamptz -> ["import Data.Time (UTCTime)"]
+    TyInt -> []
+    TyBool -> []
+    TyEnum name ->
+      [ enumImportLine (schemaEnumPrefix moduleName) enumSpec
+        | enumSpec <- schemaEnums schema,
+          enumName enumSpec == name
+      ]
+
+emitUniqueDecls :: Schema -> Model -> Text
+emitUniqueDecls schema model =
+  let keys = modelUniqueKeys schema model
+   in T.unlines $
+        emitSum (uniqueTypeName model) (map ctorLine keys)
+          ++ [""]
+          ++ emitSum (uniqueKeyTypeName model) (map emittedKeyCtor keys)
+          ++ [""]
+          ++ emitUniqueWhere model keys
+          ++ [""]
+          ++ emitConflictCols model keys
+  where
+    ctorLine key = emittedCtor key <> " " <> T.unwords (map emittedArgType (emittedFields key))
+
+emitSum :: Text -> [Text] -> [Text]
+emitSum name alts =
+  ["data " <> name]
+    ++ zipWith arm [0 :: Int ..] alts
+    ++ ["  deriving (Eq, Show)"]
+  where
+    arm 0 alt = "  = " <> alt
+    arm _ alt = "  | " <> alt
+
+emitUniqueWhere :: Model -> [EmittedUnique] -> [Text]
+emitUniqueWhere model keys =
+  let fn = uniqueWhereName model
+   in [ fn <> " :: " <> uniqueTypeName model <> " -> Where " <> tableTypeName model,
+        fn <> " = \\case"
+      ]
+        ++ map arm keys
+  where
+    arm key =
+      let binders = zipWith (\i _ -> "v" <> T.pack (show i)) [1 :: Int ..] (emittedFields key)
+          preds =
+            zipWith
+              (\spec binder -> "eq " <> fieldBinder model spec <> " " <> binder)
+              (emittedFields key)
+              binders
+       in "  "
+            <> emittedCtor key
+            <> " "
+            <> T.unwords binders
+            <> " -> "
+            <> T.intercalate " `and_` " preds
+
+emitConflictCols :: Model -> [EmittedUnique] -> [Text]
+emitConflictCols model keys =
+  let fn = uniqueConflictName model
+   in [ fn <> " :: " <> uniqueKeyTypeName model <> " -> [Text]",
+        fn <> " = \\case"
+      ]
+        ++ map arm keys
+  where
+    arm key =
+      "  "
+        <> emittedKeyCtor key
+        <> " -> "
+        <> listLit (map fieldColumn (emittedFields key))
+
+emittedArgType :: FieldSpec -> Text
+emittedArgType spec =
+  let base = hsType (fieldType spec)
+   in if fieldNullable spec then "(Maybe " <> base <> ")" else base

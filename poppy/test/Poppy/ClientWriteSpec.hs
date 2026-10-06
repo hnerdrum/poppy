@@ -5,7 +5,7 @@ where
 
 import Data.Text (Text)
 import Data.UUID.V4 (nextRandom)
-import Poppy (NullableValue (Omit), ORMError (..), eq, runDb)
+import Poppy (NullableValue (Omit, Value), ORMError (..), eq, runDb)
 import qualified Schema.Client.Widget as Widget
 import Schema.Widget (WidgetCreate (..), WidgetRow (..), WidgetUpdate (..), widgetName)
 import Support.Assert (assertRight)
@@ -64,29 +64,46 @@ clientWriteSpec =
       rows <- runDb pool (Widget.findMany Widget.emptyQuery)
       map (.name) rows `shouldBe` ["keep"]
 
-    it "upsert inserts then updates on the unique key" $ \TestEnv {envPool = pool} -> do
-      uid <- nextRandom
+    it "upsert OnName updates on conflict" $ \TestEnv {envPool = pool} -> do
       inserted <-
         runDb
           pool
-          ( Widget.upsert
-              (widgetCreate "first") {id = Just uid}
-              widgetUpdate
-          )
+          (Widget.upsert Widget.OnName (widgetCreate "first") widgetUpdate)
           >>= assertRight
       inserted.name `shouldBe` "first"
       updated <-
         runDb
           pool
           ( Widget.upsert
-              (widgetCreate "ignored") {id = Just uid}
+              Widget.OnName
+              (widgetCreate "first")
               widgetUpdate {name = Just "second"}
           )
           >>= assertRight
-      updated.id `shouldBe` uid
+      updated.id `shouldBe` inserted.id
       updated.name `shouldBe` "second"
       rows <- runDb pool (Widget.findMany Widget.emptyQuery)
       map (.name) rows `shouldBe` ["second"]
+
+    it "update and delete take a unique key" $ \TestEnv {envPool = pool} -> do
+      created <- runDb pool (Widget.create (widgetCreate "sage")) >>= assertRight
+      same <-
+        runDb pool (Widget.update (Widget.ByName "sage") widgetUpdate)
+          >>= assertRight
+      same.id `shouldBe` created.id
+      updated <-
+        runDb
+          pool
+          ( Widget.update
+              (Widget.ByName "sage")
+              widgetUpdate {description = Value "fresh"}
+          )
+          >>= assertRight
+      updated.description `shouldBe` Just "fresh"
+      n <-
+        runDb pool (Widget.delete (Widget.ById created.id))
+          >>= assertRight
+      n `shouldBe` 1
 
 widgetCreate :: Text -> WidgetCreate
 widgetCreate name =

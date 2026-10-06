@@ -2,6 +2,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NoFieldSelectors #-}
@@ -40,7 +41,11 @@ module Schema.Client.Shelf
     BookNestedOps (..),
     emptyBookNestedOps,
     ShelfQuery (..),
+    ShelfUnique (..),
+    ShelfUniqueKey (..),
+    ShelfUniqueQuery (..),
     emptyQuery,
+    uniqueQuery,
     OmitSelect (..),
     Picked (..),
     ShelfCreate (..),
@@ -61,7 +66,7 @@ import Poppy.Core (fieldColumn)
 import Poppy.PG (toField)
 import Poppy.Db (Db, liftIO, transactionEither)
 import qualified Poppy.Delete as Delete
-import Poppy.Errors (ORMError (..), requireFound)
+import Poppy.Errors (ORMError (..), fromUniqueRows, requireFound, uniqueOrFail)
 import qualified Poppy.Insert as Insert
 import qualified Poppy.Operations as Ops
 import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)
@@ -70,8 +75,24 @@ import Poppy.SelectIn (prepareIncludeRootQuery)
 import qualified Poppy.Update as Update
 import Poppy.Where (Where, and_, eq, in_)
 import Schema.Shelf (ShelfCreate (..), ShelfRow (..), ShelfSelect (..), ShelfPicked (..), shelfSelect, shelfSelectColumns, parseShelfPicked, ShelfTable, ShelfUpdate (..), shelfId)
-import Schema.Include.Shelf (LoadShelf (..), ShelfInclude (..), ShelfRead, ShelfWith (..), toShelfWithPicked)
+import Schema.Include.Shelf (LoadShelf (..), ShelfInclude (..), ShelfRead, toShelfWithPicked, ShelfWith (..))
 import Schema.Book (BookCreate (..), BookRow (..), BookUpdate (..), BookTable, bookId, bookShelfId)
+
+data ShelfUnique
+  = ById UUID
+  deriving (Eq, Show)
+
+data ShelfUniqueKey
+  = OnId
+  deriving (Eq, Show)
+
+shelfUniqueWhere :: ShelfUnique -> Where ShelfTable
+shelfUniqueWhere = \case
+  ById v1 -> eq shelfId v1
+
+shelfConflictCols :: ShelfUniqueKey -> [Text]
+shelfConflictCols = \case
+  OnId -> ["id"]
 
 create :: ShelfCreate -> Db (Either ORMError ShelfRow)
 create = Insert.insert @ShelfTable @ShelfRow
@@ -79,14 +100,16 @@ create = Insert.insert @ShelfTable @ShelfRow
 createMany :: [ShelfCreate] -> Db (Either ORMError Int)
 createMany = Insert.insertMany @ShelfTable
 
-update :: UUID -> ShelfUpdate -> Db (Either ORMError ShelfRow)
-update = Update.update @ShelfTable @ShelfRow
+update :: ShelfUnique -> ShelfUpdate -> Db (Either ORMError ShelfRow)
+update key input =
+  Update.updateWhere @ShelfTable @ShelfRow (shelfUniqueWhere key) input
 
 updateMany :: Where ShelfTable -> ShelfUpdate -> Db (Either ORMError Int)
 updateMany = Update.updateMany @ShelfTable
 
-upsert :: ShelfCreate -> ShelfUpdate -> Db (Either ORMError ShelfRow)
-upsert = Insert.upsert @ShelfTable @ShelfRow ["id"]
+upsert :: ShelfUniqueKey -> ShelfCreate -> ShelfUpdate -> Db (Either ORMError ShelfRow)
+upsert key createInput updateInput =
+  Insert.upsert @ShelfTable @ShelfRow (shelfConflictCols key) createInput updateInput
 
 data BookNestedCreate = BookNestedCreate
   { id :: Maybe UUID, title :: Text
@@ -297,14 +320,24 @@ data ShelfQuery include select = ShelfQuery
   , offset_ :: Maybe Int
   }
 
+data ShelfUniqueQuery include select = ShelfUniqueQuery
+  { include_ :: include
+  , select_ :: select
+  , where_ :: ShelfUnique
+  }
+
 emptyQuery :: ShelfQuery () OmitSelect
 emptyQuery =
   ShelfQuery {include_ = (), select_ = OmitSelect, where_ = Nothing, orderBy_ = [], limit_ = Nothing, offset_ = Nothing}
 
+uniqueQuery :: ShelfUnique -> ShelfUniqueQuery () OmitSelect
+uniqueQuery key =
+  ShelfUniqueQuery {include_ = (), select_ = OmitSelect, where_ = key}
+
 class ReadShelf include select where
   findMany :: ShelfQuery include select -> Db [ShelfRead include select]
-  findUnique :: ShelfQuery include select -> Db (Either ORMError (Maybe (ShelfRead include select)))
-  findUniqueOrFail :: ShelfQuery include select -> Db (Either ORMError (ShelfRead include select))
+  findUnique :: ShelfUniqueQuery include select -> Db (Either ORMError (Maybe (ShelfRead include select)))
+  findUniqueOrFail :: ShelfUniqueQuery include select -> Db (Either ORMError (ShelfRead include select))
   findFirst :: ShelfQuery include select -> Db (Maybe (ShelfRead include select))
   findFirstOrFail :: ShelfQuery include select -> Db (Either ORMError (ShelfRead include select))
 
@@ -312,21 +345,12 @@ instance (LoadShelf books tags) => ReadShelf (ShelfInclude books tags) OmitSelec
   findMany ShelfQuery {include_, where_, orderBy_, limit_, offset_} = do
     roots <- Ops.findMany @ShelfTable @ShelfRow (prepareIncludeRootQuery @ShelfTable (applyQueryModifiers where_ orderBy_ limit_ offset_))
     loadShelf include_ roots
-  findUnique ShelfQuery {include_, where_} =
-    case Ops.requireUniqueWhere @ShelfTable where_ of
-      Left err -> pure (Left err)
-      Right w -> do
-        roots <- Ops.findMany @ShelfTable @ShelfRow (prepareIncludeRootQuery @ShelfTable (matching w))
-        rows <- loadShelf include_ roots
-        pure $ case rows of
-          [] -> Right Nothing
-          [row] -> Right (Just row)
-          _ -> Left (MultipleRecordsFound "findUnique matched multiple rows")
-  findUniqueOrFail q = do
-    result <- findUnique q
-    case result of
-      Left err -> pure (Left err)
-      Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findUnique ShelfUniqueQuery {where_, include_} = do
+    let w = shelfUniqueWhere where_
+    roots <- Ops.findMany @ShelfTable @ShelfRow (prepareIncludeRootQuery @ShelfTable (matching w))
+    rows <- loadShelf include_ roots
+    pure (fromUniqueRows rows)
+  findUniqueOrFail q = uniqueOrFail <$> findUnique q
   findFirst ShelfQuery {include_, where_, orderBy_, offset_} = do
     roots <- Ops.findMany @ShelfTable @ShelfRow (prepareIncludeRootQuery @ShelfTable (applyQueryModifiers where_ orderBy_ (Just 1) offset_))
     loaded <- loadShelf include_ roots
@@ -340,13 +364,11 @@ instance (LoadShelf books tags) => ReadShelf (ShelfInclude books tags) OmitSelec
 instance ReadShelf () OmitSelect where
   findMany ShelfQuery {where_, orderBy_, limit_, offset_} =
     Ops.findMany @ShelfTable @ShelfRow (applyQueryModifiers where_ orderBy_ limit_ offset_)
-  findUnique ShelfQuery {where_} =
-    Ops.findUniqueWhere @ShelfTable @ShelfRow where_
-  findUniqueOrFail q = do
-    result <- findUnique q
-    case result of
-      Left err -> pure (Left err)
-      Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findUnique ShelfUniqueQuery {where_} = do
+    let w = shelfUniqueWhere where_
+    rows <- Ops.findMany @ShelfTable @ShelfRow (matching w)
+    pure (fromUniqueRows rows)
+  findUniqueOrFail q = uniqueOrFail <$> findUnique q
   findFirst ShelfQuery {where_, orderBy_, limit_, offset_} =
     Ops.findFirst @ShelfTable @ShelfRow (applyQueryModifiers where_ orderBy_ limit_ offset_)
   findFirstOrFail q = do
@@ -358,22 +380,13 @@ instance (LoadShelf books tags) => ReadShelf (ShelfInclude books tags) ShelfSele
     roots <- Ops.findMany @ShelfTable @ShelfRow (prepareIncludeRootQuery @ShelfTable (applyQueryModifiers where_ orderBy_ limit_ offset_))
     loaded <- loadShelf include_ roots
     pure $ map (toShelfWithPicked select_) loaded
-  findUnique ShelfQuery {include_, select_, where_} =
-    case Ops.requireUniqueWhere @ShelfTable where_ of
-      Left err -> pure (Left err)
-      Right w -> do
-        roots <- Ops.findMany @ShelfTable @ShelfRow (prepareIncludeRootQuery @ShelfTable (matching w))
-        loaded <- loadShelf include_ roots
-        let rows = map (toShelfWithPicked select_) loaded
-        pure $ case rows of
-          [] -> Right Nothing
-          [row] -> Right (Just row)
-          _ -> Left (MultipleRecordsFound "findUnique matched multiple rows")
-  findUniqueOrFail q = do
-    result <- findUnique q
-    case result of
-      Left err -> pure (Left err)
-      Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findUnique ShelfUniqueQuery {where_, include_, select_} = do
+    let w = shelfUniqueWhere where_
+    roots <- Ops.findMany @ShelfTable @ShelfRow (prepareIncludeRootQuery @ShelfTable (matching w))
+    loaded <- loadShelf include_ roots
+    let rows = map (toShelfWithPicked select_) loaded
+    pure (fromUniqueRows rows)
+  findUniqueOrFail q = uniqueOrFail <$> findUnique q
   findFirst ShelfQuery {select_, include_, where_, orderBy_, offset_} = do
     roots <- Ops.findMany @ShelfTable @ShelfRow (prepareIncludeRootQuery @ShelfTable (applyQueryModifiers where_ orderBy_ (Just 1) offset_))
     loaded <- loadShelf include_ roots
@@ -389,23 +402,14 @@ instance ReadShelf () ShelfSelect where
     Ops.findManyWith
       (parseShelfPicked select_)
       (selectColumns (shelfSelectColumns select_) . applyQueryModifiers where_ orderBy_ limit_ offset_)
-  findUnique ShelfQuery {select_, where_} =
-    case Ops.requireUniqueWhere @ShelfTable where_ of
-      Left err -> pure (Left err)
-      Right w -> do
-        rows <-
-          Ops.findManyWith
-            (parseShelfPicked select_)
-            (selectColumns (shelfSelectColumns select_) . matching w)
-        pure $ case rows of
-          [] -> Right Nothing
-          [row] -> Right (Just row)
-          _ -> Left (MultipleRecordsFound "findUnique matched multiple rows")
-  findUniqueOrFail q = do
-    result <- findUnique q
-    case result of
-      Left err -> pure (Left err)
-      Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findUnique ShelfUniqueQuery {where_, select_} = do
+    let w = shelfUniqueWhere where_
+    rows <-
+      Ops.findManyWith
+        (parseShelfPicked select_)
+        (selectColumns (shelfSelectColumns select_) . matching w)
+    pure (fromUniqueRows rows)
+  findUniqueOrFail q = uniqueOrFail <$> findUnique q
   findFirst ShelfQuery {select_, where_, orderBy_, limit_, offset_} =
     Ops.findFirstWith
       (parseShelfPicked select_)
@@ -433,8 +437,9 @@ reload include rootId = do
         (one : _) -> Right one
         [] -> Left (RecordNotFound "Record not found with primary key")
 
-delete :: UUID -> Db (Either ORMError Int)
-delete = Ops.delete @ShelfTable
+delete :: ShelfUnique -> Db (Either ORMError Int)
+delete key =
+  Delete.deleteMany @ShelfTable (shelfUniqueWhere key)
 
 deleteMany :: Where ShelfTable -> Db (Either ORMError Int)
 deleteMany = Delete.deleteMany @ShelfTable

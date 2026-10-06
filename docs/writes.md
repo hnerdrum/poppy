@@ -2,15 +2,15 @@
 
 These return `Db (Either ORMError …)`. Unique, foreign-key, and not-null failures from Postgres show up as `UniqueViolation`, `ForeignKeyViolation`, and `NotNullViolation`. See [Errors](errors.md).
 
-| Function     | You pass                   | You get               |
-| ------------ | -------------------------- | --------------------- |
-| `create`     | `TaskCreate`               | `TaskRow`             |
-| `createMany` | `[TaskCreate]`             | `Int` (rows inserted) |
-| `update`     | primary key, `TaskUpdate`  | `TaskRow`             |
-| `updateMany` | `Where`, `TaskUpdate`      | `Int`                 |
-| `upsert`     | `TaskCreate`, `TaskUpdate` | `TaskRow`             |
-| `delete`     | primary key                | `TaskRow`             |
-| `deleteMany` | `Where`                    | `Int`                 |
+| Function     | You pass                                    | You get               |
+| ------------ | ------------------------------------------- | --------------------- |
+| `create`     | `TaskCreate`                                | `TaskRow`             |
+| `createMany` | `[TaskCreate]`                              | `Int` (rows inserted) |
+| `update`     | `TaskUnique`, `TaskUpdate`                  | `TaskRow`             |
+| `updateMany` | `Where`, `TaskUpdate`                       | `Int`                 |
+| `upsert`     | `TaskUniqueKey`, `TaskCreate`, `TaskUpdate` | `TaskRow`             |
+| `delete`     | `TaskUnique`                                | `Int`                 |
+| `deleteMany` | `Where`                                     | `Int`                 |
 
 ## Nested writes
 

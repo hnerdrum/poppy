@@ -15,6 +15,7 @@ import Poppy.OperationsSpec (operationsSpec)
 import Poppy.RawSpec (rawSpec)
 import Poppy.ScalarSpec (scalarSpec)
 import Poppy.SelectSpec (selectSpec)
+import Poppy.UniqueFailSpec (uniqueFailSpec)
 import Poppy.WhereSpec (whereSpec)
 import Support.TestDb (withTestDb)
 import Test.Hspec
@@ -22,6 +23,7 @@ import Test.Hspec
 main :: IO ()
 main = hspec $ do
   includeFailSpec
+  uniqueFailSpec
   errorsSpec
   groupSpec
   whereSpec

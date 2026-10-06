@@ -6,7 +6,7 @@ module Poppy.SelectSpec
   )
 where
 
-import Poppy (ORMError (..), Picked (..), asc, desc, load, loadWith, runDb, skip)
+import Poppy (ORMError (..), Picked (..), asc, desc, loadWith, runDb, skip)
 import qualified Poppy.Operations as Ops
 import Poppy.Query (selectColumns)
 import Poppy.Select (picked)
@@ -81,29 +81,38 @@ selectSpec = do
       map (.name) rows `shouldBe` ["salt"]
       map (.id) rows `shouldBe` [created.id]
 
-    it "findUnique looks up by where_ on the query record" $ \TestEnv {envPool = pool} -> do
+    it "findUnique looks up by primary key" $ \TestEnv {envPool = pool} -> do
       created <- WidgetFixtures.insertWidget pool "thyme"
       found <-
         runDb
           pool
-          ( Widget.findUnique
-              Widget.emptyQuery {Widget.where_ = Just (eq Widget.widgetId created.id)}
-          )
+          (Widget.findUnique (Widget.uniqueQuery (Widget.ById created.id)))
       found `shouldBe` Right (Just created)
 
-    it "findUnique rejects a where_ that is not a unique key" $ \TestEnv {envPool = pool} -> do
-      _ <- WidgetFixtures.insertWidget pool "sage"
+    it "findUnique looks up by a declared unique" $ \TestEnv {envPool = pool} -> do
+      created <- WidgetFixtures.insertWidget pool "sage"
       found <-
         runDb
           pool
-          ( Widget.findUnique
-              Widget.emptyQuery {Widget.where_ = Just (eq widgetName "sage")}
-          )
-      found
-        `shouldSatisfy` ( \case
-                            Left (InvalidUniqueInput _) -> True
-                            _ -> False
-                        )
+          (Widget.findUnique (Widget.uniqueQuery (Widget.ByName "sage")))
+      found `shouldBe` Right (Just created)
+
+    it "findUnique projects columns when select_ is set" $ \TestEnv {envPool = pool} -> do
+      created <- WidgetFixtures.insertWidget pool "basil"
+      let sel =
+            WidgetSelect
+              { id = False,
+                createdAt = False,
+                updatedAt = False,
+                name = True,
+                description = False
+              }
+      found <-
+        runDb
+          pool
+          (Widget.findUnique ((Widget.uniqueQuery (Widget.ById created.id)) {Widget.select_ = sel}))
+          >>= assertRight
+      fmap (.name) found `shouldBe` Just (Picked "basil")
 
     it "returns WidgetPicked when select_ is set" $ \TestEnv {envPool = pool} -> do
       created <- WidgetFixtures.insertWidget pool "pepper"
@@ -208,24 +217,17 @@ selectSpec = do
       found <-
         runDb
           pool
-          ( Shelf.findUnique
-              Shelf.emptyQuery {Shelf.where_ = Just (eq shelfId created.id)}
-          )
+          (Shelf.findUnique (Shelf.uniqueQuery (Shelf.ById created.id)))
           >>= assertRight
       fmap (.name) found `shouldBe` Just "Toast"
 
-    it "findUnique applies include from the query record" $ \TestEnv {envPool = pool} -> do
+    it "findUnique loads included relations" $ \TestEnv {envPool = pool} -> do
       shelf <- ShelfFixtures.insertShelf pool "Omelette"
       _ <- ShelfFixtures.insertBook pool shelf.id "Eggs"
       found <-
         runDb
           pool
-          ( Shelf.findUnique
-              Shelf.emptyQuery
-                { Shelf.include_ = shelfInclude,
-                  Shelf.where_ = Just (eq shelfId shelf.id)
-                }
-          )
+          (Shelf.findUnique ((Shelf.uniqueQuery (Shelf.ById shelf.id)) {Shelf.include_ = shelfInclude}))
           >>= assertRight
       fmap (.shelf.name) found `shouldBe` Just "Omelette"
       fmap (length . (.books)) found `shouldBe` Just 1

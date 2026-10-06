@@ -29,10 +29,12 @@ extra-source-files:
     test/migrations/006-test-author-post.sql
     test/migrations/007-test-packet.sql
     test/migrations/008-test-comment.sql
+    test/migrations/009-test-widget-name-unique.sql
     include-fail/RecordUpdateAmbiguous.hs
     include-fail/SkippedChapters.hs
     include-fail/SkippedChaptersNoSelectors.hs
     include-fail/WrongChild.hs
+    unique-fail/NonUniqueFilter.hs
 extra-doc-files:
     README.md
     CHANGELOG.md
@@ -109,6 +111,7 @@ test-suite poppy-test
       Poppy.RawSpec
       Poppy.ScalarSpec
       Poppy.SelectSpec
+      Poppy.UniqueFailSpec
       Poppy.ShelfFixtures
       Poppy.WhereSpec
       Poppy.WidgetFixtures

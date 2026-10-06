@@ -72,7 +72,7 @@ import Data.UUID (UUID)
 import Poppy (Db, ORMError)
 import Poppy.Where (eq)
 import qualified Schema.Client.Task as Task
-import Schema.Task (TaskRow (..), taskDone, taskId)
+import Schema.Task (TaskRow (..), taskDone)
 
 listOpenTasks :: Db [TaskRow]
 listOpenTasks =
@@ -81,8 +81,7 @@ listOpenTasks =
 
 getTask :: UUID -> Db (Either ORMError TaskRow)
 getTask taskKey =
-  Task.findUniqueOrFail
-    Task.emptyQuery {Task.where_ = Just (eq taskId taskKey)}
+  Task.findUniqueOrFail (Task.uniqueQuery (Task.ById taskKey))
 ```
 
 More of the read and write API is in [Client](client.md) and [Writes](writes.md), respectively.

@@ -36,6 +36,7 @@ executeIgnoringDuplicate conn stmt =
   where
     ignoreDuplicate err
       | sqlState err == "42710" = pure ()
+      | sqlState err == "42P07" = pure () -- relation already exists (replayed UNIQUE)
       | otherwise = throwIO err
 
 stripBytes :: B8.ByteString -> B8.ByteString

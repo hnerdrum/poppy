@@ -2,6 +2,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NoFieldSelectors #-}
@@ -40,7 +41,11 @@ module Schema.Client.Book
     ChapterNestedOps (..),
     emptyChapterNestedOps,
     BookQuery (..),
+    BookUnique (..),
+    BookUniqueKey (..),
+    BookUniqueQuery (..),
     emptyQuery,
+    uniqueQuery,
     OmitSelect (..),
     Picked (..),
     BookCreate (..),
@@ -61,7 +66,7 @@ import Poppy.Core (fieldColumn)
 import Poppy.PG (toField)
 import Poppy.Db (Db, liftIO, transactionEither)
 import qualified Poppy.Delete as Delete
-import Poppy.Errors (ORMError (..), requireFound)
+import Poppy.Errors (ORMError (..), fromUniqueRows, requireFound, uniqueOrFail)
 import qualified Poppy.Insert as Insert
 import qualified Poppy.Operations as Ops
 import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)
@@ -70,8 +75,24 @@ import Poppy.SelectIn (prepareIncludeRootQuery)
 import qualified Poppy.Update as Update
 import Poppy.Where (Where, and_, eq, in_)
 import Schema.Book (BookCreate (..), BookRow (..), BookSelect (..), BookPicked (..), bookSelect, bookSelectColumns, parseBookPicked, BookTable, BookUpdate (..), bookId)
-import Schema.Include.Book (LoadBook (..), BookInclude (..), BookRead, BookWith (..), toBookWithPicked)
+import Schema.Include.Book (LoadBook (..), BookInclude (..), BookRead, toBookWithPicked, BookWith (..))
 import Schema.Chapter (ChapterCreate (..), ChapterRow (..), ChapterUpdate (..), ChapterTable, chapterId, chapterBookRef)
+
+data BookUnique
+  = ById UUID
+  deriving (Eq, Show)
+
+data BookUniqueKey
+  = OnId
+  deriving (Eq, Show)
+
+bookUniqueWhere :: BookUnique -> Where BookTable
+bookUniqueWhere = \case
+  ById v1 -> eq bookId v1
+
+bookConflictCols :: BookUniqueKey -> [Text]
+bookConflictCols = \case
+  OnId -> ["id"]
 
 create :: BookCreate -> Db (Either ORMError BookRow)
 create = Insert.insert @BookTable @BookRow
@@ -79,14 +100,16 @@ create = Insert.insert @BookTable @BookRow
 createMany :: [BookCreate] -> Db (Either ORMError Int)
 createMany = Insert.insertMany @BookTable
 
-update :: UUID -> BookUpdate -> Db (Either ORMError BookRow)
-update = Update.update @BookTable @BookRow
+update :: BookUnique -> BookUpdate -> Db (Either ORMError BookRow)
+update key input =
+  Update.updateWhere @BookTable @BookRow (bookUniqueWhere key) input
 
 updateMany :: Where BookTable -> BookUpdate -> Db (Either ORMError Int)
 updateMany = Update.updateMany @BookTable
 
-upsert :: BookCreate -> BookUpdate -> Db (Either ORMError BookRow)
-upsert = Insert.upsert @BookTable @BookRow ["id"]
+upsert :: BookUniqueKey -> BookCreate -> BookUpdate -> Db (Either ORMError BookRow)
+upsert key createInput updateInput =
+  Insert.upsert @BookTable @BookRow (bookConflictCols key) createInput updateInput
 
 data ChapterNestedCreate = ChapterNestedCreate
   { id :: Maybe UUID, heading :: Text
@@ -297,14 +320,24 @@ data BookQuery include select = BookQuery
   , offset_ :: Maybe Int
   }
 
+data BookUniqueQuery include select = BookUniqueQuery
+  { include_ :: include
+  , select_ :: select
+  , where_ :: BookUnique
+  }
+
 emptyQuery :: BookQuery () OmitSelect
 emptyQuery =
   BookQuery {include_ = (), select_ = OmitSelect, where_ = Nothing, orderBy_ = [], limit_ = Nothing, offset_ = Nothing}
 
+uniqueQuery :: BookUnique -> BookUniqueQuery () OmitSelect
+uniqueQuery key =
+  BookUniqueQuery {include_ = (), select_ = OmitSelect, where_ = key}
+
 class ReadBook include select where
   findMany :: BookQuery include select -> Db [BookRead include select]
-  findUnique :: BookQuery include select -> Db (Either ORMError (Maybe (BookRead include select)))
-  findUniqueOrFail :: BookQuery include select -> Db (Either ORMError (BookRead include select))
+  findUnique :: BookUniqueQuery include select -> Db (Either ORMError (Maybe (BookRead include select)))
+  findUniqueOrFail :: BookUniqueQuery include select -> Db (Either ORMError (BookRead include select))
   findFirst :: BookQuery include select -> Db (Maybe (BookRead include select))
   findFirstOrFail :: BookQuery include select -> Db (Either ORMError (BookRead include select))
 
@@ -312,21 +345,12 @@ instance (LoadBook chapters) => ReadBook (BookInclude chapters) OmitSelect where
   findMany BookQuery {include_, where_, orderBy_, limit_, offset_} = do
     roots <- Ops.findMany @BookTable @BookRow (prepareIncludeRootQuery @BookTable (applyQueryModifiers where_ orderBy_ limit_ offset_))
     loadBook include_ roots
-  findUnique BookQuery {include_, where_} =
-    case Ops.requireUniqueWhere @BookTable where_ of
-      Left err -> pure (Left err)
-      Right w -> do
-        roots <- Ops.findMany @BookTable @BookRow (prepareIncludeRootQuery @BookTable (matching w))
-        rows <- loadBook include_ roots
-        pure $ case rows of
-          [] -> Right Nothing
-          [row] -> Right (Just row)
-          _ -> Left (MultipleRecordsFound "findUnique matched multiple rows")
-  findUniqueOrFail q = do
-    result <- findUnique q
-    case result of
-      Left err -> pure (Left err)
-      Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findUnique BookUniqueQuery {where_, include_} = do
+    let w = bookUniqueWhere where_
+    roots <- Ops.findMany @BookTable @BookRow (prepareIncludeRootQuery @BookTable (matching w))
+    rows <- loadBook include_ roots
+    pure (fromUniqueRows rows)
+  findUniqueOrFail q = uniqueOrFail <$> findUnique q
   findFirst BookQuery {include_, where_, orderBy_, offset_} = do
     roots <- Ops.findMany @BookTable @BookRow (prepareIncludeRootQuery @BookTable (applyQueryModifiers where_ orderBy_ (Just 1) offset_))
     loaded <- loadBook include_ roots
@@ -340,13 +364,11 @@ instance (LoadBook chapters) => ReadBook (BookInclude chapters) OmitSelect where
 instance ReadBook () OmitSelect where
   findMany BookQuery {where_, orderBy_, limit_, offset_} =
     Ops.findMany @BookTable @BookRow (applyQueryModifiers where_ orderBy_ limit_ offset_)
-  findUnique BookQuery {where_} =
-    Ops.findUniqueWhere @BookTable @BookRow where_
-  findUniqueOrFail q = do
-    result <- findUnique q
-    case result of
-      Left err -> pure (Left err)
-      Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findUnique BookUniqueQuery {where_} = do
+    let w = bookUniqueWhere where_
+    rows <- Ops.findMany @BookTable @BookRow (matching w)
+    pure (fromUniqueRows rows)
+  findUniqueOrFail q = uniqueOrFail <$> findUnique q
   findFirst BookQuery {where_, orderBy_, limit_, offset_} =
     Ops.findFirst @BookTable @BookRow (applyQueryModifiers where_ orderBy_ limit_ offset_)
   findFirstOrFail q = do
@@ -358,22 +380,13 @@ instance (LoadBook chapters) => ReadBook (BookInclude chapters) BookSelect where
     roots <- Ops.findMany @BookTable @BookRow (prepareIncludeRootQuery @BookTable (applyQueryModifiers where_ orderBy_ limit_ offset_))
     loaded <- loadBook include_ roots
     pure $ map (toBookWithPicked select_) loaded
-  findUnique BookQuery {include_, select_, where_} =
-    case Ops.requireUniqueWhere @BookTable where_ of
-      Left err -> pure (Left err)
-      Right w -> do
-        roots <- Ops.findMany @BookTable @BookRow (prepareIncludeRootQuery @BookTable (matching w))
-        loaded <- loadBook include_ roots
-        let rows = map (toBookWithPicked select_) loaded
-        pure $ case rows of
-          [] -> Right Nothing
-          [row] -> Right (Just row)
-          _ -> Left (MultipleRecordsFound "findUnique matched multiple rows")
-  findUniqueOrFail q = do
-    result <- findUnique q
-    case result of
-      Left err -> pure (Left err)
-      Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findUnique BookUniqueQuery {where_, include_, select_} = do
+    let w = bookUniqueWhere where_
+    roots <- Ops.findMany @BookTable @BookRow (prepareIncludeRootQuery @BookTable (matching w))
+    loaded <- loadBook include_ roots
+    let rows = map (toBookWithPicked select_) loaded
+    pure (fromUniqueRows rows)
+  findUniqueOrFail q = uniqueOrFail <$> findUnique q
   findFirst BookQuery {select_, include_, where_, orderBy_, offset_} = do
     roots <- Ops.findMany @BookTable @BookRow (prepareIncludeRootQuery @BookTable (applyQueryModifiers where_ orderBy_ (Just 1) offset_))
     loaded <- loadBook include_ roots
@@ -389,23 +402,14 @@ instance ReadBook () BookSelect where
     Ops.findManyWith
       (parseBookPicked select_)
       (selectColumns (bookSelectColumns select_) . applyQueryModifiers where_ orderBy_ limit_ offset_)
-  findUnique BookQuery {select_, where_} =
-    case Ops.requireUniqueWhere @BookTable where_ of
-      Left err -> pure (Left err)
-      Right w -> do
-        rows <-
-          Ops.findManyWith
-            (parseBookPicked select_)
-            (selectColumns (bookSelectColumns select_) . matching w)
-        pure $ case rows of
-          [] -> Right Nothing
-          [row] -> Right (Just row)
-          _ -> Left (MultipleRecordsFound "findUnique matched multiple rows")
-  findUniqueOrFail q = do
-    result <- findUnique q
-    case result of
-      Left err -> pure (Left err)
-      Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findUnique BookUniqueQuery {where_, select_} = do
+    let w = bookUniqueWhere where_
+    rows <-
+      Ops.findManyWith
+        (parseBookPicked select_)
+        (selectColumns (bookSelectColumns select_) . matching w)
+    pure (fromUniqueRows rows)
+  findUniqueOrFail q = uniqueOrFail <$> findUnique q
   findFirst BookQuery {select_, where_, orderBy_, limit_, offset_} =
     Ops.findFirstWith
       (parseBookPicked select_)
@@ -433,8 +437,9 @@ reload include rootId = do
         (one : _) -> Right one
         [] -> Left (RecordNotFound "Record not found with primary key")
 
-delete :: UUID -> Db (Either ORMError Int)
-delete = Ops.delete @BookTable
+delete :: BookUnique -> Db (Either ORMError Int)
+delete key =
+  Delete.deleteMany @BookTable (bookUniqueWhere key)
 
 deleteMany :: Where BookTable -> Db (Either ORMError Int)
 deleteMany = Delete.deleteMany @BookTable

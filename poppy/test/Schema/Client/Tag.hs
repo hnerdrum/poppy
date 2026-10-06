@@ -1,5 +1,8 @@
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -29,23 +32,45 @@ module Schema.Client.Tag
     TagUpdate (..),
     TagTable,
     TagQuery (..),
+    TagUnique (..),
+    TagUniqueKey (..),
+    TagUniqueQuery (..),
     emptyQuery,
+    uniqueQuery,
     tagId
   )
 
 where
 
+import Data.Text (Text)
 import Data.UUID (UUID)
 import Poppy.Db (Db)
-import Poppy.Errors (ORMError (..), requireFound)
+import Poppy.Errors (ORMError (..), fromUniqueRows, requireFound, uniqueOrFail)
 import qualified Poppy.Delete as Delete
 import qualified Poppy.Insert as Insert
 import qualified Poppy.Operations as Ops
 import Poppy.Query (OrderBy, QueryBuilder, applyQueryModifiers, matching, selectColumns)
 import Poppy.Select (OmitSelect (..), Picked (..))
-import Poppy.Where (Where)
+import Poppy.Where (Where, eq)
 import Schema.Tag (TagCreate (..), TagRow (..), TagSelect (..), TagPicked (..), tagSelect, tagSelectColumns, parseTagPicked, TagTable, TagUpdate (..), tagId)
 import qualified Poppy.Update as Update
+
+data TagUnique
+  = ById UUID
+  deriving (Eq, Show)
+
+data TagUniqueKey
+  = OnId
+  deriving (Eq, Show)
+
+tagUniqueWhere :: TagUnique -> Where TagTable
+tagUniqueWhere = \case
+  ById v1 -> eq tagId v1
+
+tagConflictCols :: TagUniqueKey -> [Text]
+tagConflictCols = \case
+  OnId -> ["id"]
+
 
 create :: TagCreate -> Db (Either ORMError TagRow)
 create = Insert.insert @TagTable @TagRow
@@ -55,16 +80,18 @@ createMany :: [TagCreate] -> Db (Either ORMError Int)
 createMany = Insert.insertMany @TagTable
 
 
-update :: UUID -> TagUpdate -> Db (Either ORMError TagRow)
-update = Update.update @TagTable @TagRow
+update :: TagUnique -> TagUpdate -> Db (Either ORMError TagRow)
+update key input =
+  Update.updateWhere @TagTable @TagRow (tagUniqueWhere key) input
 
 
 updateMany :: Where TagTable -> TagUpdate -> Db (Either ORMError Int)
 updateMany = Update.updateMany @TagTable
 
 
-upsert :: TagCreate -> TagUpdate -> Db (Either ORMError TagRow)
-upsert = Insert.upsert @TagTable @TagRow ["id"]
+upsert :: TagUniqueKey -> TagCreate -> TagUpdate -> Db (Either ORMError TagRow)
+upsert key createInput updateInput =
+  Insert.upsert @TagTable @TagRow (tagConflictCols key) createInput updateInput
 
 
 data TagQuery select = TagQuery
@@ -76,9 +103,20 @@ data TagQuery select = TagQuery
   }
 
 
+data TagUniqueQuery select = TagUniqueQuery
+  { select_ :: select
+  , where_ :: TagUnique
+  }
+
+
 emptyQuery :: TagQuery OmitSelect
 emptyQuery =
   TagQuery {select_ = OmitSelect, where_ = Nothing, orderBy_ = [], limit_ = Nothing, offset_ = Nothing}
+
+
+uniqueQuery :: TagUnique -> TagUniqueQuery OmitSelect
+uniqueQuery key =
+  TagUniqueQuery {select_ = OmitSelect, where_ = key}
 
 
 type family ResolveSelect select
@@ -88,21 +126,19 @@ type instance ResolveSelect TagSelect = TagPicked
 
 class ReadTag select where
   findMany :: TagQuery select -> Db [ResolveSelect select]
-  findUnique :: TagQuery select -> Db (Either ORMError (Maybe (ResolveSelect select)))
-  findUniqueOrFail :: TagQuery select -> Db (Either ORMError (ResolveSelect select))
+  findUnique :: TagUniqueQuery select -> Db (Either ORMError (Maybe (ResolveSelect select)))
+  findUniqueOrFail :: TagUniqueQuery select -> Db (Either ORMError (ResolveSelect select))
   findFirst :: TagQuery select -> Db (Maybe (ResolveSelect select))
   findFirstOrFail :: TagQuery select -> Db (Either ORMError (ResolveSelect select))
 
 instance ReadTag OmitSelect where
   findMany q =
     Ops.findMany @TagTable @TagRow (applyQuery q)
-  findUnique TagQuery {where_} =
-    Ops.findUniqueWhere @TagTable @TagRow where_
-  findUniqueOrFail q = do
-    result <- findUnique q
-    case result of
-      Left err -> pure (Left err)
-      Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findUnique TagUniqueQuery {where_} = do
+    let w = tagUniqueWhere where_
+    rows <- Ops.findMany @TagTable @TagRow (matching w)
+    pure (fromUniqueRows rows)
+  findUniqueOrFail q = uniqueOrFail <$> findUnique q
   findFirst q =
     Ops.findFirst @TagTable @TagRow (applyQuery q)
   findFirstOrFail q = do
@@ -114,23 +150,14 @@ instance ReadTag TagSelect where
     Ops.findManyWith
       (parseTagPicked select_)
       (selectColumns (tagSelectColumns select_) . applyQuery q)
-  findUnique TagQuery {select_, where_} =
-    case Ops.requireUniqueWhere @TagTable where_ of
-      Left err -> pure (Left err)
-      Right w -> do
-        rows <-
-          Ops.findManyWith
-            (parseTagPicked select_)
-            (selectColumns (tagSelectColumns select_) . matching w)
-        pure $ case rows of
-          [] -> Right Nothing
-          [row] -> Right (Just row)
-          _ -> Left (MultipleRecordsFound "findUnique matched multiple rows")
-  findUniqueOrFail q = do
-    result <- findUnique q
-    case result of
-      Left err -> pure (Left err)
-      Right found -> pure $ requireFound found (RecordNotFound "No record found matching query")
+  findUnique TagUniqueQuery {where_, select_} = do
+    let w = tagUniqueWhere where_
+    rows <-
+      Ops.findManyWith
+        (parseTagPicked select_)
+        (selectColumns (tagSelectColumns select_) . matching w)
+    pure (fromUniqueRows rows)
+  findUniqueOrFail q = uniqueOrFail <$> findUnique q
   findFirst q@TagQuery {select_} =
     Ops.findFirstWith
       (parseTagPicked select_)
@@ -148,8 +175,9 @@ count :: TagQuery select -> Db Int
 count q = Ops.count @TagTable (applyQuery q)
 
 
-delete :: UUID -> Db (Either ORMError Int)
-delete = Ops.delete @TagTable
+delete :: TagUnique -> Db (Either ORMError Int)
+delete key =
+  Delete.deleteMany @TagTable (tagUniqueWhere key)
 
 
 deleteMany :: Where TagTable -> Db (Either ORMError Int)

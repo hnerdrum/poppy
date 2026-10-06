@@ -44,6 +44,7 @@ instance Entity WidgetTable where
   tableName = "test_widget"
   primaryKey = widgetId
   tableColumns = ["id", "created_at", "updated_at", "name", "description"]
+  uniqueKeys = [["id"], ["name"]]
 
 instance Insertable WidgetTable where
   type CreateInput WidgetTable = WidgetCreate

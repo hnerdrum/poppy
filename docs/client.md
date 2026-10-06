@@ -30,7 +30,11 @@ Task.findMany
 | `findUniqueOrFail` | `Either ORMError row`         |
 | `count`            | `Int`                         |
 
-`findUnique` / `findUniqueOrFail` require `where_` to be equalities on **exactly one** unique key: the primary key, or a `unique_` from the Schema. Incomplete keys, non-equality predicates, and filters that are not unique fail with `InvalidUniqueInput`. Multiple matching rows fail with `MultipleRecordsFound`.
+`findUnique` / `findUniqueOrFail` take `uniqueQuery` plus a unique key. Compound uniques are one constructor with one argument per field. Multiple matching rows fail with `MultipleRecordsFound`.
+
+```haskell
+Task.findUniqueOrFail (Task.uniqueQuery (Task.ById taskKey))
+```
 
 `where_` on the query record filters the root table. To filter a loaded relation, record-update `where_`, `orderBy_`, and `take_` on `load` or `loadWith`. `take_` keeps that many child rows per parent. Combinators (`eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in_`, `contains`, `isNull`, `and_`, `or_`, `not_`) come from `Poppy` / `Poppy.Where`.
 
