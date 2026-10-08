@@ -8,15 +8,19 @@ module Poppy.Codegen.Emit.Schema
   )
 where
 
-import Data.Maybe (fromMaybe, isJust, mapMaybe)
+import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Poppy.Codegen.EmitCommon
-  ( createTypeName,
+  ( CreateKind (..),
+    createHsType,
+    createKind,
+    createTypeName,
     fieldBinder,
     hsType,
     parsePickedName,
     pickedTypeName,
+    pkHsType,
     primaryKeyField,
     rowTypeName,
     selectColumnsFnName,
@@ -24,6 +28,8 @@ import Poppy.Codegen.EmitCommon
     selectTypeName,
     tableTypeName,
     toPickedName,
+    updateFields,
+    updateHsType,
     updateTypeName,
   )
 import Poppy.Codegen.IR
@@ -264,38 +270,10 @@ hasRequiredCreateField :: Model -> Bool
 hasRequiredCreateField =
   any (\f -> createKind f == CreateRequired) . modelFields
 
-pkHsType :: Model -> Text
-pkHsType model = hsType (fieldType (primaryKeyField model))
-
 rowHsType :: FieldSpec -> Text
 rowHsType f
   | fieldNullable f = "Maybe " <> hsType (fieldType f)
   | otherwise = hsType (fieldType f)
-
-data CreateKind = CreateMaybe | CreateNullable | CreateRequired
-  deriving (Eq)
-
-createKind :: FieldSpec -> CreateKind
-createKind f
-  | fieldIsPrimaryKey f && isJust (fieldDefault f) = CreateMaybe
-  | fieldIsPrimaryKey f = CreateRequired
-  | isJust (fieldDefault f) = CreateMaybe
-  | fieldNullable f = CreateNullable
-  | otherwise = CreateRequired
-
-createHsType :: FieldSpec -> Text
-createHsType f = case createKind f of
-  CreateMaybe -> "Maybe " <> hsType (fieldType f)
-  CreateNullable -> "NullableValue " <> hsType (fieldType f)
-  CreateRequired -> hsType (fieldType f)
-
-updateFields :: Model -> [FieldSpec]
-updateFields = filter (not . fieldIsPrimaryKey) . modelFields
-
-updateHsType :: FieldSpec -> Text
-updateHsType f
-  | fieldNullable f = "NullableValue " <> hsType (fieldType f)
-  | otherwise = "Maybe " <> hsType (fieldType f)
 
 emitRow :: Model -> Text
 emitRow model =

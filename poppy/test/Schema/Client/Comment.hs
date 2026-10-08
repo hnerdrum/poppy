@@ -14,9 +14,10 @@
 
 {- | Generated Client. Do not edit.
 
-Nested writes ('createNested' / 'updateNested'):
-  Set xs  — replace all children with xs
-  Ops o   — create, connect, disconnect, delete, update, upsert
+Nested writes live on 'create' / 'update'.
+  create-time relation fields are [CreateChild | ConnectChild unique]
+  update-time relation fields are Maybe <Rel>Update (replaceWith, create, connect, delete, update, upsert;
+  disconnect when the child foreign key is nullable)
 -}
 module Schema.Client.Comment
   ( findMany,
@@ -32,20 +33,19 @@ module Schema.Client.Comment
     upsert,
     delete,
     deleteMany,
-    createNested,
-    updateNested,
-    CommentWriteCreate (..),
-    CommentWriteUpdate (..),
+    CommentCreateScalars,
+    CommentUpdateScalars,
     CommentNestedCreate (..),
-    RepliesWrite (..),
-    CommentNestedOps (..),
-    emptyCommentNestedOps,
+    CommentNestedUpsert (..),
+    RepliesUpdate (..),
+    emptyRepliesUpdate,
     CommentQuery (..),
     CommentUnique (..),
     CommentUniqueKey (..),
     CommentUniqueQuery (..),
     emptyQuery,
     uniqueQuery,
+    commentUniqueWhere,
     OmitSelect (..),
     Picked (..),
     CommentCreate (..),
@@ -59,12 +59,12 @@ module Schema.Client.Comment
   )
 where
 
+import Data.Maybe (isJust)
 import Data.Text (Text)
 import Data.UUID (UUID)
-import qualified Data.UUID.V4 as V4
-import Poppy.Core (fieldColumn, NullableValue (Omit, Value))
+import Poppy.Core (NullableValue (..), fieldColumn)
 import Poppy.PG (toField)
-import Poppy.Db (Db, liftIO, transactionEither)
+import Poppy.Db (Db, transactionEither)
 import qualified Poppy.Delete as Delete
 import Poppy.Errors (ORMError (..), fromUniqueRows, requireFound, uniqueOrFail)
 import qualified Poppy.Insert as Insert
@@ -73,10 +73,11 @@ import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)
 import Poppy.Select (OmitSelect (..), Picked (..))
 import Poppy.SelectIn (prepareIncludeRootQuery)
 import qualified Poppy.Update as Update
-import Poppy.Where (Where, and_, eq, in_)
-import Schema.Comment (CommentCreate (..), CommentRow (..), CommentSelect (..), CommentPicked (..), commentSelect, commentSelectColumns, parseCommentPicked, CommentTable, CommentUpdate (..), commentId)
-import Schema.Include.Comment (LoadComment (..), CommentInclude (..), CommentRead, toCommentWithPicked, CommentWith (..))
-import Schema.Comment (CommentCreate (..), CommentRow (..), CommentUpdate (..), CommentTable, commentId, commentParentId)
+import Poppy.Where (Where, and_, eq)
+import Schema.Comment (CommentRow (..), CommentSelect (..), CommentPicked (..), commentSelect, commentSelectColumns, parseCommentPicked, CommentTable, commentId, commentParentId)
+import qualified Schema.Comment as CommentSchema (CommentCreate (..), CommentUpdate (..))
+
+import Schema.Include.Comment (LoadComment (..), CommentInclude (..), CommentRead, toCommentWithPicked)
 
 data CommentUnique
   = ById UUID
@@ -94,80 +95,132 @@ commentConflictCols :: CommentUniqueKey -> [Text]
 commentConflictCols = \case
   OnId -> ["id"]
 
-create :: CommentCreate -> Db (Either ORMError CommentRow)
-create = Insert.insert @CommentTable @CommentRow
+data CommentNestedCreate
+  = CreateComment
+      { id :: Maybe UUID, body :: Text
+      }
+  | ConnectComment CommentUnique
+  deriving (Show, Eq)
+data CommentNestedUpsert = CommentNestedUpsert
+  { where_ :: CommentUnique
+  , create :: CommentNestedCreate
+  , update :: CommentSchema.CommentUpdate
+  }
+  deriving (Show, Eq)
+data RepliesUpdate = RepliesUpdate
+  { replaceWith :: Maybe [CommentNestedCreate]
+  , create :: [CommentNestedCreate]
+  , createMany :: [CommentNestedCreate]
+  , connect :: [CommentUnique]
+  , delete :: [CommentUnique]
+  , update :: [(CommentUnique, CommentSchema.CommentUpdate)]
+  , upsert :: [CommentNestedUpsert]
+  , disconnect :: [CommentUnique]
+  }
+  deriving (Show, Eq)
 
-createMany :: [CommentCreate] -> Db (Either ORMError Int)
+emptyRepliesUpdate :: RepliesUpdate
+emptyRepliesUpdate =
+  RepliesUpdate
+    { replaceWith = Nothing
+    , create = []
+    , createMany = []
+    , connect = []
+    , delete = []
+    , update = []
+    , upsert = []
+    , disconnect = []
+    }
+data CommentCreate = CommentCreate
+  { id :: Maybe UUID,
+    parentId :: NullableValue UUID,
+    body :: Text,
+    replies :: [CommentNestedCreate]
+  }
+  deriving (Show, Eq)
+
+type CommentCreateScalars = CommentSchema.CommentCreate
+
+toCommentCreateScalars :: CommentCreate -> CommentCreateScalars
+toCommentCreateScalars input =
+  CommentSchema.CommentCreate
+    { id = input.id,
+      parentId = input.parentId,
+      body = input.body
+    }
+data CommentUpdate = CommentUpdate
+  { parentId :: NullableValue UUID,
+    body :: Maybe Text,
+    replies :: Maybe RepliesUpdate
+  }
+  deriving (Show, Eq)
+
+type CommentUpdateScalars = CommentSchema.CommentUpdate
+
+toCommentUpdateScalars :: CommentUpdate -> CommentUpdateScalars
+toCommentUpdateScalars input =
+  CommentSchema.CommentUpdate
+    { parentId = input.parentId,
+      body = input.body
+    }
+
+create :: CommentCreate -> Db (Either ORMError CommentRow)
+create input =
+  if hasCommentNestedCreate input
+    then transactionEither (createWithNested input)
+    else Insert.insert @CommentTable @CommentRow (toCommentCreateScalars input)
+
+hasCommentNestedCreate :: CommentCreate -> Bool
+hasCommentNestedCreate input =
+  not (null input.replies)
+
+createWithNested :: CommentCreate -> Db (Either ORMError CommentRow)
+createWithNested input = do
+  rootResult <- Insert.insert @CommentTable @CommentRow (toCommentCreateScalars input)
+  case rootResult of
+    Left err -> pure (Left err)
+    Right row -> do
+      nestedResult <-
+        sequenceNested
+          [ applyRepliesCreate row.id input.replies
+          ]
+      case nestedResult of
+        Left err -> pure (Left err)
+        Right () -> pure (Right row)
+
+createMany :: [CommentCreateScalars] -> Db (Either ORMError Int)
 createMany = Insert.insertMany @CommentTable
 
 update :: CommentUnique -> CommentUpdate -> Db (Either ORMError CommentRow)
 update key input =
-  Update.updateWhere @CommentTable @CommentRow (commentUniqueWhere key) input
+  if hasCommentNestedUpdate input
+    then transactionEither (updateWithNested key input)
+    else Update.updateWhere @CommentTable @CommentRow (commentUniqueWhere key) (toCommentUpdateScalars input)
 
-updateMany :: Where CommentTable -> CommentUpdate -> Db (Either ORMError Int)
+hasCommentNestedUpdate :: CommentUpdate -> Bool
+hasCommentNestedUpdate input =
+  isJust input.replies
+
+updateWithNested :: CommentUnique -> CommentUpdate -> Db (Either ORMError CommentRow)
+updateWithNested key input = do
+  updateResult <- Update.updateWhere @CommentTable @CommentRow (commentUniqueWhere key) (toCommentUpdateScalars input)
+  case updateResult of
+    Left err -> pure (Left err)
+    Right row -> do
+      nestedResult <-
+        sequenceNested
+          [ maybe (pure (Right ())) (applyRepliesUpdate row.id) input.replies
+          ]
+      case nestedResult of
+        Left err -> pure (Left err)
+        Right () -> pure (Right row)
+
+updateMany :: Where CommentTable -> CommentUpdateScalars -> Db (Either ORMError Int)
 updateMany = Update.updateMany @CommentTable
 
-upsert :: CommentUniqueKey -> CommentCreate -> CommentUpdate -> Db (Either ORMError CommentRow)
+upsert :: CommentUniqueKey -> CommentCreateScalars -> CommentUpdateScalars -> Db (Either ORMError CommentRow)
 upsert key createInput updateInput =
   Insert.upsert @CommentTable @CommentRow (commentConflictCols key) createInput updateInput
-
-data CommentNestedCreate = CommentNestedCreate
-  { id :: Maybe UUID, body :: Text
-  }
-  deriving (Show, Eq)
-
-data CommentNestedOps = CommentNestedOps
-  { create :: [CommentNestedCreate]
-  , createMany :: [CommentNestedCreate]
-  , connect :: [UUID]
-  , disconnect :: [UUID]
-  , delete :: [UUID]
-  , update :: [(UUID, CommentNestedCreate)]
-  , upsert :: [CommentNestedCreate]
-  }
-  deriving (Show, Eq)
-
-data RepliesWrite = Set [CommentNestedCreate] | Ops CommentNestedOps
-  deriving (Show, Eq)
-
-emptyCommentNestedOps :: CommentNestedOps
-emptyCommentNestedOps =
-  CommentNestedOps
-    { create = []
-    , createMany = []
-    , connect = []
-    , disconnect = []
-    , delete = []
-    , update = []
-    , upsert = []
-    }
-
-data CommentWriteCreate = CommentWriteCreate
-  { root :: CommentCreate
-  , replies :: RepliesWrite
-  }
-  deriving (Show, Eq)
-
-data CommentWriteUpdate = CommentWriteUpdate
-  { root :: CommentUpdate
-  , replies :: Maybe RepliesWrite
-  }
-  deriving (Show, Eq)
-
-toCommentCreate :: UUID -> CommentNestedCreate -> CommentCreate
-toCommentCreate parentId nested =
-  CommentCreate
-    { id = nested.id,
-      body = nested.body,
-      parentId = Value parentId
-    }
-
-toCommentUpdate :: CommentNestedCreate -> CommentUpdate
-toCommentUpdate nested =
-  CommentUpdate
-    { parentId = Omit,
-      body = Just nested.body
-    }
 
 sequenceNested :: [Db (Either ORMError ())] -> Db (Either ORMError ())
 sequenceNested [] = pure (Right ())
@@ -176,140 +229,129 @@ sequenceNested (action : rest) = do
   case result of
     Left err -> pure (Left err)
     Right () -> sequenceNested rest
-
-applyRepliesWrite :: UUID -> RepliesWrite -> Db (Either ORMError ())
-applyRepliesWrite parentId write =
-  case write of
-    Set items -> do
-      result <-
-        Delete.deleteWhere $
-          Delete.whereDelete (fieldColumn commentParentId <> " = ?") [toField parentId] (Delete.emptyDelete @CommentTable)
-      case result of
-        Left err -> pure (Left err)
-        Right _ -> insertNestedCreates parentId items
-    Ops ops -> applyCommentNestedOps parentId ops
-
-insertNestedCreates :: UUID -> [CommentNestedCreate] -> Db (Either ORMError ())
-insertNestedCreates parentId = go
+applyRepliesCreate :: UUID -> [CommentNestedCreate] -> Db (Either ORMError ())
+applyRepliesCreate = insertReplies
+applyRepliesUpdate :: UUID -> RepliesUpdate -> Db (Either ORMError ())
+applyRepliesUpdate parentId ops = do
+  replaced <- case ops.replaceWith of
+    Nothing -> pure (Right ())
+    Just items -> replaceReplies parentId items
+  case replaced of
+    Left err -> pure (Left err)
+    Right () ->
+      sequenceNested
+        [ deleteReplies parentId ops.delete
+        , updateRepliesRows parentId ops.update
+        , upsertReplies parentId ops.upsert
+        , insertReplies parentId ops.create
+        , insertReplies parentId ops.createMany
+        , connectReplies parentId ops.connect
+        , disconnectReplies parentId ops.disconnect
+        ]
+replaceReplies :: UUID -> [CommentNestedCreate] -> Db (Either ORMError ())
+replaceReplies parentId items = do
+  result <-
+    Delete.deleteWhere $
+      Delete.whereDelete (fieldColumn commentParentId <> " = ?") [toField parentId] (Delete.emptyDelete @CommentTable)
+  case result of
+    Left err -> pure (Left err)
+    Right _ -> insertReplies parentId items
+insertReplies :: UUID -> [CommentNestedCreate] -> Db (Either ORMError ())
+insertReplies parentId = go
   where
     go [] = pure (Right ())
     go (nested : rest) = do
-      result <- Insert.insert @CommentTable @CommentRow (toCommentCreate parentId nested)
-      case result of
-        Left err -> pure (Left err)
-        Right _ -> go rest
-
-applyCommentNestedOps :: UUID -> CommentNestedOps -> Db (Either ORMError ())
-applyCommentNestedOps parentId ops =
-  sequenceNested
-    [ deleteNested parentId ops.delete
-    , deleteNested parentId ops.disconnect
-    , updateChildRows parentId ops.update
-    , upsertNested parentId ops.upsert
-    , insertNestedCreates parentId ops.create
-    , insertNestedCreateMany parentId ops.createMany
-    , connectNested parentId ops.connect
-    ]
-
-deleteNested :: UUID -> [UUID] -> Db (Either ORMError ())
-deleteNested _ [] = pure (Right ())
-deleteNested parentId ids = do
-  result <- Delete.deleteMany @CommentTable (in_ commentId ids `and_` eq commentParentId parentId)
-  pure $ case result of
-    Left err -> Left err
-    Right _ -> Right ()
-
-updateChildRows :: UUID -> [(UUID, CommentNestedCreate)] -> Db (Either ORMError ())
-updateChildRows parentId = go
-  where
-    go [] = pure (Right ())
-    go ((childId, nested) : rest) = do
-      result <-
-        Update.updateBuilder @CommentTable @CommentRow $
-          Update.whereUpdate (fieldColumn commentId <> " = ?") [toField childId] $
-            Update.whereUpdate (fieldColumn commentParentId <> " = ?") [toField parentId] $
-              Update.toUpdateBuilder @CommentTable (toCommentUpdate nested)
-      case result of
-        Left err -> pure (Left err)
-        Right _ -> go rest
-
-upsertNested :: UUID -> [CommentNestedCreate] -> Db (Either ORMError ())
-upsertNested parentId = go
-  where
-    go [] = pure (Right ())
-    go (nested : rest) = do
-      result <-
-        Insert.insertBuilder @CommentTable @CommentRow $
-          Prelude.id $
-          Insert.toInsertBuilder @CommentTable (toCommentCreate parentId nested)
-      case result of
-        Left err -> pure (Left err)
-        Right _ -> go rest
-
-insertNestedCreateMany :: UUID -> [CommentNestedCreate] -> Db (Either ORMError ())
-insertNestedCreateMany parentId = go
-  where
-    go [] = pure (Right ())
-    go (nested : rest) = do
-      result <-
-        Insert.tryExecuteInsert $
-          Prelude.id $
-          Insert.toInsertBuilder @CommentTable (toCommentCreate parentId nested)
+      result <- case nested of
+        ConnectComment key -> connectReplies parentId [key]
+        CreateComment {id, body} -> do
+          inserted <- Insert.insert @CommentTable @CommentRow CommentSchema.CommentCreate
+            { id = id,
+              body = body,
+              parentId = Value parentId
+            }
+          pure $ case inserted of
+            Left err -> Left err
+            Right _ -> Right ()
       case result of
         Left err -> pure (Left err)
         Right () -> go rest
-
-connectNested :: UUID -> [UUID] -> Db (Either ORMError ())
-connectNested parentId = go
+deleteReplies :: UUID -> [CommentUnique] -> Db (Either ORMError ())
+deleteReplies _ [] = pure (Right ())
+deleteReplies parentId keys = sequenceNested (map deleteOne keys)
+  where
+    deleteOne key = do
+      result <- Delete.deleteMany @CommentTable
+        (commentUniqueWhere key `and_` eq commentParentId parentId)
+      pure $ case result of
+        Left err -> Left err
+        Right _ -> Right ()
+updateRepliesRows :: UUID -> [(CommentUnique, CommentSchema.CommentUpdate)] -> Db (Either ORMError ())
+updateRepliesRows parentId = go
   where
     go [] = pure (Right ())
-    go (childId : rest) = do
+    go ((key, nested) : rest) = do
+      let patched = CommentSchema.CommentUpdate { parentId = Omit, body = nested.body }
       result <-
-        Update.updateBuilder @CommentTable @CommentRow $
-          Update.setField commentParentId parentId $
-            Update.whereUpdate (fieldColumn commentId <> " = ?") [toField childId] $
-              Update.emptyUpdate @CommentTable
+        Update.updateWhere @CommentTable @CommentRow
+          (commentUniqueWhere key `and_` eq commentParentId parentId)
+          patched
       case result of
         Left err -> pure (Left err)
         Right _ -> go rest
-
-createNested ::
-  (LoadComment replies) =>
-  CommentInclude replies ->
-  CommentWriteCreate ->
-  Db (Either ORMError (CommentWith replies))
-createNested include input = transactionEither $ do
-  rootId <- liftIO $ maybe V4.nextRandom pure input.root.id
-  let rootInput =
-        CommentCreate { id = Just rootId, parentId = input.root.parentId, body = input.root.body }
-  rootResult <-
-    Insert.insert @CommentTable @CommentRow rootInput
-  case rootResult of
-    Left err -> pure (Left err)
-    Right _ -> do
-      nestedResult <- applyRepliesWrite rootId input.replies
-      case nestedResult of
+upsertReplies :: UUID -> [CommentNestedUpsert] -> Db (Either ORMError ())
+upsertReplies parentId = go
+  where
+    go [] = pure (Right ())
+    go (item : rest) = do
+      existing <- Ops.findMany @CommentTable @CommentRow (matching (commentUniqueWhere item.where_))
+      result <- case fromUniqueRows existing of
         Left err -> pure (Left err)
-        Right () -> reload include rootId
-
-updateNested ::
-  (LoadComment replies) =>
-  CommentInclude replies ->
-  UUID ->
-  CommentWriteUpdate ->
-  Db (Either ORMError (CommentWith replies))
-updateNested include rootId input = transactionEither $ do
-  updateResult <-
-    Update.update @CommentTable @CommentRow rootId input.root
-  case updateResult of
-    Left err -> pure (Left err)
-    Right _ -> do
-      nestedResult <- case input.replies of
-        Nothing -> pure (Right ())
-        Just write -> applyRepliesWrite rootId write
-      case nestedResult of
+        Right Nothing -> insertReplies parentId [item.create]
+        Right (Just row) ->
+          if row.parentId == Just parentId
+            then do
+              let patched = CommentSchema.CommentUpdate { parentId = Omit, body = item.update.body }
+              updated <-
+                Update.updateWhere @CommentTable @CommentRow
+                  (commentUniqueWhere item.where_ `and_` eq commentParentId parentId)
+                  patched
+              pure $ case updated of
+                Left err -> Left err
+                Right _ -> Right ()
+            else pure (Left (UniqueViolation "nested upsert would reparent a row owned by another parent"))
+      case result of
         Left err -> pure (Left err)
-        Right () -> reload include rootId
+        Right () -> go rest
+connectReplies :: UUID -> [CommentUnique] -> Db (Either ORMError ())
+connectReplies _ [] = pure (Right ())
+connectReplies parentId keys = sequenceNested (map connectOne keys)
+  where
+    connectOne key = do
+      result <-
+        Update.updateWhere @CommentTable @CommentRow
+          (commentUniqueWhere key)
+          (CommentSchema.CommentUpdate
+            { parentId = Value parentId,
+              body = Nothing
+            })
+      pure $ case result of
+        Left err -> Left err
+        Right _ -> Right ()
+disconnectReplies :: UUID -> [CommentUnique] -> Db (Either ORMError ())
+disconnectReplies _ [] = pure (Right ())
+disconnectReplies parentId keys = sequenceNested (map disconnectOne keys)
+  where
+    disconnectOne key = do
+      result <-
+        Update.updateWhere @CommentTable @CommentRow
+          (commentUniqueWhere key `and_` eq commentParentId parentId)
+          (CommentSchema.CommentUpdate
+            { parentId = Null,
+              body = Nothing
+            })
+      pure $ case result of
+        Left err -> Left err
+        Right _ -> Right ()
 
 data CommentQuery include select = CommentQuery
   { include_ :: include
@@ -421,21 +463,6 @@ instance ReadComment () CommentSelect where
 count :: CommentQuery include select -> Db Int
 count CommentQuery {where_, orderBy_, limit_, offset_} =
   Ops.count @CommentTable (applyQueryModifiers where_ orderBy_ limit_ offset_)
-
-reload ::
-  (LoadComment replies) =>
-  CommentInclude replies ->
-  UUID ->
-  Db (Either ORMError (CommentWith replies))
-reload include rootId = do
-  found <- Ops.findUnique @CommentTable @CommentRow rootId
-  case found of
-    Nothing -> pure (Left (RecordNotFound "Record not found with primary key"))
-    Just row -> do
-      loaded <- loadComment include [row]
-      pure $ case loaded of
-        (one : _) -> Right one
-        [] -> Left (RecordNotFound "Record not found with primary key")
 
 delete :: CommentUnique -> Db (Either ORMError Int)
 delete key =

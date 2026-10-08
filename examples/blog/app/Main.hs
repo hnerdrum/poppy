@@ -2,7 +2,6 @@ module Main (main) where
 
 import Poppy (applyMigrations, closePool, connect, load, runDb)
 import Schema.ArticleStatus (ArticleStatus (..))
-import Schema.Author (AuthorRow (..))
 import qualified Schema.Client.Author as Author
 import Schema.Include.Author (AuthorInclude (..), AuthorWith (..))
 import Schema.Post (PostRow)
@@ -18,24 +17,27 @@ main = do
     Right _ -> do
       created <-
         runDb pool $
-          Author.createNested
-            (AuthorInclude {posts = load})
-            Author.AuthorWriteCreate
-              { root = Author.AuthorCreate {id = Nothing, name = "Ada"},
+          Author.create
+            Author.AuthorCreate
+              { id = Nothing,
+                name = "Ada",
                 posts =
-                  Author.Set
-                    [ Author.PostNestedCreate {id = Nothing, title = "Notes", status = Draft},
-                      Author.PostNestedCreate {id = Nothing, title = "Essay", status = Published}
-                    ]
+                  [ Author.CreatePost {id = Nothing, title = "Notes", status = Draft},
+                    Author.CreatePost {id = Nothing, title = "Essay", status = Published}
+                  ]
               }
       case created of
         Left err -> print err
-        Right loaded -> do
-          putStrLn $ "author: " <> show loaded.author.name
-          putStrLn $ "posts: " <> show (loaded.posts :: [PostRow])
+        Right author -> do
+          putStrLn $ "author: " <> show author.name
           listed <-
             runDb
               pool
               (Author.findMany Author.emptyQuery {Author.include_ = AuthorInclude {posts = load}})
           putStrLn $ "authors with posts: " <> show (length listed)
+          case listed of
+            (one : _) ->
+              let posts = one.posts :: [PostRow]
+               in putStrLn $ "posts: " <> show posts
+            [] -> putStrLn "posts: []"
   closePool pool

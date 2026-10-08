@@ -14,9 +14,10 @@
 
 {- | Generated Client. Do not edit.
 
-Nested writes ('createNested' / 'updateNested'):
-  Set xs  — replace all children with xs
-  Ops o   — create, connect, disconnect, delete, update, upsert
+Nested writes live on 'create' / 'update'.
+  create-time relation fields are [CreateChild | ConnectChild unique]
+  update-time relation fields are Maybe <Rel>Update (replaceWith, create, connect, delete, update, upsert;
+  disconnect when the child foreign key is nullable)
 -}
 module Schema.Client.Chapter
   ( findMany,
@@ -32,20 +33,19 @@ module Schema.Client.Chapter
     upsert,
     delete,
     deleteMany,
-    createNested,
-    updateNested,
-    ChapterWriteCreate (..),
-    ChapterWriteUpdate (..),
+    ChapterCreateScalars,
+    ChapterUpdateScalars,
     SectionNestedCreate (..),
-    SectionsWrite (..),
-    SectionNestedOps (..),
-    emptySectionNestedOps,
+    SectionNestedUpsert (..),
+    SectionsUpdate (..),
+    emptySectionsUpdate,
     ChapterQuery (..),
     ChapterUnique (..),
     ChapterUniqueKey (..),
     ChapterUniqueQuery (..),
     emptyQuery,
     uniqueQuery,
+    chapterUniqueWhere,
     OmitSelect (..),
     Picked (..),
     ChapterCreate (..),
@@ -59,12 +59,12 @@ module Schema.Client.Chapter
   )
 where
 
+import Data.Maybe (isJust)
 import Data.Text (Text)
 import Data.UUID (UUID)
-import qualified Data.UUID.V4 as V4
-import Poppy.Core (fieldColumn)
+import Poppy.Core (NullableValue (..), fieldColumn)
 import Poppy.PG (toField)
-import Poppy.Db (Db, liftIO, transactionEither)
+import Poppy.Db (Db, transactionEither)
 import qualified Poppy.Delete as Delete
 import Poppy.Errors (ORMError (..), fromUniqueRows, requireFound, uniqueOrFail)
 import qualified Poppy.Insert as Insert
@@ -73,10 +73,13 @@ import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)
 import Poppy.Select (OmitSelect (..), Picked (..))
 import Poppy.SelectIn (prepareIncludeRootQuery)
 import qualified Poppy.Update as Update
-import Poppy.Where (Where, and_, eq, in_)
-import Schema.Chapter (ChapterCreate (..), ChapterRow (..), ChapterSelect (..), ChapterPicked (..), chapterSelect, chapterSelectColumns, parseChapterPicked, ChapterTable, ChapterUpdate (..), chapterId)
-import Schema.Include.Chapter (LoadChapter (..), ChapterInclude (..), ChapterRead, toChapterWithPicked, ChapterWith (..))
-import Schema.Section (SectionCreate (..), SectionRow (..), SectionUpdate (..), SectionTable, sectionId, sectionChapterRef)
+import Poppy.Where (Where, and_, eq)
+import Schema.Chapter (ChapterRow (..), ChapterSelect (..), ChapterPicked (..), chapterSelect, chapterSelectColumns, parseChapterPicked, ChapterTable, chapterId)
+import qualified Schema.Chapter as ChapterSchema (ChapterCreate (..), ChapterUpdate (..))
+
+import Schema.Include.Chapter (LoadChapter (..), ChapterInclude (..), ChapterRead, toChapterWithPicked)
+import Schema.Section (SectionRow (..), SectionTable, sectionId, sectionChapterRef, SectionCreate (..), SectionUpdate (..))
+import qualified Schema.Client.Section as Section (SectionUnique (..), sectionUniqueWhere)
 
 data ChapterUnique
   = ById UUID
@@ -94,80 +97,130 @@ chapterConflictCols :: ChapterUniqueKey -> [Text]
 chapterConflictCols = \case
   OnId -> ["id"]
 
-create :: ChapterCreate -> Db (Either ORMError ChapterRow)
-create = Insert.insert @ChapterTable @ChapterRow
-
-createMany :: [ChapterCreate] -> Db (Either ORMError Int)
-createMany = Insert.insertMany @ChapterTable
-
-update :: ChapterUnique -> ChapterUpdate -> Db (Either ORMError ChapterRow)
-update key input =
-  Update.updateWhere @ChapterTable @ChapterRow (chapterUniqueWhere key) input
-
-updateMany :: Where ChapterTable -> ChapterUpdate -> Db (Either ORMError Int)
-updateMany = Update.updateMany @ChapterTable
-
-upsert :: ChapterUniqueKey -> ChapterCreate -> ChapterUpdate -> Db (Either ORMError ChapterRow)
-upsert key createInput updateInput =
-  Insert.upsert @ChapterTable @ChapterRow (chapterConflictCols key) createInput updateInput
-
-data SectionNestedCreate = SectionNestedCreate
-  { id :: Maybe UUID, label :: Text
+data SectionNestedCreate
+  = CreateSection
+      { id :: Maybe UUID, label :: Text
+      }
+  | ConnectSection Section.SectionUnique
+  deriving (Show, Eq)
+data SectionNestedUpsert = SectionNestedUpsert
+  { where_ :: Section.SectionUnique
+  , create :: SectionNestedCreate
+  , update :: SectionUpdate
   }
   deriving (Show, Eq)
-
-data SectionNestedOps = SectionNestedOps
-  { create :: [SectionNestedCreate]
+data SectionsUpdate = SectionsUpdate
+  { replaceWith :: Maybe [SectionNestedCreate]
+  , create :: [SectionNestedCreate]
   , createMany :: [SectionNestedCreate]
-  , connect :: [UUID]
-  , disconnect :: [UUID]
-  , delete :: [UUID]
-  , update :: [(UUID, SectionNestedCreate)]
-  , upsert :: [SectionNestedCreate]
+  , connect :: [Section.SectionUnique]
+  , delete :: [Section.SectionUnique]
+  , update :: [(Section.SectionUnique, SectionUpdate)]
+  , upsert :: [SectionNestedUpsert]
   }
   deriving (Show, Eq)
 
-data SectionsWrite = Set [SectionNestedCreate] | Ops SectionNestedOps
-  deriving (Show, Eq)
-
-emptySectionNestedOps :: SectionNestedOps
-emptySectionNestedOps =
-  SectionNestedOps
-    { create = []
+emptySectionsUpdate :: SectionsUpdate
+emptySectionsUpdate =
+  SectionsUpdate
+    { replaceWith = Nothing
+    , create = []
     , createMany = []
     , connect = []
-    , disconnect = []
     , delete = []
     , update = []
     , upsert = []
     }
-
-data ChapterWriteCreate = ChapterWriteCreate
-  { root :: ChapterCreate
-  , sections :: SectionsWrite
+data ChapterCreate = ChapterCreate
+  { id :: Maybe UUID,
+    bookRef :: UUID,
+    heading :: Text,
+    sections :: [SectionNestedCreate]
   }
   deriving (Show, Eq)
 
-data ChapterWriteUpdate = ChapterWriteUpdate
-  { root :: ChapterUpdate
-  , sections :: Maybe SectionsWrite
+type ChapterCreateScalars = ChapterSchema.ChapterCreate
+
+toChapterCreateScalars :: ChapterCreate -> ChapterCreateScalars
+toChapterCreateScalars input =
+  ChapterSchema.ChapterCreate
+    { id = input.id,
+      bookRef = input.bookRef,
+      heading = input.heading
+    }
+data ChapterUpdate = ChapterUpdate
+  { bookRef :: Maybe UUID,
+    heading :: Maybe Text,
+    sections :: Maybe SectionsUpdate
   }
   deriving (Show, Eq)
 
-toSectionCreate :: UUID -> SectionNestedCreate -> SectionCreate
-toSectionCreate parentId nested =
-  SectionCreate
-    { id = nested.id,
-      label = nested.label,
-      chapterRef = parentId
+type ChapterUpdateScalars = ChapterSchema.ChapterUpdate
+
+toChapterUpdateScalars :: ChapterUpdate -> ChapterUpdateScalars
+toChapterUpdateScalars input =
+  ChapterSchema.ChapterUpdate
+    { bookRef = input.bookRef,
+      heading = input.heading
     }
 
-toSectionUpdate :: SectionNestedCreate -> SectionUpdate
-toSectionUpdate nested =
-  SectionUpdate
-    { chapterRef = Nothing,
-      label = Just nested.label
-    }
+create :: ChapterCreate -> Db (Either ORMError ChapterRow)
+create input =
+  if hasChapterNestedCreate input
+    then transactionEither (createWithNested input)
+    else Insert.insert @ChapterTable @ChapterRow (toChapterCreateScalars input)
+
+hasChapterNestedCreate :: ChapterCreate -> Bool
+hasChapterNestedCreate input =
+  not (null input.sections)
+
+createWithNested :: ChapterCreate -> Db (Either ORMError ChapterRow)
+createWithNested input = do
+  rootResult <- Insert.insert @ChapterTable @ChapterRow (toChapterCreateScalars input)
+  case rootResult of
+    Left err -> pure (Left err)
+    Right row -> do
+      nestedResult <-
+        sequenceNested
+          [ applySectionsCreate row.id input.sections
+          ]
+      case nestedResult of
+        Left err -> pure (Left err)
+        Right () -> pure (Right row)
+
+createMany :: [ChapterCreateScalars] -> Db (Either ORMError Int)
+createMany = Insert.insertMany @ChapterTable
+
+update :: ChapterUnique -> ChapterUpdate -> Db (Either ORMError ChapterRow)
+update key input =
+  if hasChapterNestedUpdate input
+    then transactionEither (updateWithNested key input)
+    else Update.updateWhere @ChapterTable @ChapterRow (chapterUniqueWhere key) (toChapterUpdateScalars input)
+
+hasChapterNestedUpdate :: ChapterUpdate -> Bool
+hasChapterNestedUpdate input =
+  isJust input.sections
+
+updateWithNested :: ChapterUnique -> ChapterUpdate -> Db (Either ORMError ChapterRow)
+updateWithNested key input = do
+  updateResult <- Update.updateWhere @ChapterTable @ChapterRow (chapterUniqueWhere key) (toChapterUpdateScalars input)
+  case updateResult of
+    Left err -> pure (Left err)
+    Right row -> do
+      nestedResult <-
+        sequenceNested
+          [ maybe (pure (Right ())) (applySectionsUpdate row.id) input.sections
+          ]
+      case nestedResult of
+        Left err -> pure (Left err)
+        Right () -> pure (Right row)
+
+updateMany :: Where ChapterTable -> ChapterUpdateScalars -> Db (Either ORMError Int)
+updateMany = Update.updateMany @ChapterTable
+
+upsert :: ChapterUniqueKey -> ChapterCreateScalars -> ChapterUpdateScalars -> Db (Either ORMError ChapterRow)
+upsert key createInput updateInput =
+  Insert.upsert @ChapterTable @ChapterRow (chapterConflictCols key) createInput updateInput
 
 sequenceNested :: [Db (Either ORMError ())] -> Db (Either ORMError ())
 sequenceNested [] = pure (Right ())
@@ -176,140 +229,113 @@ sequenceNested (action : rest) = do
   case result of
     Left err -> pure (Left err)
     Right () -> sequenceNested rest
-
-applySectionsWrite :: UUID -> SectionsWrite -> Db (Either ORMError ())
-applySectionsWrite parentId write =
-  case write of
-    Set items -> do
-      result <-
-        Delete.deleteWhere $
-          Delete.whereDelete (fieldColumn sectionChapterRef <> " = ?") [toField parentId] (Delete.emptyDelete @SectionTable)
-      case result of
-        Left err -> pure (Left err)
-        Right _ -> insertNestedCreates parentId items
-    Ops ops -> applySectionNestedOps parentId ops
-
-insertNestedCreates :: UUID -> [SectionNestedCreate] -> Db (Either ORMError ())
-insertNestedCreates parentId = go
+applySectionsCreate :: UUID -> [SectionNestedCreate] -> Db (Either ORMError ())
+applySectionsCreate = insertSections
+applySectionsUpdate :: UUID -> SectionsUpdate -> Db (Either ORMError ())
+applySectionsUpdate parentId ops = do
+  replaced <- case ops.replaceWith of
+    Nothing -> pure (Right ())
+    Just items -> replaceSections parentId items
+  case replaced of
+    Left err -> pure (Left err)
+    Right () ->
+      sequenceNested
+        [ deleteSections parentId ops.delete
+        , updateSectionsRows parentId ops.update
+        , upsertSections parentId ops.upsert
+        , insertSections parentId ops.create
+        , insertSections parentId ops.createMany
+        , connectSections parentId ops.connect
+        ]
+replaceSections :: UUID -> [SectionNestedCreate] -> Db (Either ORMError ())
+replaceSections parentId items = do
+  result <-
+    Delete.deleteWhere $
+      Delete.whereDelete (fieldColumn sectionChapterRef <> " = ?") [toField parentId] (Delete.emptyDelete @SectionTable)
+  case result of
+    Left err -> pure (Left err)
+    Right _ -> insertSections parentId items
+insertSections :: UUID -> [SectionNestedCreate] -> Db (Either ORMError ())
+insertSections parentId = go
   where
     go [] = pure (Right ())
     go (nested : rest) = do
-      result <- Insert.insert @SectionTable @SectionRow (toSectionCreate parentId nested)
-      case result of
-        Left err -> pure (Left err)
-        Right _ -> go rest
-
-applySectionNestedOps :: UUID -> SectionNestedOps -> Db (Either ORMError ())
-applySectionNestedOps parentId ops =
-  sequenceNested
-    [ deleteNested parentId ops.delete
-    , deleteNested parentId ops.disconnect
-    , updateChildRows parentId ops.update
-    , upsertNested parentId ops.upsert
-    , insertNestedCreates parentId ops.create
-    , insertNestedCreateMany parentId ops.createMany
-    , connectNested parentId ops.connect
-    ]
-
-deleteNested :: UUID -> [UUID] -> Db (Either ORMError ())
-deleteNested _ [] = pure (Right ())
-deleteNested parentId ids = do
-  result <- Delete.deleteMany @SectionTable (in_ sectionId ids `and_` eq sectionChapterRef parentId)
-  pure $ case result of
-    Left err -> Left err
-    Right _ -> Right ()
-
-updateChildRows :: UUID -> [(UUID, SectionNestedCreate)] -> Db (Either ORMError ())
-updateChildRows parentId = go
-  where
-    go [] = pure (Right ())
-    go ((childId, nested) : rest) = do
-      result <-
-        Update.updateBuilder @SectionTable @SectionRow $
-          Update.whereUpdate (fieldColumn sectionId <> " = ?") [toField childId] $
-            Update.whereUpdate (fieldColumn sectionChapterRef <> " = ?") [toField parentId] $
-              Update.toUpdateBuilder @SectionTable (toSectionUpdate nested)
-      case result of
-        Left err -> pure (Left err)
-        Right _ -> go rest
-
-upsertNested :: UUID -> [SectionNestedCreate] -> Db (Either ORMError ())
-upsertNested parentId = go
-  where
-    go [] = pure (Right ())
-    go (nested : rest) = do
-      result <-
-        Insert.insertBuilder @SectionTable @SectionRow $
-          Prelude.id $
-          Insert.toInsertBuilder @SectionTable (toSectionCreate parentId nested)
-      case result of
-        Left err -> pure (Left err)
-        Right _ -> go rest
-
-insertNestedCreateMany :: UUID -> [SectionNestedCreate] -> Db (Either ORMError ())
-insertNestedCreateMany parentId = go
-  where
-    go [] = pure (Right ())
-    go (nested : rest) = do
-      result <-
-        Insert.tryExecuteInsert $
-          Prelude.id $
-          Insert.toInsertBuilder @SectionTable (toSectionCreate parentId nested)
+      result <- case nested of
+        ConnectSection key -> connectSections parentId [key]
+        CreateSection {id, label} -> do
+          inserted <- Insert.insert @SectionTable @SectionRow SectionCreate
+            { id = id,
+              label = label,
+              chapterRef = parentId
+            }
+          pure $ case inserted of
+            Left err -> Left err
+            Right _ -> Right ()
       case result of
         Left err -> pure (Left err)
         Right () -> go rest
-
-connectNested :: UUID -> [UUID] -> Db (Either ORMError ())
-connectNested parentId = go
+deleteSections :: UUID -> [Section.SectionUnique] -> Db (Either ORMError ())
+deleteSections _ [] = pure (Right ())
+deleteSections parentId keys = sequenceNested (map deleteOne keys)
+  where
+    deleteOne key = do
+      result <- Delete.deleteMany @SectionTable
+        (Section.sectionUniqueWhere key `and_` eq sectionChapterRef parentId)
+      pure $ case result of
+        Left err -> Left err
+        Right _ -> Right ()
+updateSectionsRows :: UUID -> [(Section.SectionUnique, SectionUpdate)] -> Db (Either ORMError ())
+updateSectionsRows parentId = go
   where
     go [] = pure (Right ())
-    go (childId : rest) = do
+    go ((key, nested) : rest) = do
+      let patched = SectionUpdate { chapterRef = Nothing, label = nested.label }
       result <-
-        Update.updateBuilder @SectionTable @SectionRow $
-          Update.setField sectionChapterRef parentId $
-            Update.whereUpdate (fieldColumn sectionId <> " = ?") [toField childId] $
-              Update.emptyUpdate @SectionTable
+        Update.updateWhere @SectionTable @SectionRow
+          (Section.sectionUniqueWhere key `and_` eq sectionChapterRef parentId)
+          patched
       case result of
         Left err -> pure (Left err)
         Right _ -> go rest
-
-createNested ::
-  (LoadChapter sections) =>
-  ChapterInclude sections ->
-  ChapterWriteCreate ->
-  Db (Either ORMError (ChapterWith sections))
-createNested include input = transactionEither $ do
-  rootId <- liftIO $ maybe V4.nextRandom pure input.root.id
-  let rootInput =
-        ChapterCreate { id = Just rootId, bookRef = input.root.bookRef, heading = input.root.heading }
-  rootResult <-
-    Insert.insert @ChapterTable @ChapterRow rootInput
-  case rootResult of
-    Left err -> pure (Left err)
-    Right _ -> do
-      nestedResult <- applySectionsWrite rootId input.sections
-      case nestedResult of
+upsertSections :: UUID -> [SectionNestedUpsert] -> Db (Either ORMError ())
+upsertSections parentId = go
+  where
+    go [] = pure (Right ())
+    go (item : rest) = do
+      existing <- Ops.findMany @SectionTable @SectionRow (matching (Section.sectionUniqueWhere item.where_))
+      result <- case fromUniqueRows existing of
         Left err -> pure (Left err)
-        Right () -> reload include rootId
-
-updateNested ::
-  (LoadChapter sections) =>
-  ChapterInclude sections ->
-  UUID ->
-  ChapterWriteUpdate ->
-  Db (Either ORMError (ChapterWith sections))
-updateNested include rootId input = transactionEither $ do
-  updateResult <-
-    Update.update @ChapterTable @ChapterRow rootId input.root
-  case updateResult of
-    Left err -> pure (Left err)
-    Right _ -> do
-      nestedResult <- case input.sections of
-        Nothing -> pure (Right ())
-        Just write -> applySectionsWrite rootId write
-      case nestedResult of
+        Right Nothing -> insertSections parentId [item.create]
+        Right (Just row) ->
+          if row.chapterRef == parentId
+            then do
+              let patched = SectionUpdate { chapterRef = Nothing, label = item.update.label }
+              updated <-
+                Update.updateWhere @SectionTable @SectionRow
+                  (Section.sectionUniqueWhere item.where_ `and_` eq sectionChapterRef parentId)
+                  patched
+              pure $ case updated of
+                Left err -> Left err
+                Right _ -> Right ()
+            else pure (Left (UniqueViolation "nested upsert would reparent a row owned by another parent"))
+      case result of
         Left err -> pure (Left err)
-        Right () -> reload include rootId
+        Right () -> go rest
+connectSections :: UUID -> [Section.SectionUnique] -> Db (Either ORMError ())
+connectSections _ [] = pure (Right ())
+connectSections parentId keys = sequenceNested (map connectOne keys)
+  where
+    connectOne key = do
+      result <-
+        Update.updateWhere @SectionTable @SectionRow
+          (Section.sectionUniqueWhere key)
+          (SectionUpdate
+            { chapterRef = Just parentId,
+              label = Nothing
+            })
+      pure $ case result of
+        Left err -> Left err
+        Right _ -> Right ()
 
 data ChapterQuery include select = ChapterQuery
   { include_ :: include
@@ -421,21 +447,6 @@ instance ReadChapter () ChapterSelect where
 count :: ChapterQuery include select -> Db Int
 count ChapterQuery {where_, orderBy_, limit_, offset_} =
   Ops.count @ChapterTable (applyQueryModifiers where_ orderBy_ limit_ offset_)
-
-reload ::
-  (LoadChapter sections) =>
-  ChapterInclude sections ->
-  UUID ->
-  Db (Either ORMError (ChapterWith sections))
-reload include rootId = do
-  found <- Ops.findUnique @ChapterTable @ChapterRow rootId
-  case found of
-    Nothing -> pure (Left (RecordNotFound "Record not found with primary key"))
-    Just row -> do
-      loaded <- loadChapter include [row]
-      pure $ case loaded of
-        (one : _) -> Right one
-        [] -> Left (RecordNotFound "Record not found with primary key")
 
 delete :: ChapterUnique -> Db (Either ORMError Int)
 delete key =

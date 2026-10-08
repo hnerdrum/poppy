@@ -37,6 +37,7 @@ module Schema.Client.Task
     TaskUniqueQuery (..),
     emptyQuery,
     uniqueQuery,
+    taskUniqueWhere,
     taskId
   )
 

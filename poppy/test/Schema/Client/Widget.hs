@@ -37,6 +37,7 @@ module Schema.Client.Widget
     WidgetUniqueQuery (..),
     emptyQuery,
     uniqueQuery,
+    widgetUniqueWhere,
     widgetId
   )
 

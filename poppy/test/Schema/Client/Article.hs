@@ -37,6 +37,7 @@ module Schema.Client.Article
     ArticleUniqueQuery (..),
     emptyQuery,
     uniqueQuery,
+    articleUniqueWhere,
     articleId
   )
 

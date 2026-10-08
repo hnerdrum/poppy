@@ -37,6 +37,7 @@ module Schema.Client.Tag
     TagUniqueQuery (..),
     emptyQuery,
     uniqueQuery,
+    tagUniqueWhere,
     tagId
   )
 

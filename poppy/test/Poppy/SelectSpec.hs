@@ -234,7 +234,7 @@ selectSpec = do
 
     it "create and findMany share Schema.Client.Shelf" $ \TestEnv {envPool = pool} -> do
       created <-
-        runDb pool (Shelf.create (Shelf.ShelfCreate {id = Nothing, name = "Pantry"}))
+        runDb pool (Shelf.create (Shelf.ShelfCreate {id = Nothing, name = "Pantry", books = [], tags = []}))
           >>= assertRight
       rows <-
         runDb

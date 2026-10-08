@@ -37,6 +37,7 @@ module Schema.Client.Post
     PostUniqueQuery (..),
     emptyQuery,
     uniqueQuery,
+    postUniqueWhere,
     postId
   )
 

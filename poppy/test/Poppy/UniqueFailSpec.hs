@@ -19,7 +19,7 @@ expectFail path = do
   (code, _, err) <-
     readProcessWithExitCode
       "cabal"
-      ( ["exec", "--", "ghc", "-fno-code", "-w", "-itest", "-outputdir", "/tmp/poppy-unique-fail"]
+      ( ["exec", "--", "ghc", "-package", "poppy", "-fno-code", "-w", "-itest", "-outputdir", "/tmp/poppy-unique-fail"]
           ++ extensions
           ++ [path]
       )

@@ -1,38 +1,46 @@
 # Writes
 
-These return `Db (Either ORMError …)`. Unique, foreign-key, and not-null failures from Postgres show up as `UniqueViolation`, `ForeignKeyViolation`, and `NotNullViolation`. See [Errors](errors.md).
+Every write returns `Db (Either ORMError …)`. Postgres unique, foreign-key, and not-null failures map to `UniqueViolation`, `ForeignKeyViolation`, and `NotNullViolation`. See [Errors](errors.md).
 
-| Function     | You pass                                    | You get               |
-| ------------ | ------------------------------------------- | --------------------- |
-| `create`     | `TaskCreate`                                | `TaskRow`             |
-| `createMany` | `[TaskCreate]`                              | `Int` (rows inserted) |
-| `update`     | `TaskUnique`, `TaskUpdate`                  | `TaskRow`             |
-| `updateMany` | `Where`, `TaskUpdate`                       | `Int`                 |
-| `upsert`     | `TaskUniqueKey`, `TaskCreate`, `TaskUpdate` | `TaskRow`             |
-| `delete`     | `TaskUnique`                                | `Int`                 |
-| `deleteMany` | `Where`                                     | `Int`                 |
+| Function     | You pass                                        | You get               |
+| ------------ | ----------------------------------------------- | --------------------- |
+| `create`     | `TaskCreate`                                    | `TaskRow`             |
+| `createMany` | `[TaskCreateScalars]` (or `TaskCreate`)         | `Int` (rows inserted) |
+| `update`     | `TaskUnique`, `TaskUpdate`                      | `TaskRow`             |
+| `updateMany` | `Where`, `TaskUpdateScalars`                    | `Int`                 |
+| `upsert`     | `TaskUniqueKey`, create scalars, update scalars | `TaskRow`             |
+| `delete`     | `TaskUnique`                                    | `Int`                 |
+| `deleteMany` | `Where`                                         | `Int`                 |
+
+Without `hasMany` relations, create and update are scalar-only and `createMany` / `upsert` / `updateMany` use those same types. With relations, `createMany` and `upsert` take `*CreateScalars` / `*UpdateScalars` instead.
 
 ## Nested writes
 
-If a model `hasMany` children, the Client also has `createNested` and `updateNested`. These functions take two arguments:
+Each `hasMany` relation is a field on `create` and `update`:
 
-1. An include record specifying what to load back after the operation
-2. The write operation itself
+- On `create`: `[CreateChild {…} | ConnectChild ChildUnique]` (default `[]`)
+- On `update`: `Maybe RelUpdate` (default `Nothing`; leave it to skip that relation)
 
 ```haskell
-Author.createNested
-  Author.AuthorInclude {posts = True}
-  Author.AuthorWriteCreate
-    { root = Author.AuthorCreate {id = Nothing, name = "Ada"},
+Author.create
+  Author.AuthorCreate
+    { id = Nothing,
+      name = "Ada",
       posts =
-        Author.Set
-          [ Author.PostNestedCreate {id = Nothing, title = "Notes", status = Draft},
-            Author.PostNestedCreate {id = Nothing, title = "Essay", status = Published}
-          ]
+        [ Author.CreatePost {id = Nothing, title = "Notes", status = Draft},
+          Author.CreatePost {id = Nothing, title = "Essay", status = Published}
+        ]
     }
 ```
 
-Each `hasMany` field on the payload is either:
+`create` and `update` open a transaction only when a relation field is set.
 
-- `Set xs` — delete every child that points at this parent, then insert `xs`
-- `Ops o` — run the lists on `o`: `create`, `createMany`, `connect`, `disconnect`, `delete`, `update`, `upsert`
+A `RelUpdate` (such as `PostsUpdate`) has:
+
+- `replaceWith` — delete this parent's children, then insert the list
+- `create` / `createMany` — insert children
+- `connect` — attach existing children by unique key
+- `delete` — delete children of this parent by unique key
+- `update` — `(ChildUnique, ChildUpdate)` partial updates, scoped to this parent
+- `upsert` — `{ where_, create, update }`; conflict stays on this parent (won't steal another parent's child)
+- `disconnect` — only when the child FK is nullable; sets it to `NULL`, does not delete the row

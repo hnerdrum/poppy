@@ -9,6 +9,7 @@
 - Models with relations emit `Schema.Include.<Model>`. Edges are `skip`, `load`, and `loadWith`.
 - Include loaders apply `where_`, `orderBy_`, and per-parent `take_` from the edge.
 - Clients emit `<Model>Unique` (`ById`) and `<Model>UniqueKey` (`OnId`). `findUnique` takes `uniqueQuery`. `update` and `delete` take the unique. `upsert` takes the conflict target.
+- Nested writes live on `create` / `update` relation fields. `createNested` / `updateNested` and `*WriteCreate` / `*WriteUpdate` are gone. `replaceWith` replaces children; `disconnect` nulls a nullable FK; nested `upsert` never re-parents another parent's row. `createMany` / top-level `upsert` take scalar-only payloads when the model has relations.
 
 ## 0.1.0.0 — 2026-09-17
 

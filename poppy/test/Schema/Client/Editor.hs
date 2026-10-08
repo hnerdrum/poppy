@@ -14,9 +14,10 @@
 
 {- | Generated Client. Do not edit.
 
-Nested writes ('createNested' / 'updateNested'):
-  Set xs  — replace all children with xs
-  Ops o   — create, connect, disconnect, delete, update, upsert
+Nested writes live on 'create' / 'update'.
+  create-time relation fields are [CreateChild | ConnectChild unique]
+  update-time relation fields are Maybe <Rel>Update (replaceWith, create, connect, delete, update, upsert;
+  disconnect when the child foreign key is nullable)
 -}
 module Schema.Client.Editor
   ( findMany,
@@ -32,20 +33,21 @@ module Schema.Client.Editor
     upsert,
     delete,
     deleteMany,
-    createNested,
-    updateNested,
-    EditorWriteCreate (..),
-    EditorWriteUpdate (..),
+    EditorCreateScalars,
+    EditorUpdateScalars,
     ArticleNestedCreate (..),
-    WrittenPostsWrite (..),
-    ArticleNestedOps (..),
-    emptyArticleNestedOps,
+    ArticleNestedUpsert (..),
+    WrittenPostsUpdate (..),
+    emptyWrittenPostsUpdate,
+    EditedPostsUpdate (..),
+    emptyEditedPostsUpdate,
     EditorQuery (..),
     EditorUnique (..),
     EditorUniqueKey (..),
     EditorUniqueQuery (..),
     emptyQuery,
     uniqueQuery,
+    editorUniqueWhere,
     OmitSelect (..),
     Picked (..),
     EditorCreate (..),
@@ -59,12 +61,12 @@ module Schema.Client.Editor
   )
 where
 
+import Data.Maybe (isJust)
 import Data.Text (Text)
 import Data.UUID (UUID)
-import qualified Data.UUID.V4 as V4
-import Poppy.Core (fieldColumn)
+import Poppy.Core (NullableValue (..), fieldColumn)
 import Poppy.PG (toField)
-import Poppy.Db (Db, liftIO, transactionEither)
+import Poppy.Db (Db, transactionEither)
 import qualified Poppy.Delete as Delete
 import Poppy.Errors (ORMError (..), fromUniqueRows, requireFound, uniqueOrFail)
 import qualified Poppy.Insert as Insert
@@ -73,10 +75,13 @@ import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)
 import Poppy.Select (OmitSelect (..), Picked (..))
 import Poppy.SelectIn (prepareIncludeRootQuery)
 import qualified Poppy.Update as Update
-import Poppy.Where (Where, and_, eq, in_)
-import Schema.Editor (EditorCreate (..), EditorRow (..), EditorSelect (..), EditorPicked (..), editorSelect, editorSelectColumns, parseEditorPicked, EditorTable, EditorUpdate (..), editorId)
-import Schema.Include.Editor (LoadEditor (..), EditorInclude (..), EditorRead, toEditorWithPicked, EditorWith (..))
-import Schema.Article (ArticleCreate (..), ArticleRow (..), ArticleUpdate (..), ArticleTable, articleId, articleAuthorId)
+import Poppy.Where (Where, and_, eq)
+import Schema.Editor (EditorRow (..), EditorSelect (..), EditorPicked (..), editorSelect, editorSelectColumns, parseEditorPicked, EditorTable, editorId)
+import qualified Schema.Editor as EditorSchema (EditorCreate (..), EditorUpdate (..))
+
+import Schema.Include.Editor (LoadEditor (..), EditorInclude (..), EditorRead, toEditorWithPicked)
+import Schema.Article (ArticleRow (..), ArticleTable, articleId, articleAuthorId, ArticleCreate (..), ArticleUpdate (..))
+import qualified Schema.Client.Article as Article (ArticleUnique (..), articleUniqueWhere)
 
 data EditorUnique
   = ById UUID
@@ -94,80 +99,152 @@ editorConflictCols :: EditorUniqueKey -> [Text]
 editorConflictCols = \case
   OnId -> ["id"]
 
-create :: EditorCreate -> Db (Either ORMError EditorRow)
-create = Insert.insert @EditorTable @EditorRow
-
-createMany :: [EditorCreate] -> Db (Either ORMError Int)
-createMany = Insert.insertMany @EditorTable
-
-update :: EditorUnique -> EditorUpdate -> Db (Either ORMError EditorRow)
-update key input =
-  Update.updateWhere @EditorTable @EditorRow (editorUniqueWhere key) input
-
-updateMany :: Where EditorTable -> EditorUpdate -> Db (Either ORMError Int)
-updateMany = Update.updateMany @EditorTable
-
-upsert :: EditorUniqueKey -> EditorCreate -> EditorUpdate -> Db (Either ORMError EditorRow)
-upsert key createInput updateInput =
-  Insert.upsert @EditorTable @EditorRow (editorConflictCols key) createInput updateInput
-
-data ArticleNestedCreate = ArticleNestedCreate
-  { id :: Maybe UUID, title :: Text
+data ArticleNestedCreate
+  = CreateArticle
+      { id :: Maybe UUID, title :: Text
+      }
+  | ConnectArticle Article.ArticleUnique
+  deriving (Show, Eq)
+data ArticleNestedUpsert = ArticleNestedUpsert
+  { where_ :: Article.ArticleUnique
+  , create :: ArticleNestedCreate
+  , update :: ArticleUpdate
   }
   deriving (Show, Eq)
-
-data ArticleNestedOps = ArticleNestedOps
-  { create :: [ArticleNestedCreate]
+data WrittenPostsUpdate = WrittenPostsUpdate
+  { replaceWith :: Maybe [ArticleNestedCreate]
+  , create :: [ArticleNestedCreate]
   , createMany :: [ArticleNestedCreate]
-  , connect :: [UUID]
-  , disconnect :: [UUID]
-  , delete :: [UUID]
-  , update :: [(UUID, ArticleNestedCreate)]
-  , upsert :: [ArticleNestedCreate]
+  , connect :: [Article.ArticleUnique]
+  , delete :: [Article.ArticleUnique]
+  , update :: [(Article.ArticleUnique, ArticleUpdate)]
+  , upsert :: [ArticleNestedUpsert]
   }
   deriving (Show, Eq)
 
-data WrittenPostsWrite = Set [ArticleNestedCreate] | Ops ArticleNestedOps
-  deriving (Show, Eq)
-
-emptyArticleNestedOps :: ArticleNestedOps
-emptyArticleNestedOps =
-  ArticleNestedOps
-    { create = []
+emptyWrittenPostsUpdate :: WrittenPostsUpdate
+emptyWrittenPostsUpdate =
+  WrittenPostsUpdate
+    { replaceWith = Nothing
+    , create = []
     , createMany = []
     , connect = []
-    , disconnect = []
     , delete = []
     , update = []
     , upsert = []
     }
-
-data EditorWriteCreate = EditorWriteCreate
-  { root :: EditorCreate
-  , writtenPosts :: WrittenPostsWrite
+data EditedPostsUpdate = EditedPostsUpdate
+  { replaceWith :: Maybe [ArticleNestedCreate]
+  , create :: [ArticleNestedCreate]
+  , createMany :: [ArticleNestedCreate]
+  , connect :: [Article.ArticleUnique]
+  , delete :: [Article.ArticleUnique]
+  , update :: [(Article.ArticleUnique, ArticleUpdate)]
+  , upsert :: [ArticleNestedUpsert]
   }
   deriving (Show, Eq)
 
-data EditorWriteUpdate = EditorWriteUpdate
-  { root :: EditorUpdate
-  , writtenPosts :: Maybe WrittenPostsWrite
+emptyEditedPostsUpdate :: EditedPostsUpdate
+emptyEditedPostsUpdate =
+  EditedPostsUpdate
+    { replaceWith = Nothing
+    , create = []
+    , createMany = []
+    , connect = []
+    , delete = []
+    , update = []
+    , upsert = []
+    }
+data EditorCreate = EditorCreate
+  { id :: Maybe UUID,
+    name :: Text,
+    writtenPosts :: [ArticleNestedCreate],
+    editedPosts :: [ArticleNestedCreate]
   }
   deriving (Show, Eq)
 
-toArticleCreate :: UUID -> ArticleNestedCreate -> ArticleCreate
-toArticleCreate parentId nested =
-  ArticleCreate
-    { id = nested.id,
-      title = nested.title,
-      authorId = parentId
+type EditorCreateScalars = EditorSchema.EditorCreate
+
+toEditorCreateScalars :: EditorCreate -> EditorCreateScalars
+toEditorCreateScalars input =
+  EditorSchema.EditorCreate
+    { id = input.id,
+      name = input.name
+    }
+data EditorUpdate = EditorUpdate
+  { name :: Maybe Text,
+    writtenPosts :: Maybe WrittenPostsUpdate,
+    editedPosts :: Maybe EditedPostsUpdate
+  }
+  deriving (Show, Eq)
+
+type EditorUpdateScalars = EditorSchema.EditorUpdate
+
+toEditorUpdateScalars :: EditorUpdate -> EditorUpdateScalars
+toEditorUpdateScalars input =
+  EditorSchema.EditorUpdate
+    { name = input.name
     }
 
-toArticleUpdate :: ArticleNestedCreate -> ArticleUpdate
-toArticleUpdate nested =
-  ArticleUpdate
-    { authorId = Nothing,
-      title = Just nested.title
-    }
+create :: EditorCreate -> Db (Either ORMError EditorRow)
+create input =
+  if hasEditorNestedCreate input
+    then transactionEither (createWithNested input)
+    else Insert.insert @EditorTable @EditorRow (toEditorCreateScalars input)
+
+hasEditorNestedCreate :: EditorCreate -> Bool
+hasEditorNestedCreate input =
+  not (null input.writtenPosts) || not (null input.editedPosts)
+
+createWithNested :: EditorCreate -> Db (Either ORMError EditorRow)
+createWithNested input = do
+  rootResult <- Insert.insert @EditorTable @EditorRow (toEditorCreateScalars input)
+  case rootResult of
+    Left err -> pure (Left err)
+    Right row -> do
+      nestedResult <-
+        sequenceNested
+          [ applyWrittenPostsCreate row.id input.writtenPosts
+          , applyEditedPostsCreate row.id input.editedPosts
+          ]
+      case nestedResult of
+        Left err -> pure (Left err)
+        Right () -> pure (Right row)
+
+createMany :: [EditorCreateScalars] -> Db (Either ORMError Int)
+createMany = Insert.insertMany @EditorTable
+
+update :: EditorUnique -> EditorUpdate -> Db (Either ORMError EditorRow)
+update key input =
+  if hasEditorNestedUpdate input
+    then transactionEither (updateWithNested key input)
+    else Update.updateWhere @EditorTable @EditorRow (editorUniqueWhere key) (toEditorUpdateScalars input)
+
+hasEditorNestedUpdate :: EditorUpdate -> Bool
+hasEditorNestedUpdate input =
+  isJust input.writtenPosts || isJust input.editedPosts
+
+updateWithNested :: EditorUnique -> EditorUpdate -> Db (Either ORMError EditorRow)
+updateWithNested key input = do
+  updateResult <- Update.updateWhere @EditorTable @EditorRow (editorUniqueWhere key) (toEditorUpdateScalars input)
+  case updateResult of
+    Left err -> pure (Left err)
+    Right row -> do
+      nestedResult <-
+        sequenceNested
+          [ maybe (pure (Right ())) (applyWrittenPostsUpdate row.id) input.writtenPosts
+          , maybe (pure (Right ())) (applyEditedPostsUpdate row.id) input.editedPosts
+          ]
+      case nestedResult of
+        Left err -> pure (Left err)
+        Right () -> pure (Right row)
+
+updateMany :: Where EditorTable -> EditorUpdateScalars -> Db (Either ORMError Int)
+updateMany = Update.updateMany @EditorTable
+
+upsert :: EditorUniqueKey -> EditorCreateScalars -> EditorUpdateScalars -> Db (Either ORMError EditorRow)
+upsert key createInput updateInput =
+  Insert.upsert @EditorTable @EditorRow (editorConflictCols key) createInput updateInput
 
 sequenceNested :: [Db (Either ORMError ())] -> Db (Either ORMError ())
 sequenceNested [] = pure (Right ())
@@ -176,140 +253,220 @@ sequenceNested (action : rest) = do
   case result of
     Left err -> pure (Left err)
     Right () -> sequenceNested rest
-
-applyWrittenPostsWrite :: UUID -> WrittenPostsWrite -> Db (Either ORMError ())
-applyWrittenPostsWrite parentId write =
-  case write of
-    Set items -> do
-      result <-
-        Delete.deleteWhere $
-          Delete.whereDelete (fieldColumn articleAuthorId <> " = ?") [toField parentId] (Delete.emptyDelete @ArticleTable)
-      case result of
-        Left err -> pure (Left err)
-        Right _ -> insertNestedCreates parentId items
-    Ops ops -> applyArticleNestedOps parentId ops
-
-insertNestedCreates :: UUID -> [ArticleNestedCreate] -> Db (Either ORMError ())
-insertNestedCreates parentId = go
+applyWrittenPostsCreate :: UUID -> [ArticleNestedCreate] -> Db (Either ORMError ())
+applyWrittenPostsCreate = insertWrittenPosts
+applyWrittenPostsUpdate :: UUID -> WrittenPostsUpdate -> Db (Either ORMError ())
+applyWrittenPostsUpdate parentId ops = do
+  replaced <- case ops.replaceWith of
+    Nothing -> pure (Right ())
+    Just items -> replaceWrittenPosts parentId items
+  case replaced of
+    Left err -> pure (Left err)
+    Right () ->
+      sequenceNested
+        [ deleteWrittenPosts parentId ops.delete
+        , updateWrittenPostsRows parentId ops.update
+        , upsertWrittenPosts parentId ops.upsert
+        , insertWrittenPosts parentId ops.create
+        , insertWrittenPosts parentId ops.createMany
+        , connectWrittenPosts parentId ops.connect
+        ]
+replaceWrittenPosts :: UUID -> [ArticleNestedCreate] -> Db (Either ORMError ())
+replaceWrittenPosts parentId items = do
+  result <-
+    Delete.deleteWhere $
+      Delete.whereDelete (fieldColumn articleAuthorId <> " = ?") [toField parentId] (Delete.emptyDelete @ArticleTable)
+  case result of
+    Left err -> pure (Left err)
+    Right _ -> insertWrittenPosts parentId items
+insertWrittenPosts :: UUID -> [ArticleNestedCreate] -> Db (Either ORMError ())
+insertWrittenPosts parentId = go
   where
     go [] = pure (Right ())
     go (nested : rest) = do
-      result <- Insert.insert @ArticleTable @ArticleRow (toArticleCreate parentId nested)
-      case result of
-        Left err -> pure (Left err)
-        Right _ -> go rest
-
-applyArticleNestedOps :: UUID -> ArticleNestedOps -> Db (Either ORMError ())
-applyArticleNestedOps parentId ops =
-  sequenceNested
-    [ deleteNested parentId ops.delete
-    , deleteNested parentId ops.disconnect
-    , updateChildRows parentId ops.update
-    , upsertNested parentId ops.upsert
-    , insertNestedCreates parentId ops.create
-    , insertNestedCreateMany parentId ops.createMany
-    , connectNested parentId ops.connect
-    ]
-
-deleteNested :: UUID -> [UUID] -> Db (Either ORMError ())
-deleteNested _ [] = pure (Right ())
-deleteNested parentId ids = do
-  result <- Delete.deleteMany @ArticleTable (in_ articleId ids `and_` eq articleAuthorId parentId)
-  pure $ case result of
-    Left err -> Left err
-    Right _ -> Right ()
-
-updateChildRows :: UUID -> [(UUID, ArticleNestedCreate)] -> Db (Either ORMError ())
-updateChildRows parentId = go
-  where
-    go [] = pure (Right ())
-    go ((childId, nested) : rest) = do
-      result <-
-        Update.updateBuilder @ArticleTable @ArticleRow $
-          Update.whereUpdate (fieldColumn articleId <> " = ?") [toField childId] $
-            Update.whereUpdate (fieldColumn articleAuthorId <> " = ?") [toField parentId] $
-              Update.toUpdateBuilder @ArticleTable (toArticleUpdate nested)
-      case result of
-        Left err -> pure (Left err)
-        Right _ -> go rest
-
-upsertNested :: UUID -> [ArticleNestedCreate] -> Db (Either ORMError ())
-upsertNested parentId = go
-  where
-    go [] = pure (Right ())
-    go (nested : rest) = do
-      result <-
-        Insert.insertBuilder @ArticleTable @ArticleRow $
-          Prelude.id $
-          Insert.toInsertBuilder @ArticleTable (toArticleCreate parentId nested)
-      case result of
-        Left err -> pure (Left err)
-        Right _ -> go rest
-
-insertNestedCreateMany :: UUID -> [ArticleNestedCreate] -> Db (Either ORMError ())
-insertNestedCreateMany parentId = go
-  where
-    go [] = pure (Right ())
-    go (nested : rest) = do
-      result <-
-        Insert.tryExecuteInsert $
-          Prelude.id $
-          Insert.toInsertBuilder @ArticleTable (toArticleCreate parentId nested)
+      result <- case nested of
+        ConnectArticle key -> connectWrittenPosts parentId [key]
+        CreateArticle {id, title} -> do
+          inserted <- Insert.insert @ArticleTable @ArticleRow ArticleCreate
+            { id = id,
+              title = title,
+              authorId = parentId
+            }
+          pure $ case inserted of
+            Left err -> Left err
+            Right _ -> Right ()
       case result of
         Left err -> pure (Left err)
         Right () -> go rest
-
-connectNested :: UUID -> [UUID] -> Db (Either ORMError ())
-connectNested parentId = go
+deleteWrittenPosts :: UUID -> [Article.ArticleUnique] -> Db (Either ORMError ())
+deleteWrittenPosts _ [] = pure (Right ())
+deleteWrittenPosts parentId keys = sequenceNested (map deleteOne keys)
+  where
+    deleteOne key = do
+      result <- Delete.deleteMany @ArticleTable
+        (Article.articleUniqueWhere key `and_` eq articleAuthorId parentId)
+      pure $ case result of
+        Left err -> Left err
+        Right _ -> Right ()
+updateWrittenPostsRows :: UUID -> [(Article.ArticleUnique, ArticleUpdate)] -> Db (Either ORMError ())
+updateWrittenPostsRows parentId = go
   where
     go [] = pure (Right ())
-    go (childId : rest) = do
+    go ((key, nested) : rest) = do
+      let patched = ArticleUpdate { authorId = Nothing, title = nested.title }
       result <-
-        Update.updateBuilder @ArticleTable @ArticleRow $
-          Update.setField articleAuthorId parentId $
-            Update.whereUpdate (fieldColumn articleId <> " = ?") [toField childId] $
-              Update.emptyUpdate @ArticleTable
+        Update.updateWhere @ArticleTable @ArticleRow
+          (Article.articleUniqueWhere key `and_` eq articleAuthorId parentId)
+          patched
       case result of
         Left err -> pure (Left err)
         Right _ -> go rest
-
-createNested ::
-  (LoadEditor writtenPosts editedPosts) =>
-  EditorInclude writtenPosts editedPosts ->
-  EditorWriteCreate ->
-  Db (Either ORMError (EditorWith writtenPosts editedPosts))
-createNested include input = transactionEither $ do
-  rootId <- liftIO $ maybe V4.nextRandom pure input.root.id
-  let rootInput =
-        EditorCreate { id = Just rootId, name = input.root.name }
-  rootResult <-
-    Insert.insert @EditorTable @EditorRow rootInput
-  case rootResult of
-    Left err -> pure (Left err)
-    Right _ -> do
-      nestedResult <- applyWrittenPostsWrite rootId input.writtenPosts
-      case nestedResult of
+upsertWrittenPosts :: UUID -> [ArticleNestedUpsert] -> Db (Either ORMError ())
+upsertWrittenPosts parentId = go
+  where
+    go [] = pure (Right ())
+    go (item : rest) = do
+      existing <- Ops.findMany @ArticleTable @ArticleRow (matching (Article.articleUniqueWhere item.where_))
+      result <- case fromUniqueRows existing of
         Left err -> pure (Left err)
-        Right () -> reload include rootId
-
-updateNested ::
-  (LoadEditor writtenPosts editedPosts) =>
-  EditorInclude writtenPosts editedPosts ->
-  UUID ->
-  EditorWriteUpdate ->
-  Db (Either ORMError (EditorWith writtenPosts editedPosts))
-updateNested include rootId input = transactionEither $ do
-  updateResult <-
-    Update.update @EditorTable @EditorRow rootId input.root
-  case updateResult of
-    Left err -> pure (Left err)
-    Right _ -> do
-      nestedResult <- case input.writtenPosts of
-        Nothing -> pure (Right ())
-        Just write -> applyWrittenPostsWrite rootId write
-      case nestedResult of
+        Right Nothing -> insertWrittenPosts parentId [item.create]
+        Right (Just row) ->
+          if row.authorId == parentId
+            then do
+              let patched = ArticleUpdate { authorId = Nothing, title = item.update.title }
+              updated <-
+                Update.updateWhere @ArticleTable @ArticleRow
+                  (Article.articleUniqueWhere item.where_ `and_` eq articleAuthorId parentId)
+                  patched
+              pure $ case updated of
+                Left err -> Left err
+                Right _ -> Right ()
+            else pure (Left (UniqueViolation "nested upsert would reparent a row owned by another parent"))
+      case result of
         Left err -> pure (Left err)
-        Right () -> reload include rootId
+        Right () -> go rest
+connectWrittenPosts :: UUID -> [Article.ArticleUnique] -> Db (Either ORMError ())
+connectWrittenPosts _ [] = pure (Right ())
+connectWrittenPosts parentId keys = sequenceNested (map connectOne keys)
+  where
+    connectOne key = do
+      result <-
+        Update.updateWhere @ArticleTable @ArticleRow
+          (Article.articleUniqueWhere key)
+          (ArticleUpdate
+            { authorId = Just parentId,
+              title = Nothing
+            })
+      pure $ case result of
+        Left err -> Left err
+        Right _ -> Right ()
+applyEditedPostsCreate :: UUID -> [ArticleNestedCreate] -> Db (Either ORMError ())
+applyEditedPostsCreate = insertEditedPosts
+applyEditedPostsUpdate :: UUID -> EditedPostsUpdate -> Db (Either ORMError ())
+applyEditedPostsUpdate parentId ops = do
+  replaced <- case ops.replaceWith of
+    Nothing -> pure (Right ())
+    Just items -> replaceEditedPosts parentId items
+  case replaced of
+    Left err -> pure (Left err)
+    Right () ->
+      sequenceNested
+        [ deleteEditedPosts parentId ops.delete
+        , updateEditedPostsRows parentId ops.update
+        , upsertEditedPosts parentId ops.upsert
+        , insertEditedPosts parentId ops.create
+        , insertEditedPosts parentId ops.createMany
+        , connectEditedPosts parentId ops.connect
+        ]
+replaceEditedPosts :: UUID -> [ArticleNestedCreate] -> Db (Either ORMError ())
+replaceEditedPosts parentId items = do
+  result <-
+    Delete.deleteWhere $
+      Delete.whereDelete (fieldColumn articleAuthorId <> " = ?") [toField parentId] (Delete.emptyDelete @ArticleTable)
+  case result of
+    Left err -> pure (Left err)
+    Right _ -> insertEditedPosts parentId items
+insertEditedPosts :: UUID -> [ArticleNestedCreate] -> Db (Either ORMError ())
+insertEditedPosts parentId = go
+  where
+    go [] = pure (Right ())
+    go (nested : rest) = do
+      result <- case nested of
+        ConnectArticle key -> connectEditedPosts parentId [key]
+        CreateArticle {id, title} -> do
+          inserted <- Insert.insert @ArticleTable @ArticleRow ArticleCreate
+            { id = id,
+              title = title,
+              authorId = parentId
+            }
+          pure $ case inserted of
+            Left err -> Left err
+            Right _ -> Right ()
+      case result of
+        Left err -> pure (Left err)
+        Right () -> go rest
+deleteEditedPosts :: UUID -> [Article.ArticleUnique] -> Db (Either ORMError ())
+deleteEditedPosts _ [] = pure (Right ())
+deleteEditedPosts parentId keys = sequenceNested (map deleteOne keys)
+  where
+    deleteOne key = do
+      result <- Delete.deleteMany @ArticleTable
+        (Article.articleUniqueWhere key `and_` eq articleAuthorId parentId)
+      pure $ case result of
+        Left err -> Left err
+        Right _ -> Right ()
+updateEditedPostsRows :: UUID -> [(Article.ArticleUnique, ArticleUpdate)] -> Db (Either ORMError ())
+updateEditedPostsRows parentId = go
+  where
+    go [] = pure (Right ())
+    go ((key, nested) : rest) = do
+      let patched = ArticleUpdate { authorId = Nothing, title = nested.title }
+      result <-
+        Update.updateWhere @ArticleTable @ArticleRow
+          (Article.articleUniqueWhere key `and_` eq articleAuthorId parentId)
+          patched
+      case result of
+        Left err -> pure (Left err)
+        Right _ -> go rest
+upsertEditedPosts :: UUID -> [ArticleNestedUpsert] -> Db (Either ORMError ())
+upsertEditedPosts parentId = go
+  where
+    go [] = pure (Right ())
+    go (item : rest) = do
+      existing <- Ops.findMany @ArticleTable @ArticleRow (matching (Article.articleUniqueWhere item.where_))
+      result <- case fromUniqueRows existing of
+        Left err -> pure (Left err)
+        Right Nothing -> insertEditedPosts parentId [item.create]
+        Right (Just row) ->
+          if row.authorId == parentId
+            then do
+              let patched = ArticleUpdate { authorId = Nothing, title = item.update.title }
+              updated <-
+                Update.updateWhere @ArticleTable @ArticleRow
+                  (Article.articleUniqueWhere item.where_ `and_` eq articleAuthorId parentId)
+                  patched
+              pure $ case updated of
+                Left err -> Left err
+                Right _ -> Right ()
+            else pure (Left (UniqueViolation "nested upsert would reparent a row owned by another parent"))
+      case result of
+        Left err -> pure (Left err)
+        Right () -> go rest
+connectEditedPosts :: UUID -> [Article.ArticleUnique] -> Db (Either ORMError ())
+connectEditedPosts _ [] = pure (Right ())
+connectEditedPosts parentId keys = sequenceNested (map connectOne keys)
+  where
+    connectOne key = do
+      result <-
+        Update.updateWhere @ArticleTable @ArticleRow
+          (Article.articleUniqueWhere key)
+          (ArticleUpdate
+            { authorId = Just parentId,
+              title = Nothing
+            })
+      pure $ case result of
+        Left err -> Left err
+        Right _ -> Right ()
 
 data EditorQuery include select = EditorQuery
   { include_ :: include
@@ -421,21 +578,6 @@ instance ReadEditor () EditorSelect where
 count :: EditorQuery include select -> Db Int
 count EditorQuery {where_, orderBy_, limit_, offset_} =
   Ops.count @EditorTable (applyQueryModifiers where_ orderBy_ limit_ offset_)
-
-reload ::
-  (LoadEditor writtenPosts editedPosts) =>
-  EditorInclude writtenPosts editedPosts ->
-  UUID ->
-  Db (Either ORMError (EditorWith writtenPosts editedPosts))
-reload include rootId = do
-  found <- Ops.findUnique @EditorTable @EditorRow rootId
-  case found of
-    Nothing -> pure (Left (RecordNotFound "Record not found with primary key"))
-    Just row -> do
-      loaded <- loadEditor include [row]
-      pure $ case loaded of
-        (one : _) -> Right one
-        [] -> Left (RecordNotFound "Record not found with primary key")
 
 delete :: EditorUnique -> Db (Either ORMError Int)
 delete key =

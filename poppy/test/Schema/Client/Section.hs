@@ -37,6 +37,7 @@ module Schema.Client.Section
     SectionUniqueQuery (..),
     emptyQuery,
     uniqueQuery,
+    sectionUniqueWhere,
     sectionId
   )
 

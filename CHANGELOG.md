@@ -9,6 +9,7 @@
 - Models with relations emit `Schema.Include.<Model>`. Edges are `skip`, `load`, and `loadWith`.
 - `load` and `loadWith` take `where_`, `orderBy_`, and `take_`. `take_` keeps that many included rows per parent.
 - `findUnique` takes `uniqueQuery` with a `ById` / `ByEmail` key. `update` and `delete` take that unique. `upsert` takes `OnId` / `OnEmail`.
+- Nested writes are fields on `create` / `update` (not `createNested` / `updateNested`). `replaceWith` replaces children; `disconnect` clears a nullable FK; nested `upsert` refuses to re-parent.
 
 ## 0.1.0.0 — 2026-09-17
 

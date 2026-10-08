@@ -42,8 +42,10 @@ executables:
     default-extensions:
       - DuplicateRecordFields
       - NamedFieldPuns
+      - NoFieldSelectors
       - OverloadedRecordDot
       - OverloadedStrings
+      - TypeFamilies
   blog-codegen:
     main: Main.hs
     source-dirs: codegen

@@ -14,9 +14,10 @@
 
 {- | Generated Client. Do not edit.
 
-Nested writes ('createNested' / 'updateNested'):
-  Set xs  — replace all children with xs
-  Ops o   — create, connect, disconnect, delete, update, upsert
+Nested writes live on 'create' / 'update'.
+  create-time relation fields are [CreateChild | ConnectChild unique]
+  update-time relation fields are Maybe <Rel>Update (replaceWith, create, connect, delete, update, upsert;
+  disconnect when the child foreign key is nullable)
 -}
 module Schema.Client.Author
   ( findMany,
@@ -32,20 +33,19 @@ module Schema.Client.Author
     upsert,
     delete,
     deleteMany,
-    createNested,
-    updateNested,
-    AuthorWriteCreate (..),
-    AuthorWriteUpdate (..),
+    AuthorCreateScalars,
+    AuthorUpdateScalars,
     PostNestedCreate (..),
-    PostsWrite (..),
-    PostNestedOps (..),
-    emptyPostNestedOps,
+    PostNestedUpsert (..),
+    PostsUpdate (..),
+    emptyPostsUpdate,
     AuthorQuery (..),
     AuthorUnique (..),
     AuthorUniqueKey (..),
     AuthorUniqueQuery (..),
     emptyQuery,
     uniqueQuery,
+    authorUniqueWhere,
     OmitSelect (..),
     Picked (..),
     AuthorCreate (..),
@@ -59,12 +59,12 @@ module Schema.Client.Author
   )
 where
 
+import Data.Maybe (isJust)
 import Data.Text (Text)
 import Data.UUID (UUID)
-import qualified Data.UUID.V4 as V4
-import Poppy.Core (fieldColumn)
+import Poppy.Core (NullableValue (..), fieldColumn)
 import Poppy.PG (toField)
-import Poppy.Db (Db, liftIO, transactionEither)
+import Poppy.Db (Db, transactionEither)
 import qualified Poppy.Delete as Delete
 import Poppy.Errors (ORMError (..), fromUniqueRows, requireFound, uniqueOrFail)
 import qualified Poppy.Insert as Insert
@@ -73,10 +73,13 @@ import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)
 import Poppy.Select (OmitSelect (..), Picked (..))
 import Poppy.SelectIn (prepareIncludeRootQuery)
 import qualified Poppy.Update as Update
-import Poppy.Where (Where, and_, eq, in_)
-import Schema.Author (AuthorCreate (..), AuthorRow (..), AuthorSelect (..), AuthorPicked (..), authorSelect, authorSelectColumns, parseAuthorPicked, AuthorTable, AuthorUpdate (..), authorId)
-import Schema.Include.Author (LoadAuthor (..), AuthorInclude (..), AuthorRead, toAuthorWithPicked, AuthorWith (..))
-import Schema.Post (PostCreate (..), PostRow (..), PostUpdate (..), PostTable, postId, postAuthorId)
+import Poppy.Where (Where, and_, eq)
+import Schema.Author (AuthorRow (..), AuthorSelect (..), AuthorPicked (..), authorSelect, authorSelectColumns, parseAuthorPicked, AuthorTable, authorId)
+import qualified Schema.Author as AuthorSchema (AuthorCreate (..), AuthorUpdate (..))
+
+import Schema.Include.Author (LoadAuthor (..), AuthorInclude (..), AuthorRead, toAuthorWithPicked)
+import Schema.Post (PostRow (..), PostTable, postId, postAuthorId, PostCreate (..), PostUpdate (..))
+import qualified Schema.Client.Post as Post (PostUnique (..), postUniqueWhere)
 import Schema.ArticleStatus (ArticleStatus (..))
 
 data AuthorUnique
@@ -95,82 +98,126 @@ authorConflictCols :: AuthorUniqueKey -> [Text]
 authorConflictCols = \case
   OnId -> ["id"]
 
-create :: AuthorCreate -> Db (Either ORMError AuthorRow)
-create = Insert.insert @AuthorTable @AuthorRow
-
-createMany :: [AuthorCreate] -> Db (Either ORMError Int)
-createMany = Insert.insertMany @AuthorTable
-
-update :: AuthorUnique -> AuthorUpdate -> Db (Either ORMError AuthorRow)
-update key input =
-  Update.updateWhere @AuthorTable @AuthorRow (authorUniqueWhere key) input
-
-updateMany :: Where AuthorTable -> AuthorUpdate -> Db (Either ORMError Int)
-updateMany = Update.updateMany @AuthorTable
-
-upsert :: AuthorUniqueKey -> AuthorCreate -> AuthorUpdate -> Db (Either ORMError AuthorRow)
-upsert key createInput updateInput =
-  Insert.upsert @AuthorTable @AuthorRow (authorConflictCols key) createInput updateInput
-
-data PostNestedCreate = PostNestedCreate
-  { id :: Maybe UUID, title :: Text, status :: ArticleStatus
+data PostNestedCreate
+  = CreatePost
+      { id :: Maybe UUID, title :: Text, status :: ArticleStatus
+      }
+  | ConnectPost Post.PostUnique
+  deriving (Show, Eq)
+data PostNestedUpsert = PostNestedUpsert
+  { where_ :: Post.PostUnique
+  , create :: PostNestedCreate
+  , update :: PostUpdate
   }
   deriving (Show, Eq)
-
-data PostNestedOps = PostNestedOps
-  { create :: [PostNestedCreate]
+data PostsUpdate = PostsUpdate
+  { replaceWith :: Maybe [PostNestedCreate]
+  , create :: [PostNestedCreate]
   , createMany :: [PostNestedCreate]
-  , connect :: [UUID]
-  , disconnect :: [UUID]
-  , delete :: [UUID]
-  , update :: [(UUID, PostNestedCreate)]
-  , upsert :: [PostNestedCreate]
+  , connect :: [Post.PostUnique]
+  , delete :: [Post.PostUnique]
+  , update :: [(Post.PostUnique, PostUpdate)]
+  , upsert :: [PostNestedUpsert]
   }
   deriving (Show, Eq)
 
-data PostsWrite = Set [PostNestedCreate] | Ops PostNestedOps
-  deriving (Show, Eq)
-
-emptyPostNestedOps :: PostNestedOps
-emptyPostNestedOps =
-  PostNestedOps
-    { create = []
+emptyPostsUpdate :: PostsUpdate
+emptyPostsUpdate =
+  PostsUpdate
+    { replaceWith = Nothing
+    , create = []
     , createMany = []
     , connect = []
-    , disconnect = []
     , delete = []
     , update = []
     , upsert = []
     }
-
-data AuthorWriteCreate = AuthorWriteCreate
-  { root :: AuthorCreate
-  , posts :: PostsWrite
+data AuthorCreate = AuthorCreate
+  { id :: Maybe UUID,
+    name :: Text,
+    posts :: [PostNestedCreate]
   }
   deriving (Show, Eq)
 
-data AuthorWriteUpdate = AuthorWriteUpdate
-  { root :: AuthorUpdate
-  , posts :: Maybe PostsWrite
+type AuthorCreateScalars = AuthorSchema.AuthorCreate
+
+toAuthorCreateScalars :: AuthorCreate -> AuthorCreateScalars
+toAuthorCreateScalars input =
+  AuthorSchema.AuthorCreate
+    { id = input.id,
+      name = input.name
+    }
+data AuthorUpdate = AuthorUpdate
+  { name :: Maybe Text,
+    posts :: Maybe PostsUpdate
   }
   deriving (Show, Eq)
 
-toPostCreate :: UUID -> PostNestedCreate -> PostCreate
-toPostCreate parentId nested =
-  PostCreate
-    { id = nested.id,
-      title = nested.title,
-      status = nested.status,
-      authorId = parentId
+type AuthorUpdateScalars = AuthorSchema.AuthorUpdate
+
+toAuthorUpdateScalars :: AuthorUpdate -> AuthorUpdateScalars
+toAuthorUpdateScalars input =
+  AuthorSchema.AuthorUpdate
+    { name = input.name
     }
 
-toPostUpdate :: PostNestedCreate -> PostUpdate
-toPostUpdate nested =
-  PostUpdate
-    { authorId = Nothing,
-      title = Just nested.title,
-      status = Just nested.status
-    }
+create :: AuthorCreate -> Db (Either ORMError AuthorRow)
+create input =
+  if hasAuthorNestedCreate input
+    then transactionEither (createWithNested input)
+    else Insert.insert @AuthorTable @AuthorRow (toAuthorCreateScalars input)
+
+hasAuthorNestedCreate :: AuthorCreate -> Bool
+hasAuthorNestedCreate input =
+  not (null input.posts)
+
+createWithNested :: AuthorCreate -> Db (Either ORMError AuthorRow)
+createWithNested input = do
+  rootResult <- Insert.insert @AuthorTable @AuthorRow (toAuthorCreateScalars input)
+  case rootResult of
+    Left err -> pure (Left err)
+    Right row -> do
+      nestedResult <-
+        sequenceNested
+          [ applyPostsCreate row.id input.posts
+          ]
+      case nestedResult of
+        Left err -> pure (Left err)
+        Right () -> pure (Right row)
+
+createMany :: [AuthorCreateScalars] -> Db (Either ORMError Int)
+createMany = Insert.insertMany @AuthorTable
+
+update :: AuthorUnique -> AuthorUpdate -> Db (Either ORMError AuthorRow)
+update key input =
+  if hasAuthorNestedUpdate input
+    then transactionEither (updateWithNested key input)
+    else Update.updateWhere @AuthorTable @AuthorRow (authorUniqueWhere key) (toAuthorUpdateScalars input)
+
+hasAuthorNestedUpdate :: AuthorUpdate -> Bool
+hasAuthorNestedUpdate input =
+  isJust input.posts
+
+updateWithNested :: AuthorUnique -> AuthorUpdate -> Db (Either ORMError AuthorRow)
+updateWithNested key input = do
+  updateResult <- Update.updateWhere @AuthorTable @AuthorRow (authorUniqueWhere key) (toAuthorUpdateScalars input)
+  case updateResult of
+    Left err -> pure (Left err)
+    Right row -> do
+      nestedResult <-
+        sequenceNested
+          [ maybe (pure (Right ())) (applyPostsUpdate row.id) input.posts
+          ]
+      case nestedResult of
+        Left err -> pure (Left err)
+        Right () -> pure (Right row)
+
+updateMany :: Where AuthorTable -> AuthorUpdateScalars -> Db (Either ORMError Int)
+updateMany = Update.updateMany @AuthorTable
+
+upsert :: AuthorUniqueKey -> AuthorCreateScalars -> AuthorUpdateScalars -> Db (Either ORMError AuthorRow)
+upsert key createInput updateInput =
+  Insert.upsert @AuthorTable @AuthorRow (authorConflictCols key) createInput updateInput
 
 sequenceNested :: [Db (Either ORMError ())] -> Db (Either ORMError ())
 sequenceNested [] = pure (Right ())
@@ -179,140 +226,115 @@ sequenceNested (action : rest) = do
   case result of
     Left err -> pure (Left err)
     Right () -> sequenceNested rest
-
-applyPostsWrite :: UUID -> PostsWrite -> Db (Either ORMError ())
-applyPostsWrite parentId write =
-  case write of
-    Set items -> do
-      result <-
-        Delete.deleteWhere $
-          Delete.whereDelete (fieldColumn postAuthorId <> " = ?") [toField parentId] (Delete.emptyDelete @PostTable)
-      case result of
-        Left err -> pure (Left err)
-        Right _ -> insertNestedCreates parentId items
-    Ops ops -> applyPostNestedOps parentId ops
-
-insertNestedCreates :: UUID -> [PostNestedCreate] -> Db (Either ORMError ())
-insertNestedCreates parentId = go
+applyPostsCreate :: UUID -> [PostNestedCreate] -> Db (Either ORMError ())
+applyPostsCreate = insertPosts
+applyPostsUpdate :: UUID -> PostsUpdate -> Db (Either ORMError ())
+applyPostsUpdate parentId ops = do
+  replaced <- case ops.replaceWith of
+    Nothing -> pure (Right ())
+    Just items -> replacePosts parentId items
+  case replaced of
+    Left err -> pure (Left err)
+    Right () ->
+      sequenceNested
+        [ deletePosts parentId ops.delete
+        , updatePostsRows parentId ops.update
+        , upsertPosts parentId ops.upsert
+        , insertPosts parentId ops.create
+        , insertPosts parentId ops.createMany
+        , connectPosts parentId ops.connect
+        ]
+replacePosts :: UUID -> [PostNestedCreate] -> Db (Either ORMError ())
+replacePosts parentId items = do
+  result <-
+    Delete.deleteWhere $
+      Delete.whereDelete (fieldColumn postAuthorId <> " = ?") [toField parentId] (Delete.emptyDelete @PostTable)
+  case result of
+    Left err -> pure (Left err)
+    Right _ -> insertPosts parentId items
+insertPosts :: UUID -> [PostNestedCreate] -> Db (Either ORMError ())
+insertPosts parentId = go
   where
     go [] = pure (Right ())
     go (nested : rest) = do
-      result <- Insert.insert @PostTable @PostRow (toPostCreate parentId nested)
-      case result of
-        Left err -> pure (Left err)
-        Right _ -> go rest
-
-applyPostNestedOps :: UUID -> PostNestedOps -> Db (Either ORMError ())
-applyPostNestedOps parentId ops =
-  sequenceNested
-    [ deleteNested parentId ops.delete
-    , deleteNested parentId ops.disconnect
-    , updateChildRows parentId ops.update
-    , upsertNested parentId ops.upsert
-    , insertNestedCreates parentId ops.create
-    , insertNestedCreateMany parentId ops.createMany
-    , connectNested parentId ops.connect
-    ]
-
-deleteNested :: UUID -> [UUID] -> Db (Either ORMError ())
-deleteNested _ [] = pure (Right ())
-deleteNested parentId ids = do
-  result <- Delete.deleteMany @PostTable (in_ postId ids `and_` eq postAuthorId parentId)
-  pure $ case result of
-    Left err -> Left err
-    Right _ -> Right ()
-
-updateChildRows :: UUID -> [(UUID, PostNestedCreate)] -> Db (Either ORMError ())
-updateChildRows parentId = go
-  where
-    go [] = pure (Right ())
-    go ((childId, nested) : rest) = do
-      result <-
-        Update.updateBuilder @PostTable @PostRow $
-          Update.whereUpdate (fieldColumn postId <> " = ?") [toField childId] $
-            Update.whereUpdate (fieldColumn postAuthorId <> " = ?") [toField parentId] $
-              Update.toUpdateBuilder @PostTable (toPostUpdate nested)
-      case result of
-        Left err -> pure (Left err)
-        Right _ -> go rest
-
-upsertNested :: UUID -> [PostNestedCreate] -> Db (Either ORMError ())
-upsertNested parentId = go
-  where
-    go [] = pure (Right ())
-    go (nested : rest) = do
-      result <-
-        Insert.insertBuilder @PostTable @PostRow $
-          Insert.onConflictDoUpdate ["title"] ["author_id", "status"] $
-          Insert.toInsertBuilder @PostTable (toPostCreate parentId nested)
-      case result of
-        Left err -> pure (Left err)
-        Right _ -> go rest
-
-insertNestedCreateMany :: UUID -> [PostNestedCreate] -> Db (Either ORMError ())
-insertNestedCreateMany parentId = go
-  where
-    go [] = pure (Right ())
-    go (nested : rest) = do
-      result <-
-        Insert.tryExecuteInsert $
-          Insert.onConflictDoNothing ["title"] $
-          Insert.toInsertBuilder @PostTable (toPostCreate parentId nested)
+      result <- case nested of
+        ConnectPost key -> connectPosts parentId [key]
+        CreatePost {id, title, status} -> do
+          inserted <- Insert.insert @PostTable @PostRow PostCreate
+            { id = id,
+              title = title,
+              status = status,
+              authorId = parentId
+            }
+          pure $ case inserted of
+            Left err -> Left err
+            Right _ -> Right ()
       case result of
         Left err -> pure (Left err)
         Right () -> go rest
-
-connectNested :: UUID -> [UUID] -> Db (Either ORMError ())
-connectNested parentId = go
+deletePosts :: UUID -> [Post.PostUnique] -> Db (Either ORMError ())
+deletePosts _ [] = pure (Right ())
+deletePosts parentId keys = sequenceNested (map deleteOne keys)
+  where
+    deleteOne key = do
+      result <- Delete.deleteMany @PostTable
+        (Post.postUniqueWhere key `and_` eq postAuthorId parentId)
+      pure $ case result of
+        Left err -> Left err
+        Right _ -> Right ()
+updatePostsRows :: UUID -> [(Post.PostUnique, PostUpdate)] -> Db (Either ORMError ())
+updatePostsRows parentId = go
   where
     go [] = pure (Right ())
-    go (childId : rest) = do
+    go ((key, nested) : rest) = do
+      let patched = PostUpdate { authorId = Nothing, title = nested.title, status = nested.status }
       result <-
-        Update.updateBuilder @PostTable @PostRow $
-          Update.setField postAuthorId parentId $
-            Update.whereUpdate (fieldColumn postId <> " = ?") [toField childId] $
-              Update.emptyUpdate @PostTable
+        Update.updateWhere @PostTable @PostRow
+          (Post.postUniqueWhere key `and_` eq postAuthorId parentId)
+          patched
       case result of
         Left err -> pure (Left err)
         Right _ -> go rest
-
-createNested ::
-  (LoadAuthor posts) =>
-  AuthorInclude posts ->
-  AuthorWriteCreate ->
-  Db (Either ORMError (AuthorWith posts))
-createNested include input = transactionEither $ do
-  rootId <- liftIO $ maybe V4.nextRandom pure input.root.id
-  let rootInput =
-        AuthorCreate { id = Just rootId, name = input.root.name }
-  rootResult <-
-    Insert.insert @AuthorTable @AuthorRow rootInput
-  case rootResult of
-    Left err -> pure (Left err)
-    Right _ -> do
-      nestedResult <- applyPostsWrite rootId input.posts
-      case nestedResult of
+upsertPosts :: UUID -> [PostNestedUpsert] -> Db (Either ORMError ())
+upsertPosts parentId = go
+  where
+    go [] = pure (Right ())
+    go (item : rest) = do
+      existing <- Ops.findMany @PostTable @PostRow (matching (Post.postUniqueWhere item.where_))
+      result <- case fromUniqueRows existing of
         Left err -> pure (Left err)
-        Right () -> reload include rootId
-
-updateNested ::
-  (LoadAuthor posts) =>
-  AuthorInclude posts ->
-  UUID ->
-  AuthorWriteUpdate ->
-  Db (Either ORMError (AuthorWith posts))
-updateNested include rootId input = transactionEither $ do
-  updateResult <-
-    Update.update @AuthorTable @AuthorRow rootId input.root
-  case updateResult of
-    Left err -> pure (Left err)
-    Right _ -> do
-      nestedResult <- case input.posts of
-        Nothing -> pure (Right ())
-        Just write -> applyPostsWrite rootId write
-      case nestedResult of
+        Right Nothing -> insertPosts parentId [item.create]
+        Right (Just row) ->
+          if row.authorId == parentId
+            then do
+              let patched = PostUpdate { authorId = Nothing, title = item.update.title, status = item.update.status }
+              updated <-
+                Update.updateWhere @PostTable @PostRow
+                  (Post.postUniqueWhere item.where_ `and_` eq postAuthorId parentId)
+                  patched
+              pure $ case updated of
+                Left err -> Left err
+                Right _ -> Right ()
+            else pure (Left (UniqueViolation "nested upsert would reparent a row owned by another parent"))
+      case result of
         Left err -> pure (Left err)
-        Right () -> reload include rootId
+        Right () -> go rest
+connectPosts :: UUID -> [Post.PostUnique] -> Db (Either ORMError ())
+connectPosts _ [] = pure (Right ())
+connectPosts parentId keys = sequenceNested (map connectOne keys)
+  where
+    connectOne key = do
+      result <-
+        Update.updateWhere @PostTable @PostRow
+          (Post.postUniqueWhere key)
+          (PostUpdate
+            { authorId = Just parentId,
+              title = Nothing,
+              status = Nothing
+            })
+      pure $ case result of
+        Left err -> Left err
+        Right _ -> Right ()
 
 data AuthorQuery include select = AuthorQuery
   { include_ :: include
@@ -424,21 +446,6 @@ instance ReadAuthor () AuthorSelect where
 count :: AuthorQuery include select -> Db Int
 count AuthorQuery {where_, orderBy_, limit_, offset_} =
   Ops.count @AuthorTable (applyQueryModifiers where_ orderBy_ limit_ offset_)
-
-reload ::
-  (LoadAuthor posts) =>
-  AuthorInclude posts ->
-  UUID ->
-  Db (Either ORMError (AuthorWith posts))
-reload include rootId = do
-  found <- Ops.findUnique @AuthorTable @AuthorRow rootId
-  case found of
-    Nothing -> pure (Left (RecordNotFound "Record not found with primary key"))
-    Just row -> do
-      loaded <- loadAuthor include [row]
-      pure $ case loaded of
-        (one : _) -> Right one
-        [] -> Left (RecordNotFound "Record not found with primary key")
 
 delete :: AuthorUnique -> Db (Either ORMError Int)
 delete key =

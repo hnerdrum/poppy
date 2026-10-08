@@ -15,9 +15,21 @@ module Poppy.Codegen.EmitCommon
     selectColumnsFnName,
     parsePickedName,
     toPickedName,
+    uniqueTypeName,
+    uniqueWhereName,
+    uniqueKeyTypeName,
+    CreateKind (..),
+    createKind,
+    createHsType,
+    updateHsType,
+    updateFields,
+    pkHsType,
+    clientSchemaPrefix,
+    schemaModuleFor,
   )
 where
 
+import Data.Maybe (isJust)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Poppy.Codegen.IR
@@ -79,3 +91,59 @@ parsePickedName model = "parse" <> modelName model <> "Picked"
 
 toPickedName :: Model -> Text
 toPickedName model = "to" <> modelName model <> "Picked"
+
+uniqueTypeName :: Model -> Text
+uniqueTypeName model = modelName model <> "Unique"
+
+uniqueWhereName :: Model -> Text
+uniqueWhereName model = lowerFirst (modelName model) <> "UniqueWhere"
+
+uniqueKeyTypeName :: Model -> Text
+uniqueKeyTypeName model = modelName model <> "UniqueKey"
+
+data CreateKind = CreateMaybe | CreateNullable | CreateRequired
+  deriving (Eq)
+
+createKind :: FieldSpec -> CreateKind
+createKind f
+  | fieldIsPrimaryKey f && isJust (fieldDefault f) = CreateMaybe
+  | fieldIsPrimaryKey f = CreateRequired
+  | isJust (fieldDefault f) = CreateMaybe
+  | fieldNullable f = CreateNullable
+  | otherwise = CreateRequired
+
+createHsType :: FieldSpec -> Text
+createHsType f = case createKind f of
+  CreateMaybe -> "Maybe " <> hsType (fieldType f)
+  CreateNullable -> "NullableValue " <> hsType (fieldType f)
+  CreateRequired -> hsType (fieldType f)
+
+updateFields :: Model -> [FieldSpec]
+updateFields = filter (not . fieldIsPrimaryKey) . modelFields
+
+updateHsType :: FieldSpec -> Text
+updateHsType f
+  | fieldNullable f = "NullableValue " <> hsType (fieldType f)
+  | otherwise = "Maybe " <> hsType (fieldType f)
+
+pkHsType :: Model -> Text
+pkHsType model = hsType (fieldType (primaryKeyField model))
+
+-- | Schema types live next to the Client unless the Client is nested under Schema.
+--
+-- @Foo.Client.Bar@ → @Foo.Schema.@ (sibling Client/Schema packages)
+-- @Schema.Client.Bar@ → @Schema.@ (Client nested under Schema)
+clientSchemaPrefix :: Text -> Text
+clientSchemaPrefix clientModule =
+  case T.breakOnEnd ".Client." clientModule of
+    (before, after)
+      | not (T.null after) && ".Client." `T.isSuffixOf` before ->
+          let parent = T.take (T.length before - T.length ".Client.") before
+           in if parent == "Schema"
+                then "Schema."
+                else parent <> ".Schema."
+    _ -> "Schema."
+
+schemaModuleFor :: Text -> Model -> Text
+schemaModuleFor clientModule model =
+  clientSchemaPrefix clientModule <> modelName model

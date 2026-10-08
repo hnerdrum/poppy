@@ -34,6 +34,7 @@ module Schema.Client.Post
     PostUniqueQuery (..),
     emptyQuery,
     uniqueQuery,
+    postUniqueWhere,
     OmitSelect (..),
     Picked (..),
     PostCreate (..),
@@ -58,7 +59,7 @@ import Poppy.Select (OmitSelect (..), Picked (..))
 import Poppy.SelectIn (prepareIncludeRootQuery)
 import qualified Poppy.Update as Update
 import Poppy.Where (Where, eq)
-import Schema.Post (PostCreate (..), PostRow (..), PostSelect (..), PostPicked (..), postSelect, postSelectColumns, parsePostPicked, PostTable, PostUpdate (..), postId)
+import Schema.Post (PostCreate (..), PostUpdate (..), PostRow (..), PostSelect (..), PostPicked (..), postSelect, postSelectColumns, parsePostPicked, PostTable, postId)
 import Schema.Include.Post (LoadPost (..), PostInclude (..), PostRead, toPostWithPicked)
 import Data.Text (Text)
 

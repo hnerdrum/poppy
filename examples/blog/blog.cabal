@@ -57,8 +57,10 @@ executable blog
   default-extensions:
       DuplicateRecordFields
       NamedFieldPuns
+      NoFieldSelectors
       OverloadedRecordDot
       OverloadedStrings
+      TypeFamilies
   ghc-options: -Wall
   build-depends:
       base >=4.17 && <4.21
