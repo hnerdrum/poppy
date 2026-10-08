@@ -1,5 +1,6 @@
+{-# OPTIONS_HADDOCK hide #-}
 -- | Errors returned as @Either ORMError@ from Client operations.
-module Poppy.Errors
+module Poppy.Internal.Errors
   ( ORMError (..),
     DatabaseErrorInfo (..),
     DriverErrorKind (..),

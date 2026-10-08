@@ -68,14 +68,7 @@ emitSimpleClientModule moduleName schema model =
       "where",
       "",
       valueImportsBlock schema moduleName model,
-      "import Poppy.Db (Db)",
-      "import Poppy.Errors (ORMError (..), fromUniqueRows, requireFound, uniqueOrFail)",
-      "import qualified Poppy.Delete as Delete",
-      "import qualified Poppy.Insert as Insert",
-      "import qualified Poppy.Operations as Ops",
-      "import Poppy.Query (OrderBy, QueryBuilder, applyQueryModifiers, matching, selectColumns)",
-      "import Poppy.Select (OmitSelect (..), Picked (..))",
-      whereImport schema model,
+      simpleGeneratedImports schema model,
       "import "
         <> schemaModule moduleName model
         <> " ("
@@ -99,7 +92,6 @@ emitSimpleClientModule moduleName schema model =
         <> " (..), "
         <> uniqueFieldImportList schema model
         <> ")",
-      "import qualified Poppy.Update as Update",
       "",
       emitUniqueDecls schema model,
       "",
@@ -282,16 +274,7 @@ includeReadFunctionExportItems =
 includeClientImportLines :: Text -> Schema -> Model -> [Text]
 includeClientImportLines moduleName schema root =
   nestedPreludeImports schema root
-    ++ [ dbImport schema root,
-         "import qualified Poppy.Delete as Delete",
-         "import Poppy.Errors (ORMError (..), fromUniqueRows, requireFound, uniqueOrFail)",
-         "import qualified Poppy.Insert as Insert",
-         "import qualified Poppy.Operations as Ops",
-         "import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)",
-         "import Poppy.Select (OmitSelect (..), Picked (..))",
-         "import Poppy.SelectIn (prepareIncludeRootQuery)",
-         "import qualified Poppy.Update as Update",
-         whereImport schema root,
+    ++ [ includeGeneratedImports schema root,
          rootSchemaImport moduleName schema root,
          includeModuleImportLine moduleName root
        ]
@@ -362,24 +345,103 @@ nestedPreludeImports schema root
   | nestedWriteUsesTransaction schema root =
       [ "import Data.Maybe (isJust)",
         "import Data.Text (Text)",
-        "import Data.UUID (UUID)",
-        "import Poppy.Core (NullableValue (..), fieldColumn)",
-        "import Poppy.PG (toField)"
+        "import Data.UUID (UUID)"
       ]
   | otherwise = ["import Data.UUID (UUID)"]
 
-dbImport :: Schema -> Model -> Text
-dbImport schema root
-  | nestedWriteUsesTransaction schema root = "import Poppy.Db (Db, transactionEither)"
-  | otherwise = "import Poppy.Db (Db)"
+simpleGeneratedImports :: Schema -> Model -> Text
+simpleGeneratedImports schema model =
+  T.unlines
+    [ "import Poppy.Internal.Generated",
+      "  ( Db,",
+      "    ORMError (..),",
+      "    fromUniqueRows,",
+      "    requireFound,",
+      "    uniqueOrFail,",
+      "    OrderBy,",
+      "    QueryBuilder,",
+      "    applyQueryModifiers,",
+      "    matching,",
+      "    selectColumns,",
+      "    OmitSelect (..),",
+      "    Picked (..),",
+      "    " <> T.intercalate ",\n    " (whereNames schema model) <> "",
+      "  )",
+      "import qualified Poppy.Internal.Generated as Delete",
+      "  ( deleteMany",
+      "  )",
+      "import qualified Poppy.Internal.Generated as Insert",
+      "  ( insert,",
+      "    insertMany,",
+      "    upsert",
+      "  )",
+      "import qualified Poppy.Internal.Generated as Ops",
+      "  ( findMany,",
+      "    findManyWith,",
+      "    findFirst,",
+      "    findFirstWith,",
+      "    count",
+      "  )",
+      "import qualified Poppy.Internal.Generated as Update",
+      "  ( updateWhere,",
+      "    updateMany",
+      "  )"
+    ]
 
-whereImport :: Schema -> Model -> Text
-whereImport schema model
-  | nestedWriteUsesTransaction schema model = "import Poppy.Where (Where, and_, eq)"
+includeGeneratedImports :: Schema -> Model -> Text
+includeGeneratedImports schema root =
+  let dbNames =
+        if nestedWriteUsesTransaction schema root
+          then ["Db", "transactionEither"]
+          else ["Db"]
+      nestedNames =
+        if nestedWriteUsesTransaction schema root
+          then
+            ["fieldColumn", "toField"]
+              ++ [ "NullableValue (..)"
+                   | any
+                       ( \(rel, child) ->
+                           fieldNullable (lookupField child (relForeignField rel))
+                       )
+                       (nestedWriteRelations schema root)
+                 ]
+          else []
+      wherePart = whereNames schema root
+      selectIn = ["prepareIncludeRootQuery"]
+   in T.unlines T.unlines
+        [ "import Poppy.Internal.Generated",
+          "  ( " <> T.intercalate ",\n    " (dbNames ++ nestedNames ++ ["ORMError (..)", "fromUniqueRows", "requireFound", "uniqueOrFail", "OrderBy", "applyQueryModifiers", "matching", "selectColumns", "OmitSelect (..)", "Picked (..)"] ++ selectIn ++ wherePart) <> "",
+          "  )",
+          "import qualified Poppy.Internal.Generated as Delete",
+          "  ( deleteMany,",
+          "    deleteWhere,",
+          "    whereDelete,",
+          "    emptyDelete",
+          "  )",
+          "import qualified Poppy.Internal.Generated as Insert",
+          "  ( insert,",
+          "    insertMany,",
+          "    upsert",
+          "  )",
+          "import qualified Poppy.Internal.Generated as Ops",
+          "  ( findMany,",
+          "    findManyWith,",
+          "    findFirst,",
+          "    findFirstWith,",
+          "    count",
+          "  )",
+          "import qualified Poppy.Internal.Generated as Update",
+          "  ( updateWhere,",
+          "    updateMany",
+          "  )"
+        ]
+
+whereNames :: Schema -> Model -> [Text]
+whereNames schema model
+  | nestedWriteUsesTransaction schema model = ["Where", "and_", "eq"]
   | otherwise =
       let needsAnd = any ((> 1) . length . emittedFields) (modelUniqueKeys schema model)
-          names = ["Where", "eq"] ++ ["and_" | needsAnd]
-       in "import Poppy.Where (" <> T.intercalate ", " names <> ")"
+       in ["Where", "eq"] ++ ["and_" | needsAnd]
 
 intercalateSections :: [Text] -> Text
 intercalateSections sections =

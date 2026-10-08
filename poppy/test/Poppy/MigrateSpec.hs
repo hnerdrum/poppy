@@ -11,7 +11,7 @@ import Data.UUID.V4 (nextRandom)
 import Database.PostgreSQL.Simple (Only (..))
 import qualified Database.PostgreSQL.Simple as PG
 import Poppy (MigrateError (..), applyMigrations)
-import Poppy.Db (DbPool, withConn)
+import Poppy.Internal.Db (DbPool, withConn)
 import Support.TestDb (TestEnv (..))
 import System.Directory (createDirectoryIfMissing, getTemporaryDirectory, removeDirectoryRecursive)
 import System.FilePath ((</>))
@@ -19,7 +19,7 @@ import Test.Hspec (SpecWith, describe, it, shouldBe, shouldSatisfy)
 
 migrateSpec :: SpecWith TestEnv
 migrateSpec =
-  describe "Poppy.Migrate" $ do
+  describe "Poppy.Internal.Migrate" $ do
     it "applies SQL files in name order and is a no-op on replay" $ \TestEnv {envPool = pool} ->
       withCleanProbe pool
         $ withMigrationDir

@@ -4,8 +4,8 @@ module Poppy.CommentSpec
 where
 
 import Poppy (NullableValue (..), load, loadWith, runDb)
-import qualified Poppy.Insert as Insert
-import Poppy.Where (isNull)
+import qualified Poppy.Internal.Insert as Insert
+import Poppy.Internal.Where (isNull)
 import qualified Schema.Client.Comment as Comment
 import Schema.Comment (CommentCreate (..), CommentRow (..), CommentTable, commentParentId)
 import Schema.Include.Comment (CommentInclude (..), CommentWith (..))

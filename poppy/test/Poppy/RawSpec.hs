@@ -13,10 +13,10 @@ import Data.Text (Text)
 import Database.PostgreSQL.Simple.FromRow (FromRow (..), field)
 import Database.PostgreSQL.Simple.Types (Query (..))
 import Poppy (NullableValue (Omit), ORMError (..), runDb, transaction, withTransaction)
-import Poppy.Db (liftIO)
-import qualified Poppy.Insert as Insert
-import qualified Poppy.Operations as Ops
-import Poppy.Sql (catchDb, executeRaw, param, queryRaw)
+import Poppy.Internal.Db (liftIO)
+import qualified Poppy.Internal.Insert as Insert
+import qualified Poppy.Internal.Operations as Ops
+import Poppy.Internal.Sql (catchDb, executeRaw, param, queryRaw)
 import qualified Poppy.WidgetFixtures as WidgetFixtures
 import Schema.Widget (WidgetCreate (..), WidgetRow (..), WidgetTable)
 import Support.TestDb (TestEnv (..))
@@ -30,7 +30,7 @@ instance FromRow CountRow where
 
 rawSpec :: SpecWith TestEnv
 rawSpec =
-  describe "Poppy.Sql raw queries" $ do
+  describe "Poppy.Internal.Sql raw queries" $ do
     it "queryRaw returns typed rows" $ \TestEnv {envPool = pool} -> do
       _ <- WidgetFixtures.insertWidget pool "alpha"
       _ <- WidgetFixtures.insertWidget pool "beta"

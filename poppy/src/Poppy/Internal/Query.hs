@@ -2,9 +2,10 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# OPTIONS_HADDOCK hide #-}
 
 -- | Query builders used by generated Clients (@matching@, @asc@ / @desc@, @limit@).
-module Poppy.Query
+module Poppy.Internal.Query
   ( Query,
     QueryBuilder,
     queryWhereClauses,
@@ -42,10 +43,10 @@ import qualified Database.PostgreSQL.Simple as PGSimple
 import Database.PostgreSQL.Simple.FromRow (FromRow, RowParser, fromRow)
 import Database.PostgreSQL.Simple.ToField (Action)
 import Database.PostgreSQL.Simple.Types (Query (..))
-import Poppy.Core (Entity (..), Field (..))
-import Poppy.Db (Db, dbIO, logSql)
-import Poppy.Sql (quoteIdent)
-import Poppy.Where (Where, compileWhere)
+import Poppy.Internal.Core (Entity (..), Field (..))
+import Poppy.Internal.Db (Db, dbIO, logSql)
+import Poppy.Internal.Sql (quoteIdent)
+import Poppy.Internal.Where (Where, compileWhere)
 
 data QueryBuilder table = QueryBuilder
   { qbTable :: Text,

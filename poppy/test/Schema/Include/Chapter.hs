@@ -23,10 +23,19 @@ module Schema.Include.Chapter
   )
 where
 
-import Poppy.Db (Db)
-import Poppy.Include (IncludeFor, Load (..), Skip (..), Skipped, ValidEdge, skipped)
-import Poppy.Select (OmitSelect (..))
-import Poppy.SelectIn (findByIn, indexHasMany, lookupGroups)
+import Poppy.Internal.Generated
+  ( Db,
+    IncludeFor,
+    Load (..),
+    Skip (..),
+    Skipped,
+    ValidEdge,
+    skipped,
+    OmitSelect (..),
+    findByIn,
+    indexHasMany,
+    lookupGroups
+  )
 import Schema.Chapter (ChapterPicked, ChapterRow (..), ChapterSelect, toChapterPicked)
 import qualified Schema.Section as Section
 import Schema.Section (SectionRow (..), SectionTable)

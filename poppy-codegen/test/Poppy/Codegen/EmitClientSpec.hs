@@ -12,8 +12,8 @@ import Poppy.Codegen.Emit.Client
     emitSimpleClientModule,
   )
 import Poppy.Codegen.IR
-  ( Schema (..),
-    modelName,
+  ( modelName,
+    schemaModels,
   )
 import Poppy.Codegen.Spec.Example (exampleSchema, taskModel)
 import Poppy.Codegen.Spec.Shelf (shelfSchema)

@@ -1,8 +1,7 @@
 module Main (main) where
 
 import Data.UUID (UUID)
-import Poppy (Db, DbPool, ORMError, applyMigrations, closePool, connect, runDb)
-import Poppy.Where (eq)
+import Poppy (Db, DbPool, ORMError, applyMigrations, closePool, connect, eq, runDb)
 import qualified Schema.Client.Task as Task
 import Schema.Task (TaskCreate (..), TaskRow (..), taskDone)
 import System.Environment (getEnv)

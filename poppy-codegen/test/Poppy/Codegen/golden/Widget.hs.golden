@@ -27,12 +27,27 @@ where
 import Data.Text (Text)
 import Data.Time (UTCTime)
 import Data.UUID (UUID)
-import Poppy.PG (FromRow (..), RowParser, field)
-import Poppy.Core
-import Poppy.Include (ModelTable)
-import Poppy.Select (Picked (..), picked)
-import Poppy.Insert (Insertable (..), emptyInsert, set, setMaybe, setNullable)
-import Poppy.Update (Updatable (..), emptyUpdate, setFieldMaybe, setFieldNullable)
+import Poppy.Internal.Generated
+  ( FromRow (..),
+    RowParser,
+    field,
+    Entity (..),
+    Field (..),
+    PrimaryKeyType,
+    ModelTable,
+    Picked (..),
+    picked,
+    Insertable (..),
+    emptyInsert,
+    NullableValue (..),
+    set,
+    setMaybe,
+    setNullable,
+    Updatable (..),
+    emptyUpdate,
+    setFieldMaybe,
+    setFieldNullable
+  )
 
 data WidgetTable = WidgetTable
 

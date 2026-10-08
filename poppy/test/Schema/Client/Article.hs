@@ -45,16 +45,43 @@ where
 
 import Data.Text (Text)
 import Data.UUID (UUID)
-import Poppy.Db (Db)
-import Poppy.Errors (ORMError (..), fromUniqueRows, requireFound, uniqueOrFail)
-import qualified Poppy.Delete as Delete
-import qualified Poppy.Insert as Insert
-import qualified Poppy.Operations as Ops
-import Poppy.Query (OrderBy, QueryBuilder, applyQueryModifiers, matching, selectColumns)
-import Poppy.Select (OmitSelect (..), Picked (..))
-import Poppy.Where (Where, eq)
+import Poppy.Internal.Generated
+  ( Db,
+    ORMError (..),
+    fromUniqueRows,
+    requireFound,
+    uniqueOrFail,
+    OrderBy,
+    QueryBuilder,
+    applyQueryModifiers,
+    matching,
+    selectColumns,
+    OmitSelect (..),
+    Picked (..),
+    Where,
+    eq
+  )
+import qualified Poppy.Internal.Generated as Delete
+  ( deleteMany
+  )
+import qualified Poppy.Internal.Generated as Insert
+  ( insert,
+    insertMany,
+    upsert
+  )
+import qualified Poppy.Internal.Generated as Ops
+  ( findMany,
+    findManyWith,
+    findFirst,
+    findFirstWith,
+    count
+  )
+import qualified Poppy.Internal.Generated as Update
+  ( updateWhere,
+    updateMany
+  )
+
 import Schema.Article (ArticleCreate (..), ArticleRow (..), ArticleSelect (..), ArticlePicked (..), articleSelect, articleSelectColumns, parseArticlePicked, ArticleTable, ArticleUpdate (..), articleId)
-import qualified Poppy.Update as Update
 
 data ArticleUnique
   = ById UUID

@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Haddock on @Poppy.Codegen.Schema@ and @Poppy.Codegen.CLI@. Guides: repository @docs/@.
+- Only `Poppy.Codegen.Schema` and `Poppy.Codegen.CLI` are exposed. `Schema`, `Model`, `FieldSpec`, and `RelationSpec` are abstract. Generated modules import `Poppy.Internal.Generated`. `mainWith` / `simpleTarget` remain on CLI for multi-schema apps.
 - `--check-schema` reads `DATABASE_URL` only. Pass `--database-url URL` to override it.
 - Model modules no longer emit `HasMany` / `BelongsTo` values. Schema checks no longer reject include trees deeper than 5 or for running out of join aliases.
 - An include or nested-write field is the same as the relation name. Validation rejects a duplicated relation name and a relation name that matches a scalar field.

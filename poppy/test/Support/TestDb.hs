@@ -16,9 +16,9 @@ import Data.Text (Text)
 import qualified Data.Text.Encoding as TE
 import qualified Database.PostgreSQL.Simple as PG
 import Database.PostgreSQL.Simple.Types (Query (..))
-import Poppy.Core (Entity (..))
-import Poppy.Db (DbPool, closePool, connect, withConn)
-import Poppy.Sql (quoteIdent)
+import Poppy.Internal.Core (Entity (..))
+import Poppy.Internal.Db (DbPool, closePool, connect, withConn)
+import Poppy.Internal.Sql (quoteIdent)
 import Schema.Author (AuthorTable)
 import Schema.Book (BookTable)
 import Schema.Chapter (ChapterTable)

@@ -5,6 +5,7 @@ module Poppy.Codegen.SchemaSpec
   )
 where
 
+import Poppy.Codegen.IR (modelName, modelRelations, relName, schemaModels)
 import Poppy.Codegen.Schema
 import Poppy.Codegen.Spec.Editor (editorSchema)
 import Poppy.Codegen.Spec.Shelf (shelfSchema)

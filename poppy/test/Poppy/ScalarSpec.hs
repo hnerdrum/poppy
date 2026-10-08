@@ -10,8 +10,8 @@ import Data.Aeson (object, (.=))
 import Data.Scientific (scientific)
 import Data.Text (Text)
 import Poppy (runDb)
-import qualified Poppy.Insert as Insert
-import qualified Poppy.Operations as Ops
+import qualified Poppy.Internal.Insert as Insert
+import qualified Poppy.Internal.Operations as Ops
 import Schema.Packet
 import Support.Assert (assertRight)
 import Support.TestDb (TestEnv (..))

@@ -4,12 +4,12 @@
 -- 'Poppy.Codegen.CLI.generate'. Field types, relations, and uniques are
 -- documented in the repository @docs/schema.md@.
 module Poppy.Codegen.Schema
-  ( Schema (..),
+  ( Schema,
     schema,
-    Model (..),
+    Model,
     model,
     table,
-    FieldSpec (..),
+    FieldSpec,
     FieldType (..),
     FieldDefault (..),
     uuid,
@@ -26,7 +26,7 @@ module Poppy.Codegen.Schema
     withDefault,
     column,
     (&),
-    RelationSpec (..),
+    RelationSpec,
     RelationKind (..),
     JoinKind (..),
     hasMany,

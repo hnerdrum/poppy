@@ -23,10 +23,19 @@ module Schema.Include.Comment
   )
 where
 
-import Poppy.Db (Db)
-import Poppy.Include (IncludeFor, Load (..), Skip (..), Skipped, ValidEdge, skipped)
-import Poppy.Select (OmitSelect (..))
-import Poppy.SelectIn (findByIn, indexHasManyMaybe, lookupGroups)
+import Poppy.Internal.Generated
+  ( Db,
+    IncludeFor,
+    Load (..),
+    Skip (..),
+    Skipped,
+    ValidEdge,
+    skipped,
+    OmitSelect (..),
+    findByIn,
+    indexHasManyMaybe,
+    lookupGroups
+  )
 import qualified Schema.Comment as Comment
 import Schema.Comment (CommentPicked, CommentRow (..), CommentSelect, CommentTable, toCommentPicked)
 

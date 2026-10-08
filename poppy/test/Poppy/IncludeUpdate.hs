@@ -4,7 +4,7 @@ module Poppy.IncludeUpdate
 where
 
 import Poppy (load, skip)
-import Poppy.Include (Load)
+import Poppy.Internal.Include (Load)
 import Schema.Chapter (ChapterTable)
 import Schema.Include.Book (BookInclude (..))
 

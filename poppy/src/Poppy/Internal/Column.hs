@@ -1,7 +1,8 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
+{-# OPTIONS_HADDOCK hide #-}
 
 -- | 'Column' instances for Schema scalars (including @numeric@ / 'Data.Scientific.Scientific' and @jsonb@ / 'Data.Aeson.Value').
-module Poppy.Column
+module Poppy.Internal.Column
   ( Column (..),
   )
 where
@@ -14,7 +15,7 @@ import Data.Time (UTCTime)
 import Data.UUID (UUID)
 import Database.PostgreSQL.Simple.FromField ()
 import Database.PostgreSQL.Simple.ToField ()
-import Poppy.Core (Column (..))
+import Poppy.Internal.Core (Column (..))
 
 instance Column UUID where
   columnType = "uuid"

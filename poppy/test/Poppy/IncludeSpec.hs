@@ -13,11 +13,11 @@ import qualified Data.Text as T
 import Data.UUID (UUID, nil)
 import GHC.Records (HasField)
 import Poppy (asc, desc, load, loadWith, runDb, skip)
-import Poppy.Include (Load (..))
+import Poppy.Internal.Include (Load (..))
 import Poppy.IncludeUpdate (updatedChapters)
-import qualified Poppy.Operations as Ops
+import qualified Poppy.Internal.Operations as Ops
 import qualified Poppy.ShelfFixtures as ShelfFixtures
-import Poppy.Where (eq, neq)
+import Poppy.Internal.Where (eq, neq)
 import Schema.Book (BookRow (..), bookId, bookTitle)
 import Schema.Chapter (ChapterRow (..))
 import qualified Schema.Client.Book as Book
@@ -65,7 +65,7 @@ shelfById include pk =
 
 includeSpec :: SpecWith TestEnv
 includeSpec =
-  describe "Poppy.Include" $ do
+  describe "Poppy.Internal.Include" $ do
     it "findMany nests books under their shelf" $ \TestEnv {envPool = pool} -> do
       fiction <- ShelfFixtures.insertShelf pool "fiction"
       _ <- ShelfFixtures.insertShelf pool "nonfiction"

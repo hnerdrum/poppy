@@ -2,9 +2,10 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# OPTIONS_HADDOCK hide #-}
 
 -- | Low-level reads used by generated Clients. Application code calls @Schema.Client.*@.
-module Poppy.Operations
+module Poppy.Internal.Operations
   ( findMany,
     findManyWith,
     findUnique,
@@ -21,11 +22,11 @@ where
 import qualified Data.Text as Text
 import Database.PostgreSQL.Simple.FromRow (FromRow, RowParser)
 import Database.PostgreSQL.Simple.ToField (ToField)
-import Poppy.Core (Entity (..), PrimaryKeyType)
-import Poppy.Db (Db (..))
-import qualified Poppy.Delete as Delete
-import Poppy.Errors (ORMError (..), requireFound)
-import Poppy.Query
+import Poppy.Internal.Core (Entity (..), PrimaryKeyType)
+import Poppy.Internal.Db (Db (..))
+import qualified Poppy.Internal.Delete as Delete
+import Poppy.Internal.Errors (ORMError (..), requireFound)
+import Poppy.Internal.Query
   ( QueryBuilder,
     limit,
     matching,
@@ -35,7 +36,7 @@ import Poppy.Query
     runQueryWith,
     selectAll,
   )
-import Poppy.Where (compileWhere, eq)
+import Poppy.Internal.Where (compileWhere, eq)
 
 findMany ::
   forall table result.

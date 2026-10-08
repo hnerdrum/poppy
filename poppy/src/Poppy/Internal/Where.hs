@@ -1,11 +1,12 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_HADDOCK hide #-}
 
 -- | Predicates for query records and include edges.
 --
 -- On a generated query record, @where_@ filters the root model. On 'load'
 -- or 'loadWith', @where_@ filters that included relation.
-module Poppy.Where
+module Poppy.Internal.Where
   ( Where,
     eq,
     neq,
@@ -27,8 +28,8 @@ where
 import Data.Text (Text, unpack)
 import Database.PostgreSQL.Simple.ToField (Action, ToField, toField)
 import Database.PostgreSQL.Simple.Types (In (..))
-import Poppy.Core (Field (..))
-import Poppy.Sql (quoteIdent)
+import Poppy.Internal.Core (Field (..))
+import Poppy.Internal.Sql (quoteIdent)
 
 -- | Predicate on one table: the root of a query record, or the child of an include edge.
 data Where table

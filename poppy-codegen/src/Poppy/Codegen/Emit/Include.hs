@@ -70,11 +70,7 @@ emitComponent moduleName schema models =
 
 emitImports :: Text -> Schema -> [Model] -> [Text]
 emitImports moduleName schema models =
-  [ "import Poppy.Db (Db)",
-    "import Poppy.Include (IncludeFor, Load (..), Skip (..), Skipped, ValidEdge, skipped" <> requireImport <> ")",
-    "import Poppy.Select (OmitSelect (..))"
-  ]
-    ++ selectInImport schema models
+  [generatedImport schema models]
     ++ concatMap (emitSchemaImport prefix models childNames) (importModels schema models)
     ++ map (emitIncludeImport prefix) (externalChildren schema models)
   where
@@ -84,20 +80,28 @@ emitImports moduleName schema models =
         | model <- models,
           rel <- modelRelations model
       ]
-    requireImport =
-      if any (any (isRequiredBelongsTo schema) . modelRelations) models
-        then ", requireRelated"
-        else ""
 
-selectInImport :: Schema -> [Model] -> [Text]
-selectInImport schema models =
-  [ "import Poppy.SelectIn (" <> T.intercalate ", " names <> ")"
-    | not (null names)
-  ]
+generatedImport :: Schema -> [Model] -> Text
+generatedImport schema models =
+  "import Poppy.Internal.Generated\n  ( "
+    <> T.intercalate ",\n    " names
+    <> "\n  )"
   where
     rels = concatMap modelRelations models
+    requireRelatedNeeded =
+      any (any (isRequiredBelongsTo schema) . modelRelations) models
     names =
-      ["findByIn" | not (null rels)]
+      [ "Db",
+        "IncludeFor",
+        "Load (..)",
+        "Skip (..)",
+        "Skipped",
+        "ValidEdge",
+        "skipped",
+        "OmitSelect (..)"
+      ]
+        ++ ["requireRelated" | requireRelatedNeeded]
+        ++ ["findByIn" | not (null rels)]
         ++ ["indexByPk" | any (\rel -> relKind rel == RelBelongsTo) rels]
         ++ ["indexHasMany" | any (isPlainHasMany schema) rels]
         ++ ["indexHasManyMaybe" | any (isNullableHasMany schema) rels]

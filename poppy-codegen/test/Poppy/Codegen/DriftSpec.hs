@@ -19,7 +19,7 @@ import Poppy.Codegen.Spec.Flag (flagSchema)
 import Poppy.Codegen.Spec.Packet (packetSchema)
 import Poppy.Codegen.Spec.Shelf (shelfSchema)
 import Poppy.Codegen.Spec.Widget (widgetSchema)
-import Poppy.Db (withConn)
+import Poppy.Internal.Db (withConn)
 import Support.TestDb (TestEnv (..))
 import Test.Hspec
 

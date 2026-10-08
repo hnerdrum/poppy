@@ -8,7 +8,7 @@ where
 
 import Data.Maybe (isNothing)
 import Data.Text (Text)
-import Poppy.PG
+import Poppy.Internal.Generated
   ( FromField (..),
     ResultError (ConversionFailed, UnexpectedNull),
     returnError,

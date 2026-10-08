@@ -1,6 +1,6 @@
 module NonUniqueFilter where
 
-import Poppy.Where (eq)
+import Poppy (eq)
 import qualified Schema.Client.Widget as Widget
 import Schema.Widget (widgetName)
 

@@ -5,8 +5,8 @@ where
 
 import Data.Text (Text)
 import Poppy (NullableValue (Omit), runDb)
-import Poppy.Db (DbPool)
-import qualified Poppy.Insert as Insert
+import Poppy.Internal.Db (DbPool)
+import qualified Poppy.Internal.Insert as Insert
 import Schema.Widget
 import Support.Assert (assertRight)
 

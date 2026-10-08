@@ -5,8 +5,9 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
+{-# OPTIONS_HADDOCK hide #-}
 
-module Poppy.Update
+module Poppy.Internal.Update
   ( UpdateBuilder,
     Updatable (..),
     update,
@@ -34,13 +35,13 @@ import qualified Database.PostgreSQL.Simple as PGSimple
 import Database.PostgreSQL.Simple.FromRow (FromRow, fromRow)
 import Database.PostgreSQL.Simple.ToField (Action, ToField, toField)
 import Database.PostgreSQL.Simple.Types (Query (..))
-import Poppy.Core (Entity (..), Field (..), NullableValue (..), PrimaryKeyType)
-import Poppy.Db (Db (..), dbIO)
-import Poppy.Errors (ORMError (..), parseSingleton)
-import qualified Poppy.Operations as Ops
-import Poppy.Query (buildWhereClause, matching)
-import Poppy.Sql (catchSql, quoteIdent)
-import Poppy.Where (Where, compileWhere)
+import Poppy.Internal.Core (Entity (..), Field (..), NullableValue (..), PrimaryKeyType)
+import Poppy.Internal.Db (Db (..), dbIO)
+import Poppy.Internal.Errors (ORMError (..), parseSingleton)
+import qualified Poppy.Internal.Operations as Ops
+import Poppy.Internal.Query (buildWhereClause, matching)
+import Poppy.Internal.Sql (catchSql, quoteIdent)
+import Poppy.Internal.Where (Where, compileWhere)
 
 class (Entity table) => Updatable table where
   type UpdateInput table

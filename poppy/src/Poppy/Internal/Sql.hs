@@ -1,5 +1,6 @@
--- | Raw SQL in 'Poppy.Db.Db': @queryRaw@ / @executeRaw@ with bound 'param's.
-module Poppy.Sql
+{-# OPTIONS_HADDOCK hide #-}
+-- | Raw SQL in 'Poppy.Internal.Db.Db': @queryRaw@ / @executeRaw@ with bound 'param's.
+module Poppy.Internal.Sql
   ( Param (..),
     param,
     queryRaw,
@@ -27,8 +28,8 @@ import Database.PostgreSQL.Simple.FromField (ResultError (..))
 import Database.PostgreSQL.Simple.FromRow (FromRow, fromRow)
 import Database.PostgreSQL.Simple.ToField (Action, ToField, toField)
 import Database.PostgreSQL.Simple.Types (Query (..))
-import Poppy.Db (Db (..), dbIO, logSql)
-import Poppy.Errors (DatabaseErrorInfo (..), DriverErrorKind (..), ORMError (..))
+import Poppy.Internal.Db (Db (..), dbIO, logSql)
+import Poppy.Internal.Errors (DatabaseErrorInfo (..), DriverErrorKind (..), ORMError (..))
 
 newtype Param = Param {unParam :: Action}
 

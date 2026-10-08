@@ -4,6 +4,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_HADDOCK hide #-}
 
 -- | Include edges for generated @Schema.Include.*@ modules.
 --
@@ -13,7 +14,7 @@
 -- Import the result constructor
 -- (@BookWith (..)@), or a skipped field is reported as a missing @HasField@
 -- instance.
-module Poppy.Include
+module Poppy.Internal.Include
   ( Skip (..),
     Load (..),
     load,
@@ -30,8 +31,8 @@ where
 
 import Data.Kind (Constraint, Type)
 import GHC.TypeLits (ErrorMessage (..), Symbol, TypeError)
-import Poppy.Query (OrderBy)
-import Poppy.Where (Where)
+import Poppy.Internal.Query (OrderBy)
+import Poppy.Internal.Where (Where)
 
 data Skip = Skip
   deriving (Show, Eq)

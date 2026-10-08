@@ -4,13 +4,15 @@
 module Poppy.Codegen.CLI
   ( generate,
     mainWith,
+    simpleTarget,
+    CodegenTarget,
   )
 where
 
 import Data.Text (Text, pack)
 import qualified Data.Text.IO as TIO
 import Poppy.Codegen.Drift (checkSchema, formatDriftError)
-import Poppy.Codegen.IR (Schema (..))
+import Poppy.Codegen.IR (Schema)
 import Poppy.Codegen.Introspect (introspectCatalog)
 import Poppy.Codegen.Run (GenOutput (..), allOutputs, checkOutputs, schemasForTargets, writeOutputs)
 import Poppy.Codegen.Target
@@ -19,7 +21,7 @@ import Poppy.Codegen.Target
     targetSchemas,
   )
 import Poppy.Codegen.Validate (ValidationError (..), validateSchema)
-import Poppy.Db (closePool, connect, withConn)
+import Poppy.Internal.Db (closePool, connect, withConn)
 import System.Directory (getCurrentDirectory)
 import System.Environment (getArgs, lookupEnv)
 import System.Exit (exitFailure, exitSuccess)
@@ -43,8 +45,8 @@ mainWith targets = do
     ("--check" : _) -> runCheck root targets
     ("--list" : _) -> runList targets
     _ | "--check-schema" `elem` args -> do
-        urlFlag <- checkSchemaDatabaseUrl args
-        runCheckSchema urlFlag targets
+      urlFlag <- checkSchemaDatabaseUrl args
+      runCheckSchema urlFlag targets
     _ -> runWrite root targets
 
 runWrite :: FilePath -> [CodegenTarget] -> IO ()

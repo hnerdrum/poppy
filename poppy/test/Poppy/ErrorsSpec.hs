@@ -5,13 +5,13 @@ where
 
 import Data.ByteString (ByteString)
 import Database.PostgreSQL.Simple (SqlError (..))
-import Poppy.Errors (DatabaseErrorInfo (..), ORMError (..))
-import Poppy.Sql (fromSqlError, quoteIdent)
+import Poppy.Internal.Errors (DatabaseErrorInfo (..), ORMError (..))
+import Poppy.Internal.Sql (fromSqlError, quoteIdent)
 import Test.Hspec (Spec, describe, it, shouldBe)
 
 errorsSpec :: Spec
 errorsSpec = do
-  describe "Poppy.Sql.fromSqlError" $ do
+  describe "Poppy.Internal.Sql.fromSqlError" $ do
     it "maps unique violations to UniqueViolation" $ do
       fromSqlError sampleUniqueError
         `shouldBe` UniqueViolation "duplicate key value violates unique constraint"
@@ -33,7 +33,7 @@ errorsSpec = do
               detail = ""
             }
 
-  describe "Poppy.Sql.quoteIdent" $ do
+  describe "Poppy.Internal.Sql.quoteIdent" $ do
     it "double-quotes identifiers" $
       quoteIdent "recipe" `shouldBe` "\"recipe\""
 

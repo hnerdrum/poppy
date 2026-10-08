@@ -1,8 +1,9 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# OPTIONS_HADDOCK hide #-}
 
-module Poppy.Core
+module Poppy.Internal.Core
   ( Entity (..),
     Column (..),
     SqlType (..),

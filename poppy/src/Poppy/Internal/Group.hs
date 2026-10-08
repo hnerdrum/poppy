@@ -1,4 +1,5 @@
-module Poppy.Group
+{-# OPTIONS_HADDOCK hide #-}
+module Poppy.Internal.Group
   ( groupByKey,
   )
 where

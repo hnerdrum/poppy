@@ -7,8 +7,8 @@ where
 import Data.Text (Text)
 import Data.UUID (UUID)
 import Poppy (runDb)
-import Poppy.Db (DbPool)
-import qualified Poppy.Insert as Insert
+import Poppy.Internal.Db (DbPool)
+import qualified Poppy.Internal.Insert as Insert
 import Schema.Author (AuthorCreate (..), AuthorRow (..), AuthorTable)
 import Schema.Post (PostCreate (..), PostRow (..), PostTable)
 import Schema.PostStatus (PostStatus)

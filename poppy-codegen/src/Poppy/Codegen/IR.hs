@@ -166,7 +166,7 @@ enumField name enumName = field name (TyEnum enumName)
 pk :: FieldSpec -> FieldSpec
 pk f = f {fieldIsPrimaryKey = True}
 
--- | @Maybe@ on the row; create/update use 'Poppy.Core.NullableValue'.
+-- | @Maybe@ on the row; create/update use 'Poppy.NullableValue'.
 nullable :: FieldSpec -> FieldSpec
 nullable f = f {fieldNullable = True}
 

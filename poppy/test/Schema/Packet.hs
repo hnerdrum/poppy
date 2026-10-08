@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NoFieldSelectors #-}
 {-# LANGUAGE OverloadedRecordDot #-}
@@ -25,15 +26,30 @@ import Data.Text (Text)
 import Data.UUID (UUID)
 import Data.Scientific (Scientific)
 import Data.Aeson (Value)
-import Poppy.PG (FromRow (..), RowParser, field)
-import Poppy.Core
-import Poppy.Select (Picked (..), picked)
-import Poppy.Insert (Insertable (..), emptyInsert, set, setMaybe)
-import Poppy.Update (Updatable (..), emptyUpdate, setFieldMaybe)
+import Poppy.Internal.Generated
+  ( FromRow (..),
+    RowParser,
+    field,
+    Entity (..),
+    Field (..),
+    PrimaryKeyType,
+    ModelTable,
+    Picked (..),
+    picked,
+    Insertable (..),
+    emptyInsert,
+    set,
+    setMaybe,
+    Updatable (..),
+    emptyUpdate,
+    setFieldMaybe
+  )
 
 data PacketTable = PacketTable
 
 type instance PrimaryKeyType PacketTable = UUID
+
+type instance ModelTable "Packet" = PacketTable
 
 instance Entity PacketTable where
   tableName = "test_packet"

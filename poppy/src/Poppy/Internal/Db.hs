@@ -1,5 +1,6 @@
+{-# OPTIONS_HADDOCK hide #-}
 -- | Connection pool, 'Db' monad, and SQL logging.
-module Poppy.Db
+module Poppy.Internal.Db
   ( Db (..),
     DbPool (..),
     DbEnv (..),
@@ -27,7 +28,7 @@ import Data.Pool (Pool, defaultPoolConfig, destroyAllResources, newPool, setNumS
 import Data.Text (Text)
 import Database.PostgreSQL.Simple (Connection)
 import qualified Database.PostgreSQL.Simple as PG
-import Poppy.Errors (ORMError)
+import Poppy.Internal.Errors (ORMError)
 
 -- | Assembled SQL only; bound parameters are not logged.
 type SqlLogger = Text -> IO ()

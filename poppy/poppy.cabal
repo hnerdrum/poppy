@@ -46,23 +46,24 @@ source-repository head
 library
   exposed-modules:
       Poppy
-      Poppy.Column
-      Poppy.Core
-      Poppy.Db
-      Poppy.Delete
-      Poppy.Errors
-      Poppy.Group
-      Poppy.Include
-      Poppy.Insert
-      Poppy.Migrate
-      Poppy.Operations
-      Poppy.PG
-      Poppy.Query
-      Poppy.Select
-      Poppy.SelectIn
-      Poppy.Sql
-      Poppy.Update
-      Poppy.Where
+      Poppy.Internal.Generated
+      Poppy.Internal.Column
+      Poppy.Internal.Core
+      Poppy.Internal.Db
+      Poppy.Internal.Delete
+      Poppy.Internal.Errors
+      Poppy.Internal.Group
+      Poppy.Internal.Include
+      Poppy.Internal.Insert
+      Poppy.Internal.Migrate
+      Poppy.Internal.Operations
+      Poppy.Internal.PG
+      Poppy.Internal.Query
+      Poppy.Internal.Select
+      Poppy.Internal.SelectIn
+      Poppy.Internal.Sql
+      Poppy.Internal.Update
+      Poppy.Internal.Where
   other-modules:
       Paths_poppy
   hs-source-dirs:
@@ -111,8 +112,8 @@ test-suite poppy-test
       Poppy.RawSpec
       Poppy.ScalarSpec
       Poppy.SelectSpec
-      Poppy.UniqueFailSpec
       Poppy.ShelfFixtures
+      Poppy.UniqueFailSpec
       Poppy.WhereSpec
       Poppy.WidgetFixtures
       Schema.Article

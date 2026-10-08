@@ -3,8 +3,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# OPTIONS_HADDOCK hide #-}
 
-module Poppy.Insert
+module Poppy.Internal.Insert
   ( InsertBuilder,
     Insertable (..),
     insert,
@@ -36,11 +37,11 @@ import qualified Database.PostgreSQL.Simple as PGSimple
 import Database.PostgreSQL.Simple.FromRow (FromRow, fromRow)
 import Database.PostgreSQL.Simple.ToField (Action, ToField, toField)
 import Database.PostgreSQL.Simple.Types (Query (..))
-import Poppy.Core (Entity (..), Field (..), NullableValue (..))
-import Poppy.Db (Db, dbIO, transactionEither)
-import Poppy.Errors (ORMError (..), parseSingleton)
-import Poppy.Sql (catchSql, quoteIdent)
-import qualified Poppy.Update as Update
+import Poppy.Internal.Core (Entity (..), Field (..), NullableValue (..))
+import Poppy.Internal.Db (Db, dbIO, transactionEither)
+import Poppy.Internal.Errors (ORMError (..), parseSingleton)
+import Poppy.Internal.Sql (catchSql, quoteIdent)
+import qualified Poppy.Internal.Update as Update
 
 class (Entity table) => Insertable table where
   type CreateInput table

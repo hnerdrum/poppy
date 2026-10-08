@@ -8,12 +8,12 @@ where
 import Data.List (sort)
 import Data.UUID (UUID, nil)
 import Poppy (NullableValue (..), ORMError (..), runDb)
-import qualified Poppy.Delete as Delete
-import qualified Poppy.Insert as Insert
-import qualified Poppy.Operations as Ops
-import Poppy.Query (OrderDirection (Asc), limit, matching, offset, orderBy)
-import qualified Poppy.Update as Update
-import Poppy.Where (contains, eq, in_, isNull, or_)
+import qualified Poppy.Internal.Delete as Delete
+import qualified Poppy.Internal.Insert as Insert
+import qualified Poppy.Internal.Operations as Ops
+import Poppy.Internal.Query (OrderDirection (Asc), limit, matching, offset, orderBy)
+import qualified Poppy.Internal.Update as Update
+import Poppy.Internal.Where (contains, eq, in_, isNull, or_)
 import qualified Poppy.WidgetFixtures as WidgetFixtures
 import Schema.Book (BookCreate (..), BookRow (..), BookTable)
 import Schema.Widget (WidgetCreate (..), WidgetRow (..), WidgetTable (..), WidgetUpdate (..), widgetCreatedAt, widgetDescription, widgetId, widgetName)
@@ -23,7 +23,7 @@ import Test.Hspec (SpecWith, describe, it, shouldBe, shouldSatisfy)
 
 operationsSpec :: SpecWith TestEnv
 operationsSpec =
-  describe "Poppy.Operations" $ do
+  describe "Poppy.Internal.Operations" $ do
     it "findMany returns an empty list on a clean test_widget table" $ \TestEnv {envPool = pool} -> do
       rows <- runDb pool (Ops.findMany @WidgetTable @WidgetRow id)
       rows `shouldBe` []

@@ -7,9 +7,9 @@ where
 
 import Poppy (runDb)
 import qualified Poppy.AuthorFixtures as AuthorFixtures
-import qualified Poppy.Operations as Ops
-import Poppy.Query (matching)
-import Poppy.Where (eq)
+import qualified Poppy.Internal.Operations as Ops
+import Poppy.Internal.Query (matching)
+import Poppy.Internal.Where (eq)
 import Schema.Author (AuthorRow (..))
 import Schema.Post (PostRow (..), PostTable, postStatus)
 import Schema.PostStatus (PostStatus (..), postStatusToString)

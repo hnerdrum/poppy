@@ -36,7 +36,7 @@ Task.findMany
 Task.findUniqueOrFail (Task.uniqueQuery (Task.ById taskKey))
 ```
 
-`where_` on the query record filters the root table. To filter a loaded relation, record-update `where_`, `orderBy_`, and `take_` on `load` or `loadWith`. `take_` keeps that many child rows per parent. Combinators (`eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in_`, `contains`, `isNull`, `and_`, `or_`, `not_`) come from `Poppy` / `Poppy.Where`.
+`where_` on the query record filters the root table. To filter a loaded relation, record-update `where_`, `orderBy_`, and `take_` on `load` or `loadWith`. `take_` keeps that many child rows per parent. Combinators (`eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in_`, `contains`, `isNull`, `and_`, `or_`, `not_`) come from `Poppy`.
 
 `orderBy_` is a list of `asc field` / `desc field`. `limit_` and `offset_` are `Maybe Int`.
 

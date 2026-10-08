@@ -1,4 +1,5 @@
-module Poppy.PG
+{-# OPTIONS_HADDOCK hide #-}
+module Poppy.Internal.PG
   ( FromRow (..),
     RowParser,
     field,

@@ -45,21 +45,21 @@ library:
   source-dirs: src
   exposed-modules:
     - Poppy.Codegen.CLI
-    - Poppy.Codegen.Drift
-    - Poppy.Codegen.IR
-    - Poppy.Codegen.Run
     - Poppy.Codegen.Schema
-    - Poppy.Codegen.Target
-    - Poppy.Codegen.Validate
   other-modules:
+    - Poppy.Codegen.Drift
     - Poppy.Codegen.Emit.Client
     - Poppy.Codegen.Emit.Include
     - Poppy.Codegen.Emit.NestedWrite
     - Poppy.Codegen.Emit.Schema
     - Poppy.Codegen.EmitCommon
+    - Poppy.Codegen.IR
     - Poppy.Codegen.Introspect
     - Poppy.Codegen.Lookup
+    - Poppy.Codegen.Run
+    - Poppy.Codegen.Target
     - Poppy.Codegen.TextUtil
+    - Poppy.Codegen.Validate
   default-extensions:
     - NamedFieldPuns
     - OverloadedRecordDot

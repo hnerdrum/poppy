@@ -31,10 +31,22 @@ module Schema.Include.Author
   )
 where
 
-import Poppy.Db (Db)
-import Poppy.Include (IncludeFor, Load (..), Skip (..), Skipped, ValidEdge, skipped, requireRelated)
-import Poppy.Select (OmitSelect (..))
-import Poppy.SelectIn (findByIn, indexByPk, indexHasMany, lookupByPk, lookupGroups)
+import Poppy.Internal.Generated
+  ( Db,
+    IncludeFor,
+    Load (..),
+    Skip (..),
+    Skipped,
+    ValidEdge,
+    skipped,
+    OmitSelect (..),
+    requireRelated,
+    findByIn,
+    indexByPk,
+    indexHasMany,
+    lookupByPk,
+    lookupGroups
+  )
 import qualified Schema.Author as Author
 import Schema.Author (AuthorPicked, AuthorRow (..), AuthorSelect, AuthorTable, toAuthorPicked)
 import qualified Schema.Post as Post

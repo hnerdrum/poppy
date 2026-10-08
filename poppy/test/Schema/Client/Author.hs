@@ -62,18 +62,49 @@ where
 import Data.Maybe (isJust)
 import Data.Text (Text)
 import Data.UUID (UUID)
-import Poppy.Core (NullableValue (..), fieldColumn)
-import Poppy.PG (toField)
-import Poppy.Db (Db, transactionEither)
-import qualified Poppy.Delete as Delete
-import Poppy.Errors (ORMError (..), fromUniqueRows, requireFound, uniqueOrFail)
-import qualified Poppy.Insert as Insert
-import qualified Poppy.Operations as Ops
-import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)
-import Poppy.Select (OmitSelect (..), Picked (..))
-import Poppy.SelectIn (prepareIncludeRootQuery)
-import qualified Poppy.Update as Update
-import Poppy.Where (Where, and_, eq)
+import Poppy.Internal.Generated
+  ( Db,
+    transactionEither,
+    fieldColumn,
+    toField,
+    ORMError (..),
+    fromUniqueRows,
+    requireFound,
+    uniqueOrFail,
+    OrderBy,
+    applyQueryModifiers,
+    matching,
+    selectColumns,
+    OmitSelect (..),
+    Picked (..),
+    prepareIncludeRootQuery,
+    Where,
+    and_,
+    eq
+  )
+import qualified Poppy.Internal.Generated as Delete
+  ( deleteMany,
+    deleteWhere,
+    whereDelete,
+    emptyDelete
+  )
+import qualified Poppy.Internal.Generated as Insert
+  ( insert,
+    insertMany,
+    upsert
+  )
+import qualified Poppy.Internal.Generated as Ops
+  ( findMany,
+    findManyWith,
+    findFirst,
+    findFirstWith,
+    count
+  )
+import qualified Poppy.Internal.Generated as Update
+  ( updateWhere,
+    updateMany
+  )
+
 import Schema.Author (AuthorRow (..), AuthorSelect (..), AuthorPicked (..), authorSelect, authorSelectColumns, parseAuthorPicked, AuthorTable, authorId)
 import qualified Schema.Author as AuthorSchema (AuthorCreate (..), AuthorUpdate (..))
 

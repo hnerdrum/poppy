@@ -1,5 +1,6 @@
+{-# OPTIONS_HADDOCK hide #-}
 -- | Column picking for generated @*Select@ records. Default is 'OmitSelect' (full row).
-module Poppy.Select
+module Poppy.Internal.Select
   ( OmitSelect (..),
     Picked (..),
     picked,

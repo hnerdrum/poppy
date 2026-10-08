@@ -1,8 +1,9 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# OPTIONS_HADDOCK hide #-}
 
-module Poppy.SelectIn
+module Poppy.Internal.SelectIn
   ( GroupIndex,
     ByPk,
     findByIn,
@@ -26,11 +27,11 @@ import qualified Database.PostgreSQL.Simple as PGSimple
 import Database.PostgreSQL.Simple.FromRow (FromRow, fromRow)
 import Database.PostgreSQL.Simple.ToField (Action, ToField, toField)
 import Database.PostgreSQL.Simple.Types (In (..), Query (..))
-import Poppy.Core (Entity (..), Field (..))
-import Poppy.Db (Db, dbIO, logSql)
-import Poppy.Group (groupByKey)
-import qualified Poppy.Operations as Ops
-import Poppy.Query
+import Poppy.Internal.Core (Entity (..), Field (..))
+import Poppy.Internal.Db (Db, dbIO, logSql)
+import Poppy.Internal.Group (groupByKey)
+import qualified Poppy.Internal.Operations as Ops
+import Poppy.Internal.Query
   ( OrderBy (..),
     OrderDirection (..),
     QueryBuilder,
@@ -39,8 +40,8 @@ import Poppy.Query
     queryOrderBy,
     setOrderBy,
   )
-import Poppy.Sql (quoteIdent)
-import Poppy.Where (Where, compileWhere, in_)
+import Poppy.Internal.Sql (quoteIdent)
+import Poppy.Internal.Where (Where, compileWhere, in_)
 
 newtype GroupIndex k a = GroupIndex (Map k [a])
 

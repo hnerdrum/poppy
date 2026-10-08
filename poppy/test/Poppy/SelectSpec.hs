@@ -7,11 +7,11 @@ module Poppy.SelectSpec
 where
 
 import Poppy (ORMError (..), Picked (..), asc, desc, loadWith, runDb, skip)
-import qualified Poppy.Operations as Ops
-import Poppy.Query (selectColumns)
-import Poppy.Select (picked)
+import qualified Poppy.Internal.Operations as Ops
+import Poppy.Internal.Query (selectColumns)
+import Poppy.Internal.Select (picked)
 import qualified Poppy.ShelfFixtures as ShelfFixtures
-import Poppy.Where (eq)
+import Poppy.Internal.Where (eq)
 import qualified Poppy.WidgetFixtures as WidgetFixtures
 import Schema.Book (BookRow (..))
 import qualified Schema.Client.Shelf as Shelf
@@ -35,7 +35,7 @@ import Test.Hspec (SpecWith, describe, it, shouldBe, shouldSatisfy)
 
 selectSpec :: SpecWith TestEnv
 selectSpec = do
-  describe "Poppy.Select columns" $ do
+  describe "Poppy.Internal.Select columns" $ do
     it "always includes the primary key and only requested scalars" $ \_ ->
       widgetSelectColumns
         WidgetSelect

@@ -122,12 +122,7 @@ imports moduleName schema model =
         if needsUuid model then "import Data.UUID (UUID)" else "",
         if needsScientific model then "import Data.Scientific (Scientific)" else "",
         if needsJsonb model then "import Data.Aeson (Value)" else "",
-        "import Poppy.PG (FromRow (..), RowParser, field)",
-        "import Poppy.Core",
-        "import Poppy.Include (ModelTable)",
-        "import Poppy.Select (Picked (..), picked)",
-        insertImport model,
-        updateImport model
+        generatedImport model
       ]
       ++ enumImports moduleName schema model
 
@@ -176,7 +171,7 @@ emitEnumModule moduleName e =
       "",
       "import Data.Maybe (isNothing)",
       "import Data.Text (Text)",
-      "import Poppy.PG",
+      "import Poppy.Internal.Generated",
       "  ( FromField (..),",
       "    ResultError (ConversionFailed, UnexpectedNull),",
       "    returnError,",
@@ -230,26 +225,35 @@ emitEnumToString e =
 variantDbStr :: EnumVariant -> Text
 variantDbStr v = fromMaybe (lowerFirst (variantName v)) (variantDbValue v)
 
-insertImport :: Model -> Text
-insertImport model =
+generatedImport :: Model -> Text
+generatedImport model =
   let needsNullable = any fieldNullable (modelFields model)
       needsMaybe = any ((== CreateMaybe) . createKind) (modelFields model)
+      needsUpdateNullable = any fieldNullable (updateFields model)
+      needsUpdateMaybe = (not . all fieldNullable) (updateFields model)
       parts =
-        ["Insertable (..)", "emptyInsert"]
+        [ "FromRow (..)",
+          "RowParser",
+          "field",
+          "Entity (..)",
+          "Field (..)",
+          "PrimaryKeyType",
+          "ModelTable",
+          "Picked (..)",
+          "picked",
+          "Insertable (..)",
+          "emptyInsert"
+        ]
+          ++ ["NullableValue (..)" | needsNullable]
           ++ ["set" | hasRequiredCreateField model]
           ++ ["setMaybe" | needsMaybe]
           ++ ["setNullable" | needsNullable]
-   in "import Poppy.Insert (" <> T.intercalate ", " parts <> ")"
-
-updateImport :: Model -> Text
-updateImport model =
-  let needsNullable = any fieldNullable (updateFields model)
-      needsMaybe = (not . all fieldNullable) (updateFields model)
-      parts =
-        ["Updatable (..)", "emptyUpdate"]
-          ++ ["setFieldMaybe" | needsMaybe]
-          ++ ["setFieldNullable" | needsNullable]
-   in "import Poppy.Update (" <> T.intercalate ", " parts <> ")"
+          ++ ["Updatable (..)", "emptyUpdate"]
+          ++ ["setFieldMaybe" | needsUpdateMaybe]
+          ++ ["setFieldNullable" | needsUpdateNullable]
+   in "import Poppy.Internal.Generated\n  ( "
+        <> T.intercalate ",\n    " parts
+        <> "\n  )"
 
 needsTime :: Model -> Bool
 needsTime = any ((== TyTimestamptz) . fieldType) . modelFields

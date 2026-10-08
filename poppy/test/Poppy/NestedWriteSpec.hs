@@ -10,7 +10,7 @@ where
 import Data.List (sort)
 import qualified Data.UUID.V4 as V4
 import Poppy (NullableValue (Omit), ORMError (..), load, loadWith, runDb, skip)
-import qualified Poppy.Operations as Ops
+import qualified Poppy.Internal.Operations as Ops
 import Schema.Book (BookRow (..), BookTable, BookUpdate (..))
 import qualified Schema.Client.Book as Book
 import qualified Schema.Client.Comment as Comment

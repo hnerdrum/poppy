@@ -49,16 +49,45 @@ module Schema.Client.Post
 where
 
 import Data.UUID (UUID)
-import Poppy.Db (Db)
-import qualified Poppy.Delete as Delete
-import Poppy.Errors (ORMError (..), fromUniqueRows, requireFound, uniqueOrFail)
-import qualified Poppy.Insert as Insert
-import qualified Poppy.Operations as Ops
-import Poppy.Query (OrderBy, applyQueryModifiers, matching, selectColumns)
-import Poppy.Select (OmitSelect (..), Picked (..))
-import Poppy.SelectIn (prepareIncludeRootQuery)
-import qualified Poppy.Update as Update
-import Poppy.Where (Where, eq)
+import Poppy.Internal.Generated
+  ( Db,
+    ORMError (..),
+    fromUniqueRows,
+    requireFound,
+    uniqueOrFail,
+    OrderBy,
+    applyQueryModifiers,
+    matching,
+    selectColumns,
+    OmitSelect (..),
+    Picked (..),
+    prepareIncludeRootQuery,
+    Where,
+    eq
+  )
+import qualified Poppy.Internal.Generated as Delete
+  ( deleteMany,
+    deleteWhere,
+    whereDelete,
+    emptyDelete
+  )
+import qualified Poppy.Internal.Generated as Insert
+  ( insert,
+    insertMany,
+    upsert
+  )
+import qualified Poppy.Internal.Generated as Ops
+  ( findMany,
+    findManyWith,
+    findFirst,
+    findFirstWith,
+    count
+  )
+import qualified Poppy.Internal.Generated as Update
+  ( updateWhere,
+    updateMany
+  )
+
 import Schema.Post (PostCreate (..), PostUpdate (..), PostRow (..), PostSelect (..), PostPicked (..), postSelect, postSelectColumns, parsePostPicked, PostTable, postId)
 import Schema.Include.Post (LoadPost (..), PostInclude (..), PostRead, toPostWithPicked)
 import Data.Text (Text)

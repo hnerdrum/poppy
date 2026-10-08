@@ -69,8 +69,7 @@ The executable accepts the following flags:
 
 ```haskell
 import Data.UUID (UUID)
-import Poppy (Db, ORMError)
-import Poppy.Where (eq)
+import Poppy (Db, ORMError, eq)
 import qualified Schema.Client.Task as Task
 import Schema.Task (TaskRow (..), taskDone)
 

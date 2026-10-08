@@ -1,7 +1,8 @@
 {-# LANGUAGE TypeApplications #-}
+{-# OPTIONS_HADDOCK hide #-}
 
 -- | Apply hand-written @.sql@ files and record names in @_poppy_migrations@.
-module Poppy.Migrate
+module Poppy.Internal.Migrate
   ( MigrateError (..),
     applyMigrations,
   )
@@ -16,9 +17,9 @@ import qualified Data.Text as T
 import Database.PostgreSQL.Simple (Connection, Only (..))
 import qualified Database.PostgreSQL.Simple as PG
 import Database.PostgreSQL.Simple.Types (Query (..))
-import Poppy.Db (DbPool, withConn)
-import Poppy.Errors (ORMError)
-import Poppy.Sql (catchSql)
+import Poppy.Internal.Db (DbPool, withConn)
+import Poppy.Internal.Errors (ORMError)
+import Poppy.Internal.Sql (catchSql)
 import System.Directory (doesDirectoryExist, doesFileExist, listDirectory)
 import System.FilePath (takeExtension, (</>))
 

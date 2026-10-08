@@ -4,7 +4,7 @@
 
 module SkippedChaptersNoSelectors where
 
-import Poppy.Include (Skip)
+import Poppy.Internal.Include (Skip)
 import Schema.Chapter (ChapterRow)
 import Schema.Include.Book (BookWith (..))
 

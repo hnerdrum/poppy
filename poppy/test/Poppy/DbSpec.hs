@@ -11,10 +11,10 @@ import qualified Data.Text as T
 import Database.PostgreSQL.Simple.FromRow (FromRow (..), field)
 import Database.PostgreSQL.Simple.Types (Query (..))
 import Poppy (DbPool, PoolConfig (..), closePool, connectWith, defaultPool, runDb)
-import qualified Poppy.Operations as Ops
-import Poppy.Query (matching)
-import Poppy.Sql (executeRaw, param, queryRaw)
-import Poppy.Where (eq)
+import qualified Poppy.Internal.Operations as Ops
+import Poppy.Internal.Query (matching)
+import Poppy.Internal.Sql (executeRaw, param, queryRaw)
+import Poppy.Internal.Where (eq)
 import Schema.Widget (WidgetTable, widgetName)
 import Support.TestDb (TestEnv, testDatabaseUrl)
 import Test.Hspec (SpecWith, describe, it, shouldBe, shouldSatisfy)
@@ -32,7 +32,7 @@ withCustomPool config action = do
 
 dbSpec :: SpecWith TestEnv
 dbSpec =
-  describe "Poppy.Db pool config" $ do
+  describe "Poppy.Internal.Db pool config" $ do
     it "connectWith a one-connection pool still runs a query" $ \_ ->
       withCustomPool defaultPool {poolStripes = 1, poolMaxPerStripe = 1} $ \pool -> do
         rows <-
