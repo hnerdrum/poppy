@@ -1,8 +1,8 @@
 # Relations
 
-Tables can point at each other. An author has many posts; each post stores `authorId`. You declare that on the Schema with `hasMany` or `belongsTo`. After codegen, a Client query can load the related rows in the same call, instead of you fetching posts yourself and grouping them.
+Tables can point at each other. An author has many posts; each post stores `authorId`. You declare that on the Schema with `hasMany` or `belongsTo`. After codegen, a Client query can load the related rows in the same call.
 
-Set `include_` on the query when you want that. [`examples/blog/`](../examples/blog/) is a small app that loads authors with their posts.
+Set `include_` on the query when you want that. [`examples/blog/`](../examples/blog/) loads authors with their posts.
 
 ```haskell
 model
@@ -15,25 +15,44 @@ model
 
 `Post.authorId` points at `Author.id`. The include field is `posts`, the name you gave the relation.
 
-## Include records
+## Include shape
+
+Each model with relations gets `Schema.Include.<Model>`. That module is shared: a shelf's books and `Book.findMany` with an include use the same `BookInclude` / `BookWith` types.
+
+Edges can be either `skip`, `load`, or `loadWith`:
 
 ```haskell
+import Poppy (load, loadWith, skip)
+import Schema.Include.Author (AuthorInclude (..))
+import Schema.Include.Shelf (ShelfInclude (..))
+import Schema.Include.Book (BookInclude (..))
+
 Author.findMany
-  Author.emptyQuery {Author.include_ = Author.AuthorInclude {posts = True}}
-```
+  Author.emptyQuery
+    { Author.include_ = AuthorInclude {posts = load}
+    }
 
-`emptyQuery` uses `noInclude`, so you get `[AuthorRow]`. Set `include_` to `AuthorInclude {posts = True}` and the result type becomes `AuthorWithPosts`: an `author` row plus a `posts` list.
-
-`posts = True` is enough when you only want that list. To go further (books, then chapters), wrap the next include in `Just`:
-
-```haskell
 ShelfInclude
-  { books = Just (BookInclude {chapters = Just (ChapterInclude {sections = True})}),
-    tags = True
+  { books = loadWith BookInclude {chapters = load},
+    tags = skip
   }
 ```
 
-`load` and `loadWith` fetch the related rows. Record-update `where_`, `orderBy_`, and `take_` on that value to filter, sort, or keep a per-parent number of children:
+`emptyQuery` leaves `include_ = ()`, so you get plain rows (`[AuthorRow]`). With an include record, the result type follows what you loaded: `AuthorWith posts`, and so on.
+
+- `skip` omits that relation. Reading it is a type error (`Skipped "posts" …`), not an empty list or `Nothing`.
+- `load` fetches the related rows and stops there.
+- `loadWith` nests another include on the child.
+
+A required `belongsTo` is the parent row type (`AuthorRow`), not `Maybe`. A nullable `belongsTo` is `Maybe`.
+
+Include types are recursive: `AuthorInclude.posts` leads to `PostInclude.author` and back. You cut the cycle with `skip` or by stopping at `load`.
+
+Prefer constructor syntax for include records. Record update works when that field name is unique in scope; if another in-scope record shares the name, the update is ambiguous.
+
+## Filters on an edge
+
+Record-update `where_`, `orderBy_`, and `take_` on `load` or `loadWith`:
 
 ```haskell
 AuthorInclude
@@ -46,4 +65,4 @@ AuthorInclude
   }
 ```
 
-`take_` uses a per-parent window, so each author keeps two posts. `Nothing` keeps every match.
+`take_` is per parent (windowed in SQL), so each author keeps two posts. `Nothing` keeps every match.

@@ -1,6 +1,6 @@
 # Client
 
-Generated Clients live under `Schema.Client.<Model>`. Table types (`TaskRow`, field witnesses like `taskId`) can be imported from `Schema.<Model>`.
+Generated Clients live under `Schema.Client.<Model>`. Table types (`TaskRow`, field witnesses like `taskId`) come from `Schema.<Model>`.
 
 ```haskell
 import qualified Schema.Client.Task as Task
@@ -30,13 +30,18 @@ Task.findMany
 | `findUniqueOrFail` | `Either ORMError row`         |
 | `count`            | `Int`                         |
 
-`findUnique` / `findUniqueOrFail` take `uniqueQuery` plus a unique key. Compound uniques are one constructor with one argument per field. Multiple matching rows fail with `MultipleRecordsFound`.
+`findUnique` and `findUniqueOrFail` take `uniqueQuery` with a generated unique key (`Task.ById`, `Post.ByTitle`, …). Compound uniques are one constructor with one argument per field. A non-unique filter does not type-check.
 
 ```haskell
 Task.findUniqueOrFail (Task.uniqueQuery (Task.ById taskKey))
 ```
 
-`where_` on the query record filters the root table. To filter a loaded relation, record-update `where_`, `orderBy_`, and `take_` on `load` or `loadWith`. `take_` keeps that many child rows per parent. Combinators (`eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in_`, `contains`, `isNull`, `and_`, `or_`, `not_`) come from `Poppy`.
+| Error                  | When                                                           |
+| ---------------------- | -------------------------------------------------------------- |
+| `RecordNotFound`       | `findUniqueOrFail` / `findFirstOrFail` found nothing           |
+| `MultipleRecordsFound` | More than one row matched (DB out of sync with Schema uniques) |
+
+`where_` on the query record filters the root table. To filter a loaded relation, record-update `where_`, `orderBy_`, and `take_` on `load` or `loadWith`. Combinators (`eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in_`, `contains`, `isNull`, `and_`, `or_`, `not_`) come from `Poppy`.
 
 `orderBy_` is a list of `asc field` / `desc field`. `limit_` and `offset_` are `Maybe Int`.
 

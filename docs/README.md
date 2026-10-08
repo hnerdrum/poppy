@@ -10,4 +10,4 @@
 - [Errors](errors.md)
 - [Raw SQL](raw-sql.md)
 
-Examples: [`examples/task/`](../examples/task/) (one table) and [`examples/blog/`](../examples/blog/) (tables with relation).
+Examples: [`examples/task/`](../examples/task/) (one table) and [`examples/blog/`](../examples/blog/) (tables with relations).

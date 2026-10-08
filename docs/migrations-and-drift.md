@@ -16,7 +16,7 @@ applied <- applyMigrations pool "migrations"
 cabal run task-codegen -- --check-schema
 ```
 
-This connects with `DATABASE_URL`, or with the URL passed as `--database-url`, and compares the Schema to the live database (tables, columns, keys, and the rest).
+`--check-schema` reads `DATABASE_URL`. Pass `--database-url URL` to override it (the two flags can appear in either order). The check compares tables, columns, keys, and related catalog data to the Schema.
 
 ## Workflow
 

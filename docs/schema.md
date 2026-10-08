@@ -1,6 +1,6 @@
 # Schema
 
-A Schema is Haskell code with three separate parts: enums, models, and unique constraints. Codegen then turns it into table types (`Schema.Task`) and a Client (`Schema.Client.Task`).
+A Schema is Haskell code with three parts: enums, models, and unique constraints. Codegen turns it into table types (`Schema.Task`) and a Client (`Schema.Client.Task`).
 
 ```haskell
 schema
@@ -8,6 +8,8 @@ schema
   [authorModel, postModel]
   [unique_ "Post" ["title"]]
 ```
+
+Import `Poppy.Codegen.Schema`. The builders (`schema`, `model`, `hasMany`, …) are the public surface; the record constructors stay internal.
 
 ## Models and fields
 
@@ -64,7 +66,7 @@ belongsTo "author" "Author" "authorId"
 
 Add `hasMany` on `Author` when you want to create posts with the author, or load an author with their posts. Add `belongsTo` on `Post` when you want to load a post's author. [Relations](relations.md) covers how that loading works.
 
-The include and nested-write field is the relation name. `hasMany "posts" …` on `Author` becomes `AuthorInclude { posts = True }`. Two relations from one model to the same target are fine when the names differ (`writtenPosts` and `editedPosts`). A name used twice on one model, or a name equal to a scalar field on that model, fails validation.
+The include and nested-write field is the relation name as written. `hasMany "posts" …` becomes `posts` on `AuthorInclude` and on `AuthorCreate` / `AuthorUpdate`. Two relations from one model to the same target are fine when the names differ (`writtenPosts` and `editedPosts`). A name used twice on one model, or a name equal to a scalar field on that model, fails validation.
 
 ## Uniques
 
@@ -84,5 +86,4 @@ Pass the Schema field names (`title`), not the Postgres column. Each unique, inc
 - `enumField` names an enum that exists on the Schema.
 - Each relation's `from` / `to` models exist, and the foreign-key field exists on the right model.
 - Each `unique_` names a real model and at least one real field.
-- The generated include tree has no duplicate edge on the same model and no unknown relation.
 - Relation names are unique on a model, and none of them match a scalar field on that model.
