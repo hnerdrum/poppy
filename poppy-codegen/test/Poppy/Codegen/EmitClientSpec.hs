@@ -15,6 +15,20 @@ import Poppy.Codegen.IR
   ( modelName,
     schemaModels,
   )
+import Poppy.Codegen.Schema
+  ( FieldDefault (..),
+    Schema,
+    hasMany,
+    model,
+    nullable,
+    pk,
+    schema,
+    text,
+    timestamptz,
+    uuid,
+    withDefault,
+    (&),
+  )
 import Poppy.Codegen.Spec.Example (exampleSchema, taskModel)
 import Poppy.Codegen.Spec.Shelf (shelfSchema)
 import Test.Hspec
@@ -50,3 +64,34 @@ emitClientSpec =
       actual `shouldSatisfy` T.isInfixOf "ShelfCreateScalars"
       actual `shouldSatisfy` T.isInfixOf "include_ :: include"
       actual `shouldSatisfy` T.isInfixOf "include_ :: include"
+
+    it "imports root scalar types on nested-write Clients" $ do
+      let recipe = head [m | m <- schemaModels recipeNestedSchema, modelName m == "Recipe"]
+          actual = emitClientModule "Schema.Client.Recipe" recipeNestedSchema recipe
+      actual `shouldSatisfy` T.isInfixOf "import Data.Time (UTCTime)"
+      actual `shouldSatisfy` T.isInfixOf "NullableValue (..)"
+      actual `shouldSatisfy` T.isInfixOf "createdAt :: Maybe UTCTime"
+      actual `shouldSatisfy` T.isInfixOf "description :: NullableValue Text"
+
+-- Parent with hasMany plus root timestamptz / nullable text (Recipe-shaped).
+recipeNestedSchema :: Schema
+recipeNestedSchema =
+  schema
+    []
+    [ model
+        "Recipe"
+        [ uuid "id" & pk & withDefault DefaultUuidV4,
+          timestamptz "createdAt" & withDefault DefaultNow,
+          text "title",
+          text "description" & nullable
+        ]
+        [hasMany "steps" "Step" "recipeId"],
+      model
+        "Step"
+        [ uuid "id" & pk & withDefault DefaultUuidV4,
+          uuid "recipeId",
+          text "body"
+        ]
+        []
+    ]
+    []

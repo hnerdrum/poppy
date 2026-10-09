@@ -398,13 +398,7 @@ includeGeneratedImports schema root =
         if nestedWriteUsesTransaction schema root
           then
             ["fieldColumn", "toField"]
-              ++ [ "NullableValue (..)"
-                   | any
-                       ( \(rel, child) ->
-                           fieldNullable (lookupField child (relForeignField rel))
-                       )
-                       (nestedWriteRelations schema root)
-                 ]
+              ++ ["NullableValue (..)" | needsNestedNullableValue schema root]
           else []
       wherePart = whereNames schema root
       selectIn = ["prepareIncludeRootQuery"]
@@ -859,6 +853,7 @@ extraValueImports moduleName schema model =
   filter (`notElem` nestedPreludeImports schema model) $
     nub $
       valueImportLines schema moduleName model
+        ++ rootFieldImports
         ++ concat
           [ concatMap (valueImport schema moduleName) nonEnumFields
             | (rel, child) <- nestedWriteRelations schema model,
@@ -870,6 +865,19 @@ extraValueImports moduleName schema model =
                           _ -> True
                     ]
           ]
+  where
+    -- Nested-write Clients re-emit root Create/Update, so root scalar types
+    -- must be in scope here (not only on Schema.<Model>).
+    rootFieldImports
+      | nestedWriteUsesTransaction schema model =
+          concatMap (valueImport schema moduleName) (modelFields model)
+      | otherwise = []
+
+-- | True when nested create/update payloads mention 'NullableValue'.
+needsNestedNullableValue :: Schema -> Model -> Bool
+needsNestedNullableValue schema root =
+  any fieldNullable (modelFields root)
+    || any (any fieldNullable . modelFields . snd) (nestedWriteRelations schema root)
 
 valueImport :: Schema -> Text -> FieldSpec -> [Text]
 valueImport schema moduleName spec =
