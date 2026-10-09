@@ -408,7 +408,7 @@ includeGeneratedImports schema root =
           else []
       wherePart = whereNames schema root
       selectIn = ["prepareIncludeRootQuery"]
-   in T.unlines T.unlines
+   in T.unlines
         [ "import Poppy.Internal.Generated",
           "  ( " <> T.intercalate ",\n    " (dbNames ++ nestedNames ++ ["ORMError (..)", "fromUniqueRows", "requireFound", "uniqueOrFail", "OrderBy", "applyQueryModifiers", "matching", "selectColumns", "OmitSelect (..)", "Picked (..)"] ++ selectIn ++ wherePart) <> "",
           "  )",
