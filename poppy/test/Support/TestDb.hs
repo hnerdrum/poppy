@@ -10,18 +10,21 @@ module Support.TestDb
   )
 where
 
-import Control.Applicative ((<|>))
 import Control.Exception (SomeException, displayException, try)
 import Control.Monad (void)
 import Data.Text (Text)
 import qualified Data.Text.Encoding as TE
 import qualified Database.PostgreSQL.Simple as PG
 import Database.PostgreSQL.Simple.Types (Query (..))
-import Poppy.Core (Entity (..))
-import Poppy.Db (DbPool, closePool, connect, withConn)
-import Poppy.Sql (quoteIdent)
+import Poppy.Internal.Core (Entity (..))
+import Poppy.Internal.Db (DbPool, closePool, connect, withConn)
+import Poppy.Internal.Sql (quoteIdent)
+import Schema.Author (AuthorTable)
 import Schema.Book (BookTable)
 import Schema.Chapter (ChapterTable)
+import Schema.Comment (CommentTable)
+import Schema.Packet (PacketTable)
+import Schema.Post (PostTable)
 import Schema.Section (SectionTable)
 import Schema.Shelf (ShelfTable)
 import Schema.Tag (TagTable)
@@ -43,13 +46,12 @@ withTestDb spec =
 testDatabaseUrl :: IO String
 testDatabaseUrl = do
   mTestUrl <- lookupEnv "TEST_DATABASE_URL"
-  mDbUrl <- lookupEnv "DATABASE_URL"
-  case mTestUrl <|> mDbUrl of
+  case mTestUrl of
     Nothing ->
       fail $
         unlines
           [ "No test database URL configured.",
-            "Set TEST_DATABASE_URL (recommended) or DATABASE_URL.",
+            "Set TEST_DATABASE_URL.",
             "Start Postgres with: docker compose up -d",
             "Default URL: postgres://poppy:poppy@127.0.0.1:5435/poppy_test"
           ]
@@ -92,6 +94,10 @@ resetTestData env = do
   truncateTable @BookTable env
   truncateTable @TagTable env
   truncateTable @ShelfTable env
+  truncateTable @PostTable env
+  truncateTable @AuthorTable env
+  truncateTable @CommentTable env
+  truncateTable @PacketTable env
 
 truncateTable ::
   forall table.

@@ -26,14 +26,21 @@ extra-source-files:
     test/migrations/003-test-chapter.sql
     test/migrations/004-test-section.sql
     test/migrations/005-test-tag.sql
+    test/migrations/006-test-author-post.sql
+    test/migrations/007-test-packet.sql
+    test/migrations/009-test-widget-name-unique.sql
+    test/Poppy/Codegen/golden/Article.hs.golden
+    test/Poppy/Codegen/golden/Author.hs.golden
     test/Poppy/Codegen/golden/Book.hs.golden
-    test/Poppy/Codegen/golden/BookInclude.hs.golden
     test/Poppy/Codegen/golden/Chapter.hs.golden
-    test/Poppy/Codegen/golden/ChapterInclude.hs.golden
+    test/Poppy/Codegen/golden/Comment.hs.golden
+    test/Poppy/Codegen/golden/Editor.hs.golden
     test/Poppy/Codegen/golden/Flag.hs.golden
+    test/Poppy/Codegen/golden/Packet.hs.golden
+    test/Poppy/Codegen/golden/Post.hs.golden
+    test/Poppy/Codegen/golden/PostStatus.hs.golden
     test/Poppy/Codegen/golden/Section.hs.golden
     test/Poppy/Codegen/golden/Shelf.hs.golden
-    test/Poppy/Codegen/golden/ShelfInclude.hs.golden
     test/Poppy/Codegen/golden/ShelfReadClient.hs.golden
     test/Poppy/Codegen/golden/Tag.hs.golden
     test/Poppy/Codegen/golden/Widget.hs.golden
@@ -48,27 +55,21 @@ source-repository head
 library
   exposed-modules:
       Poppy.Codegen.CLI
-      Poppy.Codegen.Drift
-      Poppy.Codegen.IR
-      Poppy.Codegen.Run
       Poppy.Codegen.Schema
-      Poppy.Codegen.Target
-      Poppy.Codegen.Validate
   other-modules:
-      Poppy.Codegen.Combinator
+      Poppy.Codegen.Drift
       Poppy.Codegen.Emit.Client
-      Poppy.Codegen.Emit.Combinator
-      Poppy.Codegen.Emit.FlatRow
       Poppy.Codegen.Emit.Include
-      Poppy.Codegen.Emit.Nest
+      Poppy.Codegen.Emit.NestedWrite
       Poppy.Codegen.Emit.Schema
-      Poppy.Codegen.Emit.SelectIn
       Poppy.Codegen.EmitCommon
-      Poppy.Codegen.IncludePath
+      Poppy.Codegen.IR
       Poppy.Codegen.Introspect
-      Poppy.Codegen.JoinAlias
       Poppy.Codegen.Lookup
+      Poppy.Codegen.Run
+      Poppy.Codegen.Target
       Poppy.Codegen.TextUtil
+      Poppy.Codegen.Validate
   hs-source-dirs:
       src
   default-extensions:
@@ -92,14 +93,15 @@ test-suite poppy-codegen-test
   other-modules:
       Poppy.Codegen.DriftSpec
       Poppy.Codegen.EmitClientSpec
-      Poppy.Codegen.EmitFlatRowSpec
       Poppy.Codegen.EmitIncludeSpec
       Poppy.Codegen.EmitSpec
-      Poppy.Codegen.IncludePathSpec
-      Poppy.Codegen.JoinAliasSpec
       Poppy.Codegen.SchemaSpec
+      Poppy.Codegen.Spec.Author
+      Poppy.Codegen.Spec.Comment
+      Poppy.Codegen.Spec.Editor
       Poppy.Codegen.Spec.Example
       Poppy.Codegen.Spec.Flag
+      Poppy.Codegen.Spec.Packet
       Poppy.Codegen.Spec.Shelf
       Poppy.Codegen.Spec.ShelfDeep
       Poppy.Codegen.Spec.Widget
@@ -109,20 +111,14 @@ test-suite poppy-codegen-test
       Support.TestDb
       Support.TestMigrations
       Poppy.Codegen.CLI
-      Poppy.Codegen.Combinator
       Poppy.Codegen.Drift
       Poppy.Codegen.Emit.Client
-      Poppy.Codegen.Emit.Combinator
-      Poppy.Codegen.Emit.FlatRow
       Poppy.Codegen.Emit.Include
-      Poppy.Codegen.Emit.Nest
+      Poppy.Codegen.Emit.NestedWrite
       Poppy.Codegen.Emit.Schema
-      Poppy.Codegen.Emit.SelectIn
       Poppy.Codegen.EmitCommon
-      Poppy.Codegen.IncludePath
       Poppy.Codegen.Introspect
       Poppy.Codegen.IR
-      Poppy.Codegen.JoinAlias
       Poppy.Codegen.Lookup
       Poppy.Codegen.Run
       Poppy.Codegen.Schema

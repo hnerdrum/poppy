@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NoFieldSelectors #-}
 {-# LANGUAGE OverloadedRecordDot #-}
@@ -17,24 +18,36 @@ module Schema.Chapter
     ChapterUpdate (..),
     chapterId,
     chapterBookRef,
-    chapterHeading,
-    chapterSections
+    chapterHeading
   )
 where
 
 import Data.Text (Text)
 import Data.UUID (UUID)
-import Poppy.PG (FromRow (..), RowParser, field)
-import Poppy.Core
-import Poppy.Select (Picked (..), picked)
-import Poppy.Insert (Insertable (..), emptyInsert, set, setMaybe)
-import Poppy.Update (Updatable (..), emptyUpdate, setFieldMaybe)
-import Poppy.Relation (HasMany (..), JoinType (..))
-import Schema.Section (SectionTable, sectionChapterRef)
+import Poppy.Internal.Generated
+  ( FromRow (..),
+    RowParser,
+    field,
+    Entity (..),
+    Field (..),
+    PrimaryKeyType,
+    ModelTable,
+    Picked (..),
+    picked,
+    Insertable (..),
+    emptyInsert,
+    set,
+    setMaybe,
+    Updatable (..),
+    emptyUpdate,
+    setFieldMaybe
+  )
 
 data ChapterTable = ChapterTable
 
 type instance PrimaryKeyType ChapterTable = UUID
+
+type instance ModelTable "Chapter" = ChapterTable
 
 instance Entity ChapterTable where
   tableName = "test_chapter"
@@ -135,12 +148,4 @@ chapterBookRef = Field "bookRef" "book_id"
 
 chapterHeading :: Field ChapterTable Text
 chapterHeading = Field "heading" "heading"
-
-chapterSections :: HasMany ChapterTable SectionTable UUID
-chapterSections =
-  HasMany
-    { localKey = chapterId,
-      foreignKey = sectionChapterRef,
-      joinType = LeftJoin
-    }
 

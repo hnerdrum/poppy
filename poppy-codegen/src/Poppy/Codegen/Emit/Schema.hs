@@ -3,21 +3,24 @@
 module Poppy.Codegen.Emit.Schema
   ( emitModelModule,
     emitEnumModule,
-    emitHasMany,
-    emitBelongsTo,
     enumImportLine,
+    schemaEnumPrefix,
   )
 where
 
-import Data.Maybe (fromMaybe, isJust, mapMaybe)
+import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Poppy.Codegen.EmitCommon
-  ( createTypeName,
+  ( CreateKind (..),
+    createHsType,
+    createKind,
+    createTypeName,
     fieldBinder,
     hsType,
     parsePickedName,
     pickedTypeName,
+    pkHsType,
     primaryKeyField,
     rowTypeName,
     selectColumnsFnName,
@@ -25,10 +28,12 @@ import Poppy.Codegen.EmitCommon
     selectTypeName,
     tableTypeName,
     toPickedName,
+    updateFields,
+    updateHsType,
     updateTypeName,
   )
 import Poppy.Codegen.IR
-import Poppy.Codegen.Lookup (lookupField, lookupModel, lookupUniques)
+import Poppy.Codegen.Lookup (lookupField, lookupUniques)
 import Poppy.Codegen.TextUtil (lowerFirst)
 
 emitModelModule :: Text -> Schema -> Model -> Text
@@ -46,31 +51,31 @@ emitModelModule moduleName schema model =
           "",
           "type instance PrimaryKeyType " <> tableName_ <> " = " <> pkHsType model,
           "",
+          "type instance ModelTable \"" <> modelName model <> "\" = " <> tableName_,
+          "",
           "instance Entity " <> tableName_ <> " where",
           "  tableName = \"" <> modelTable model <> "\"",
           "  primaryKey = " <> fieldBinder model pkField,
           "  tableColumns = [" <> T.intercalate ", " (map colLit (modelFields model)) <> "]"
         ]
-        ++ uniqueKeysLines schema model
-        ++ [ "",
-          emitInsertable model,
-          "",
-          emitUpdatable model,
-          "",
-          emitRow model,
-          "",
-          emitCreate model,
-          "",
-          emitUpdate model,
-          "",
-          emitFromRow model,
-          "",
-          emitSelectTypes model,
-          ""
-        ],
-        concatMap (emitFieldDecl model) (modelFields model),
-        map (emitHasMany schema) (hasManyRelations model),
-        map (emitBelongsTo schema) (belongsToRelations model)
+          ++ uniqueKeysLines schema model
+          ++ [ "",
+               emitInsertable model,
+               "",
+               emitUpdatable model,
+               "",
+               emitRow model,
+               "",
+               emitCreate model,
+               "",
+               emitUpdate model,
+               "",
+               emitFromRow model,
+               "",
+               emitSelectTypes model,
+               ""
+             ],
+        concatMap (emitFieldDecl model) (modelFields model)
       ]
   where
     tableName_ = tableTypeName model
@@ -95,12 +100,11 @@ emitExports model =
         updateTypeName model <> " (..)"
       ]
         ++ map (fieldBinder model) (modelFields model)
-        ++ map relName (hasManyRelations model)
-        ++ map relName (belongsToRelations model)
 
 pragmas :: [Text]
 pragmas =
   [ "{-# LANGUAGE AllowAmbiguousTypes #-}",
+    "{-# LANGUAGE DataKinds #-}",
     "{-# LANGUAGE DuplicateRecordFields #-}",
     "{-# LANGUAGE NoFieldSelectors #-}",
     "{-# LANGUAGE OverloadedRecordDot #-}",
@@ -116,15 +120,11 @@ imports moduleName schema model =
       [ "import Data.Text (Text)",
         if needsTime model then "import Data.Time (UTCTime)" else "",
         if needsUuid model then "import Data.UUID (UUID)" else "",
-        "import Poppy.PG (FromRow (..), RowParser, field)",
-        "import Poppy.Core",
-        "import Poppy.Select (Picked (..), picked)",
-        insertImport model,
-        updateImport model,
-        relationImport model
+        if needsScientific model then "import Data.Scientific (Scientific)" else "",
+        if needsJsonb model then "import Data.Aeson (Value)" else "",
+        generatedImport model
       ]
       ++ enumImports moduleName schema model
-      ++ relationModelImports moduleName schema model
 
 enumImports :: Text -> Schema -> Model -> [Text]
 enumImports moduleName schema model =
@@ -171,7 +171,7 @@ emitEnumModule moduleName e =
       "",
       "import Data.Maybe (isNothing)",
       "import Data.Text (Text)",
-      "import Poppy.PG",
+      "import Poppy.Internal.Generated",
       "  ( FromField (..),",
       "    ResultError (ConversionFailed, UnexpectedNull),",
       "    returnError,",
@@ -225,64 +225,35 @@ emitEnumToString e =
 variantDbStr :: EnumVariant -> Text
 variantDbStr v = fromMaybe (lowerFirst (variantName v)) (variantDbValue v)
 
-relationModelImports :: Text -> Schema -> Model -> [Text]
-relationModelImports moduleName schema model =
-  concatMap hasManyImport (hasManyRelations model)
-    ++ concatMap belongsToImport (belongsToRelations model)
-  where
-    hasManyImport rel =
-      let child = lookupModel schema (relToModel rel)
-          foreignField = lookupField child (relForeignField rel)
-          childMod = siblingModule moduleName child
-       in [ "import "
-              <> childMod
-              <> " ("
-              <> tableTypeName child
-              <> ", "
-              <> fieldBinder child foreignField
-              <> ")"
-          ]
-    belongsToImport rel =
-      let parent = lookupModel schema (relToModel rel)
-          parentMod = siblingModule moduleName parent
-       in [ "import " <> parentMod <> " (" <> tableTypeName parent <> ")",
-            "import qualified " <> parentMod <> " as " <> modelName parent
-          ]
-
-siblingModule :: Text -> Model -> Text
-siblingModule moduleName model =
-  case T.breakOnEnd "." moduleName of
-    (prefix, _) | not (T.null prefix) -> prefix <> modelName model
-    _ -> modelName model
-
-insertImport :: Model -> Text
-insertImport model =
+generatedImport :: Model -> Text
+generatedImport model =
   let needsNullable = any fieldNullable (modelFields model)
       needsMaybe = any ((== CreateMaybe) . createKind) (modelFields model)
+      needsUpdateNullable = any fieldNullable (updateFields model)
+      needsUpdateMaybe = (not . all fieldNullable) (updateFields model)
       parts =
-        ["Insertable (..)", "emptyInsert"]
+        [ "FromRow (..)",
+          "RowParser",
+          "field",
+          "Entity (..)",
+          "Field (..)",
+          "PrimaryKeyType",
+          "ModelTable",
+          "Picked (..)",
+          "picked",
+          "Insertable (..)",
+          "emptyInsert"
+        ]
+          ++ ["NullableValue (..)" | needsNullable]
           ++ ["set" | hasRequiredCreateField model]
           ++ ["setMaybe" | needsMaybe]
           ++ ["setNullable" | needsNullable]
-   in "import Poppy.Insert (" <> T.intercalate ", " parts <> ")"
-
-updateImport :: Model -> Text
-updateImport model =
-  let needsNullable = any fieldNullable (updateFields model)
-      needsMaybe = (not . all fieldNullable) (updateFields model)
-      parts =
-        ["Updatable (..)", "emptyUpdate"]
-          ++ ["setFieldMaybe" | needsMaybe]
-          ++ ["setFieldNullable" | needsNullable]
-   in "import Poppy.Update (" <> T.intercalate ", " parts <> ")"
-
-relationImport :: Model -> Text
-relationImport model =
-  case (needsHasMany model, needsBelongsTo model) of
-    (False, False) -> ""
-    (True, False) -> "import Poppy.Relation (HasMany (..), JoinType (..))"
-    (False, True) -> "import Poppy.Relation (BelongsTo (..), JoinType (..))"
-    (True, True) -> "import Poppy.Relation (HasMany (..), BelongsTo (..), JoinType (..))"
+          ++ ["Updatable (..)", "emptyUpdate"]
+          ++ ["setFieldMaybe" | needsUpdateMaybe]
+          ++ ["setFieldNullable" | needsUpdateNullable]
+   in "import Poppy.Internal.Generated\n  ( "
+        <> T.intercalate ",\n    " parts
+        <> "\n  )"
 
 needsTime :: Model -> Bool
 needsTime = any ((== TyTimestamptz) . fieldType) . modelFields
@@ -293,56 +264,20 @@ needsUuid = any (isUuidType . fieldType) . modelFields
     isUuidType TyUuid = True
     isUuidType _ = False
 
+needsScientific :: Model -> Bool
+needsScientific = any ((== TyNumeric) . fieldType) . modelFields
+
+needsJsonb :: Model -> Bool
+needsJsonb = any ((== TyJsonb) . fieldType) . modelFields
+
 hasRequiredCreateField :: Model -> Bool
 hasRequiredCreateField =
   any (\f -> createKind f == CreateRequired) . modelFields
-
-needsHasMany :: Model -> Bool
-needsHasMany = not . null . hasManyRelations
-
-hasManyRelations :: Model -> [RelationSpec]
-hasManyRelations =
-  filter ((== RelHasMany) . relKind) . modelRelations
-
-needsBelongsTo :: Model -> Bool
-needsBelongsTo = not . null . belongsToRelations
-
-belongsToRelations :: Model -> [RelationSpec]
-belongsToRelations =
-  filter ((== RelBelongsTo) . relKind) . modelRelations
-
-pkHsType :: Model -> Text
-pkHsType model = hsType (fieldType (primaryKeyField model))
 
 rowHsType :: FieldSpec -> Text
 rowHsType f
   | fieldNullable f = "Maybe " <> hsType (fieldType f)
   | otherwise = hsType (fieldType f)
-
-data CreateKind = CreateMaybe | CreateNullable | CreateRequired
-  deriving (Eq)
-
-createKind :: FieldSpec -> CreateKind
-createKind f
-  | fieldIsPrimaryKey f && isJust (fieldDefault f) = CreateMaybe
-  | fieldIsPrimaryKey f = CreateRequired
-  | isJust (fieldDefault f) = CreateMaybe
-  | fieldNullable f = CreateNullable
-  | otherwise = CreateRequired
-
-createHsType :: FieldSpec -> Text
-createHsType f = case createKind f of
-  CreateMaybe -> "Maybe " <> hsType (fieldType f)
-  CreateNullable -> "NullableValue " <> hsType (fieldType f)
-  CreateRequired -> hsType (fieldType f)
-
-updateFields :: Model -> [FieldSpec]
-updateFields = filter (not . fieldIsPrimaryKey) . modelFields
-
-updateHsType :: FieldSpec -> Text
-updateHsType f
-  | fieldNullable f = "NullableValue " <> hsType (fieldType f)
-  | otherwise = "Maybe " <> hsType (fieldType f)
 
 emitRow :: Model -> Text
 emitRow model =
@@ -563,66 +498,3 @@ emitUpdatable model =
     updatedAtBinder f
       | fieldUpdatedAt f = Just (fieldBinder model f)
       | otherwise = Nothing
-
-emitHasMany :: Schema -> RelationSpec -> Text
-emitHasMany schema rel =
-  case relKind rel of
-    RelBelongsTo ->
-      error "emitHasMany: expected RelHasMany"
-    RelHasMany ->
-      T.unlines
-        [ name <> " :: HasMany " <> parentTable <> " " <> childTable <> " " <> keyTy,
-          name <> " =",
-          "  HasMany",
-          "    { localKey = " <> localBinder <> ",",
-          "      foreignKey = " <> foreignBinder <> ",",
-          "      joinType = " <> joinTy,
-          "    }"
-        ]
-  where
-    name = relName rel
-    parent = lookupModel schema (relFromModel rel)
-    child = lookupModel schema (relToModel rel)
-    parentTable = tableTypeName parent
-    childTable = tableTypeName child
-    localField = lookupField parent (relLocalField rel)
-    foreignField = lookupField child (relForeignField rel)
-    localBinder = fieldBinder parent localField
-    foreignBinder = fieldBinder child foreignField
-    keyTy = hsType (fieldType localField)
-    joinTy = emitJoinType (relJoin rel)
-
-emitBelongsTo :: Schema -> RelationSpec -> Text
-emitBelongsTo schema rel =
-  case relKind rel of
-    RelHasMany ->
-      error "emitBelongsTo: expected RelBelongsTo"
-    RelBelongsTo ->
-      T.unlines
-        [ name <> " :: BelongsTo " <> childTable <> " " <> parentTable <> " " <> keyTy,
-          name <> " =",
-          "  BelongsTo",
-          "    { foreignKey = " <> foreignBinder <> ",",
-          "      references = " <> referencesBinder <> ",",
-          "      joinType = " <> joinTy,
-          "    }"
-        ]
-  where
-    name = relName rel
-    child = lookupModel schema (relFromModel rel)
-    parent = lookupModel schema (relToModel rel)
-    childTable = tableTypeName child
-    parentTable = tableTypeName parent
-    -- IR: relForeignField = FK on child; relLocalField = referenced field on parent
-    foreignField = lookupField child (relForeignField rel)
-    referencedField = lookupField parent (relLocalField rel)
-    foreignBinder = fieldBinder child foreignField
-    referencesBinder =
-      modelName parent <> "." <> fieldBinder parent referencedField
-    keyTy = hsType (fieldType foreignField)
-    joinTy = emitJoinType (relJoin rel)
-
-emitJoinType :: JoinKind -> Text
-emitJoinType JoinLeft = "LeftJoin"
-emitJoinType JoinInner = "InnerJoin"
-emitJoinType JoinRight = "RightJoin"

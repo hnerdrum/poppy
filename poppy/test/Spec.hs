@@ -1,26 +1,42 @@
 module Main (main) where
 
+import Poppy.BelongsToSpec (belongsToSpec)
+import Poppy.ClientWriteSpec (clientWriteSpec)
+import Poppy.CommentSpec (commentSpec)
+import Poppy.DbSpec (dbSpec)
+import Poppy.EnumSpec (enumSpec)
 import Poppy.ErrorsSpec (errorsSpec)
 import Poppy.GroupSpec (groupSpec)
+import Poppy.IncludeFailSpec (includeFailSpec)
 import Poppy.IncludeSpec (includeSpec)
-import Poppy.JoinSpec (joinSpec)
+import Poppy.MigrateSpec (migrateSpec)
 import Poppy.NestedWriteSpec (nestedWriteSpec)
 import Poppy.OperationsSpec (operationsSpec)
 import Poppy.RawSpec (rawSpec)
+import Poppy.ScalarSpec (scalarSpec)
 import Poppy.SelectSpec (selectSpec)
+import Poppy.UniqueFailSpec (uniqueFailSpec)
 import Poppy.WhereSpec (whereSpec)
 import Support.TestDb (withTestDb)
 import Test.Hspec
 
 main :: IO ()
 main = hspec $ do
+  includeFailSpec
+  uniqueFailSpec
   errorsSpec
   groupSpec
   whereSpec
   withTestDb $
     operationsSpec
-      >> joinSpec
       >> includeSpec
+      >> commentSpec
+      >> belongsToSpec
+      >> enumSpec
       >> rawSpec
       >> selectSpec
       >> nestedWriteSpec
+      >> dbSpec
+      >> migrateSpec
+      >> clientWriteSpec
+      >> scalarSpec

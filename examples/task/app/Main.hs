@@ -1,10 +1,9 @@
 module Main (main) where
 
 import Data.UUID (UUID)
-import Poppy (Db, ORMError, closePool, connect, runDb)
-import Poppy.Where (eq)
+import Poppy (Db, DbPool, ORMError, applyMigrations, closePool, connect, eq, runDb)
 import qualified Schema.Client.Task as Task
-import Schema.Task (TaskCreate (..), TaskRow (..), taskDone, taskId)
+import Schema.Task (TaskCreate (..), TaskRow (..), taskDone)
 import System.Environment (getEnv)
 
 listOpenTasks :: Db [TaskRow]
@@ -14,13 +13,20 @@ listOpenTasks =
 
 getTask :: UUID -> Db (Either ORMError TaskRow)
 getTask taskKey =
-  Task.findUniqueOrFail
-    Task.emptyQuery {Task.where_ = Just (eq taskId taskKey)}
+  Task.findUniqueOrFail (Task.uniqueQuery (Task.ById taskKey))
 
 main :: IO ()
 main = do
   url <- getEnv "DATABASE_URL"
   pool <- connect url
+  applied <- applyMigrations pool "migrations"
+  case applied of
+    Left err -> print err
+    Right _ -> runQueries pool
+  closePool pool
+
+runQueries :: DbPool -> IO ()
+runQueries pool = do
   created <-
     runDb pool $
       Task.create
@@ -40,4 +46,3 @@ main = do
       case found of
         Left err -> print err
         Right row -> putStrLn $ "loaded: " <> show row.title
-  closePool pool

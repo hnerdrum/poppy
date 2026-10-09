@@ -8,6 +8,9 @@ where
 import Data.List (nub, sort)
 import qualified Data.Text as T
 import Poppy.Codegen.Run (allOutputs, schemasForTargets)
+import Poppy.Codegen.Spec.Author (authorSchema)
+import Poppy.Codegen.Spec.Comment (commentSchema)
+import Poppy.Codegen.Spec.Editor (editorSchema)
 import Poppy.Codegen.Spec.Shelf (shelfSchema)
 import Poppy.Codegen.Spec.Widget (widgetSchema)
 import Poppy.Codegen.Target
@@ -24,13 +27,23 @@ allTargets = testTargets
 
 schemaGoldenNames :: [FilePath]
 schemaGoldenNames =
-  [ "Book",
-    "BookInclude",
+  [ "Article",
+    "Author",
+    "Book",
     "Chapter",
-    "ChapterInclude",
+    "Comment",
+    "Editor",
+    "Include/Author",
+    "Include/Book",
+    "Include/Chapter",
+    "Include/Comment",
+    "Include/Editor",
+    "Include/Post",
+    "Include/Shelf",
+    "Post",
+    "PostStatus",
     "Section",
     "Shelf",
-    "ShelfInclude",
     "Tag",
     "Widget"
   ]
@@ -41,20 +54,33 @@ targetSpec =
     it "validates every schema referenced by a target" $ do
       schemasForTargets allTargets
         `shouldMatchList` [ widgetSchema,
-                            shelfSchema
+                            shelfSchema,
+                            authorSchema,
+                            editorSchema,
+                            commentSchema
                           ]
 
     it "writes table types under the output dir and clients under Client/" $ do
       let paths = sort (nub (map outputPath (allOutputs allTargets)))
       filter (not . isClientPath) paths
         `shouldBe` sort
-          [ "test/Schema/Book.hs",
-            "test/Schema/BookInclude.hs",
+          [ "test/Schema/Article.hs",
+            "test/Schema/Author.hs",
+            "test/Schema/Book.hs",
             "test/Schema/Chapter.hs",
-            "test/Schema/ChapterInclude.hs",
+            "test/Schema/Comment.hs",
+            "test/Schema/Editor.hs",
+            "test/Schema/Include/Author.hs",
+            "test/Schema/Include/Book.hs",
+            "test/Schema/Include/Chapter.hs",
+            "test/Schema/Include/Comment.hs",
+            "test/Schema/Include/Editor.hs",
+            "test/Schema/Include/Post.hs",
+            "test/Schema/Include/Shelf.hs",
+            "test/Schema/Post.hs",
+            "test/Schema/PostStatus.hs",
             "test/Schema/Section.hs",
             "test/Schema/Shelf.hs",
-            "test/Schema/ShelfInclude.hs",
             "test/Schema/Tag.hs",
             "test/Schema/Widget.hs"
           ]
@@ -63,6 +89,23 @@ targetSpec =
 
     it "keeps generated schema modules byte-stable" $ do
       mapM_ assertGoldenStable schemaGoldenNames
+
+    it "emits one Client per model" $ do
+      outputPaths (simpleTarget "src/Schema" shelfSchema)
+        `shouldMatchList` [ "src/Schema/Book.hs",
+                            "src/Schema/Chapter.hs",
+                            "src/Schema/Include/Book.hs",
+                            "src/Schema/Include/Chapter.hs",
+                            "src/Schema/Include/Shelf.hs",
+                            "src/Schema/Section.hs",
+                            "src/Schema/Shelf.hs",
+                            "src/Schema/Tag.hs",
+                            "src/Schema/Client/Book.hs",
+                            "src/Schema/Client/Chapter.hs",
+                            "src/Schema/Client/Section.hs",
+                            "src/Schema/Client/Shelf.hs",
+                            "src/Schema/Client/Tag.hs"
+                          ]
 
     it "nests clients under the module prefix" $ do
       let target = simpleTarget "src/Schema" widgetSchema

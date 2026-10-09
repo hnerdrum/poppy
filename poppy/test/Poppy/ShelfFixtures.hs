@@ -10,8 +10,8 @@ where
 import Data.Text (Text)
 import Data.UUID (UUID)
 import Poppy (runDb)
-import Poppy.Db (DbPool)
-import qualified Poppy.Insert as Insert
+import Poppy.Internal.Db (DbPool)
+import qualified Poppy.Internal.Insert as Insert
 import Schema.Book (BookCreate (..), BookRow (..), BookTable)
 import Schema.Chapter (ChapterCreate (..), ChapterRow (..), ChapterTable)
 import Schema.Section (SectionCreate (..), SectionRow (..), SectionTable)

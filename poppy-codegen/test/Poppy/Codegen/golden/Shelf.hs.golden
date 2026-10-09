@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NoFieldSelectors #-}
 {-# LANGUAGE OverloadedRecordDot #-}
@@ -16,26 +17,36 @@ module Schema.Shelf
     ShelfCreate (..),
     ShelfUpdate (..),
     shelfId,
-    shelfName,
-    shelfBooks,
-    shelfTags
+    shelfName
   )
 where
 
 import Data.Text (Text)
 import Data.UUID (UUID)
-import Poppy.PG (FromRow (..), RowParser, field)
-import Poppy.Core
-import Poppy.Select (Picked (..), picked)
-import Poppy.Insert (Insertable (..), emptyInsert, set, setMaybe)
-import Poppy.Update (Updatable (..), emptyUpdate, setFieldMaybe)
-import Poppy.Relation (HasMany (..), JoinType (..))
-import Schema.Book (BookTable, bookShelfId)
-import Schema.Tag (TagTable, tagShelfId)
+import Poppy.Internal.Generated
+  ( FromRow (..),
+    RowParser,
+    field,
+    Entity (..),
+    Field (..),
+    PrimaryKeyType,
+    ModelTable,
+    Picked (..),
+    picked,
+    Insertable (..),
+    emptyInsert,
+    set,
+    setMaybe,
+    Updatable (..),
+    emptyUpdate,
+    setFieldMaybe
+  )
 
 data ShelfTable = ShelfTable
 
 type instance PrimaryKeyType ShelfTable = UUID
+
+type instance ModelTable "Shelf" = ShelfTable
 
 instance Entity ShelfTable where
   tableName = "test_shelf"
@@ -122,20 +133,4 @@ shelfId = Field "id" "id"
 
 shelfName :: Field ShelfTable Text
 shelfName = Field "name" "name"
-
-shelfBooks :: HasMany ShelfTable BookTable UUID
-shelfBooks =
-  HasMany
-    { localKey = shelfId,
-      foreignKey = bookShelfId,
-      joinType = LeftJoin
-    }
-
-shelfTags :: HasMany ShelfTable TagTable UUID
-shelfTags =
-  HasMany
-    { localKey = shelfId,
-      foreignKey = tagShelfId,
-      joinType = LeftJoin
-    }
 

@@ -15,17 +15,24 @@ module Poppy.Codegen.EmitCommon
     selectColumnsFnName,
     parsePickedName,
     toPickedName,
-    resultTypeName,
-    singlePrefixEdge,
-    leafResultTypeName,
-    leafTagTypeName,
+    uniqueTypeName,
+    uniqueWhereName,
+    uniqueKeyTypeName,
+    CreateKind (..),
+    createKind,
+    createHsType,
+    updateHsType,
+    updateFields,
+    pkHsType,
+    clientSchemaPrefix,
+    schemaModuleFor,
   )
 where
 
+import Data.Maybe (isJust)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Poppy.Codegen.IR
-import Poppy.Codegen.Lookup (lookupModel, lookupRelation)
 import Poppy.Codegen.TextUtil (lowerFirst, upperFirst)
 
 fieldBinder :: Model -> FieldSpec -> Text
@@ -36,6 +43,8 @@ hsType :: FieldType -> Text
 hsType TyText = "Text"
 hsType TyUuid = "UUID"
 hsType TyInt = "Int"
+hsType TyNumeric = "Scientific"
+hsType TyJsonb = "Value"
 hsType TyTimestamptz = "UTCTime"
 hsType TyBool = "Bool"
 hsType (TyEnum name) = name
@@ -51,10 +60,7 @@ primaryKeyField model =
           <> " must have exactly one primary key"
 
 includeFieldName :: Model -> RelationSpec -> Text
-includeFieldName parent rel =
-  case T.stripPrefix (lowerFirst (modelName parent)) (relName rel) of
-    Just rest | not (T.null rest) -> lowerFirst rest
-    _ -> lowerFirst (relToModel rel)
+includeFieldName _parent = relName
 
 createTypeName :: Model -> Text
 createTypeName model = modelName model <> "Create"
@@ -86,32 +92,58 @@ parsePickedName model = "parse" <> modelName model <> "Picked"
 toPickedName :: Model -> Text
 toPickedName model = "to" <> modelName model <> "Picked"
 
-resultTypeName :: Schema -> Model -> [IncludeTree] -> Text
-resultTypeName _schema model edges =
-  modelName model
-    <> "With"
-    <> T.concat (map (upperFirst . fieldOf) edges)
-  where
-    fieldOf edge =
-      includeFieldName model (lookupRelation model (includeRelation edge))
+uniqueTypeName :: Model -> Text
+uniqueTypeName model = modelName model <> "Unique"
 
--- Single relation whose children are themselves leaves (Recipe: ingredients → ingredient).
-singlePrefixEdge :: ModelInclude -> Maybe IncludeTree
-singlePrefixEdge incl =
-  case includeTree incl of
-    [edge]
-      | not (null (includeChildren edge)),
-        all (null . includeChildren) (includeChildren edge) ->
-          Just edge
-    _ -> Nothing
+uniqueWhereName :: Model -> Text
+uniqueWhereName model = lowerFirst (modelName model) <> "UniqueWhere"
 
-leafResultTypeName :: Schema -> Model -> IncludeTree -> Text
-leafResultTypeName schema parent edge =
-  modelName parent <> "With" <> modelName child
-  where
-    rel = lookupRelation parent (includeRelation edge)
-    child = lookupModel schema (relToModel rel)
+uniqueKeyTypeName :: Model -> Text
+uniqueKeyTypeName model = modelName model <> "UniqueKey"
 
-leafTagTypeName :: Model -> IncludeTree -> Text
-leafTagTypeName parent edge =
-  upperFirst (includeFieldName parent (lookupRelation parent (includeRelation edge)))
+data CreateKind = CreateMaybe | CreateNullable | CreateRequired
+  deriving (Eq)
+
+createKind :: FieldSpec -> CreateKind
+createKind f
+  | fieldIsPrimaryKey f && isJust (fieldDefault f) = CreateMaybe
+  | fieldIsPrimaryKey f = CreateRequired
+  | isJust (fieldDefault f) = CreateMaybe
+  | fieldNullable f = CreateNullable
+  | otherwise = CreateRequired
+
+createHsType :: FieldSpec -> Text
+createHsType f = case createKind f of
+  CreateMaybe -> "Maybe " <> hsType (fieldType f)
+  CreateNullable -> "NullableValue " <> hsType (fieldType f)
+  CreateRequired -> hsType (fieldType f)
+
+updateFields :: Model -> [FieldSpec]
+updateFields = filter (not . fieldIsPrimaryKey) . modelFields
+
+updateHsType :: FieldSpec -> Text
+updateHsType f
+  | fieldNullable f = "NullableValue " <> hsType (fieldType f)
+  | otherwise = "Maybe " <> hsType (fieldType f)
+
+pkHsType :: Model -> Text
+pkHsType model = hsType (fieldType (primaryKeyField model))
+
+-- | Schema types live next to the Client unless the Client is nested under Schema.
+--
+-- @Foo.Client.Bar@ → @Foo.Schema.@ (sibling Client/Schema packages)
+-- @Schema.Client.Bar@ → @Schema.@ (Client nested under Schema)
+clientSchemaPrefix :: Text -> Text
+clientSchemaPrefix clientModule =
+  case T.breakOnEnd ".Client." clientModule of
+    (before, after)
+      | not (T.null after) && ".Client." `T.isSuffixOf` before ->
+          let parent = T.take (T.length before - T.length ".Client.") before
+           in if parent == "Schema"
+                then "Schema."
+                else parent <> ".Schema."
+    _ -> "Schema."
+
+schemaModuleFor :: Text -> Model -> Text
+schemaModuleFor clientModule model =
+  clientSchemaPrefix clientModule <> modelName model

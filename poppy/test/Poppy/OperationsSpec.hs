@@ -8,12 +8,12 @@ where
 import Data.List (sort)
 import Data.UUID (UUID, nil)
 import Poppy (NullableValue (..), ORMError (..), runDb)
-import qualified Poppy.Delete as Delete
-import qualified Poppy.Insert as Insert
-import qualified Poppy.Operations as Ops
-import Poppy.Query (OrderDirection (Asc), limit, matching, offset, orderBy)
-import qualified Poppy.Update as Update
-import Poppy.Where (contains, eq, in_, isNull, or_)
+import qualified Poppy.Internal.Delete as Delete
+import qualified Poppy.Internal.Insert as Insert
+import qualified Poppy.Internal.Operations as Ops
+import Poppy.Internal.Query (OrderDirection (Asc), limit, matching, offset, orderBy)
+import qualified Poppy.Internal.Update as Update
+import Poppy.Internal.Where (contains, eq, in_, isNull, or_)
 import qualified Poppy.WidgetFixtures as WidgetFixtures
 import Schema.Book (BookCreate (..), BookRow (..), BookTable)
 import Schema.Widget (WidgetCreate (..), WidgetRow (..), WidgetTable (..), WidgetUpdate (..), widgetCreatedAt, widgetDescription, widgetId, widgetName)
@@ -23,7 +23,7 @@ import Test.Hspec (SpecWith, describe, it, shouldBe, shouldSatisfy)
 
 operationsSpec :: SpecWith TestEnv
 operationsSpec =
-  describe "Poppy.Operations" $ do
+  describe "Poppy.Internal.Operations" $ do
     it "findMany returns an empty list on a clean test_widget table" $ \TestEnv {envPool = pool} -> do
       rows <- runDb pool (Ops.findMany @WidgetTable @WidgetRow id)
       rows `shouldBe` []
@@ -41,10 +41,10 @@ operationsSpec =
       result `shouldBe` Just widget
 
     it "findMany returns all elements that pass the filter" $ \TestEnv {envPool = pool} -> do
-      alpha1 <- WidgetFixtures.insertWidget pool "alpha"
-      alpha2 <- WidgetFixtures.insertWidget pool "alpha"
+      alpha1 <- insertDescribed pool "alpha-1" "pair"
+      alpha2 <- insertDescribed pool "alpha-2" "pair"
       _ <- WidgetFixtures.insertWidget pool "beta"
-      results <- runDb pool (Ops.findMany @WidgetTable @WidgetRow $ matching (eq widgetName "alpha"))
+      results <- runDb pool (Ops.findMany @WidgetTable @WidgetRow $ matching (eq widgetDescription "pair"))
       sort (map (.id) results) `shouldBe` sort [alpha1.id, alpha2.id]
 
     it "findUniqueOrFail returns an element by id" $ \TestEnv {envPool = pool} -> do
@@ -60,55 +60,13 @@ operationsSpec =
                             _ -> False
                         )
 
-    it "findUniqueWhere looks up by primary key where_" $ \TestEnv {envPool = pool} -> do
-      widget <- WidgetFixtures.insertWidget pool "test"
-      result <-
-        runDb
-          pool
-          (Ops.findUniqueWhere @WidgetTable @WidgetRow (Just (eq widgetId widget.id)))
-      result `shouldBe` Right (Just widget)
-
-    it "findUniqueWhere rejects a where_ that is not a unique key" $ \TestEnv {envPool = pool} -> do
-      _ <- WidgetFixtures.insertWidget pool "alpha"
-      result <-
-        runDb
-          pool
-          (Ops.findUniqueWhere @WidgetTable @WidgetRow (Just (eq widgetName "alpha")))
-      result
-        `shouldSatisfy` ( \case
-                            Left (InvalidUniqueInput _) -> True
-                            _ -> False
-                        )
-
-    it "findUniqueWhere rejects a missing where_" $ \TestEnv {envPool = pool} -> do
-      result <- runDb pool (Ops.findUniqueWhere @WidgetTable @WidgetRow Nothing)
-      result
-        `shouldSatisfy` ( \case
-                            Left (InvalidUniqueInput _) -> True
-                            _ -> False
-                        )
-
-    it "findUniqueWhere rejects a non-equality unique where_" $ \TestEnv {envPool = pool} -> do
-      widget <- WidgetFixtures.insertWidget pool "alpha"
-      result <-
-        runDb
-          pool
-          ( Ops.findUniqueWhere @WidgetTable @WidgetRow $
-              Just (eq widgetId widget.id `or_` eq widgetName "alpha")
-          )
-      result
-        `shouldSatisfy` ( \case
-                            Left (InvalidUniqueInput _) -> True
-                            _ -> False
-                        )
-
     it "findFirst returns the first element that passes the filter" $ \TestEnv {envPool = pool} -> do
-      alpha1 <- WidgetFixtures.insertWidget pool "alpha"
-      alpha2 <- WidgetFixtures.insertWidget pool "alpha"
+      alpha1 <- insertDescribed pool "alpha-1" "pair"
+      alpha2 <- insertDescribed pool "alpha-2" "pair"
       _ <- WidgetFixtures.insertWidget pool "beta"
-      result <- runDb pool (Ops.findFirst @WidgetTable @WidgetRow $ matching (eq widgetName "alpha"))
+      result <- runDb pool (Ops.findFirst @WidgetTable @WidgetRow $ matching (eq widgetDescription "pair"))
       row <- assertJust result
-      row.name `shouldBe` "alpha"
+      row.description `shouldBe` Just "pair"
       row.id `shouldSatisfy` (`elem` [alpha1.id, alpha2.id])
 
     it "findFirst returns Nothing when no row matches" $ \TestEnv {envPool = pool} -> do
@@ -116,10 +74,10 @@ operationsSpec =
       result `shouldBe` Nothing
 
     it "count returns the number of rows matching a filter" $ \TestEnv {envPool = pool} -> do
-      _ <- WidgetFixtures.insertWidget pool "alpha"
-      _ <- WidgetFixtures.insertWidget pool "alpha"
+      _ <- insertDescribed pool "alpha-1" "pair"
+      _ <- insertDescribed pool "alpha-2" "pair"
       _ <- WidgetFixtures.insertWidget pool "beta"
-      n <- runDb pool (Ops.count @WidgetTable $ matching (eq widgetName "alpha"))
+      n <- runDb pool (Ops.count @WidgetTable $ matching (eq widgetDescription "pair"))
       n `shouldBe` 2
 
     it "count returns 0 when no rows match" $ \TestEnv {envPool = pool} -> do
@@ -221,29 +179,61 @@ operationsSpec =
       updated.description `shouldBe` Nothing
 
     it "findMany supports offset" $ \TestEnv {envPool = pool} -> do
-      _ <- WidgetFixtures.insertWidget pool "alpha"
-      _ <- WidgetFixtures.insertWidget pool "alpha"
-      _ <- WidgetFixtures.insertWidget pool "alpha"
-      allAlpha <- runDb pool (Ops.findMany @WidgetTable @WidgetRow $ matching (eq widgetName "alpha"))
+      _ <- insertDescribed pool "alpha-1" "page"
+      _ <- insertDescribed pool "alpha-2" "page"
+      _ <- insertDescribed pool "alpha-3" "page"
+      allAlpha <- runDb pool (Ops.findMany @WidgetTable @WidgetRow $ matching (eq widgetDescription "page"))
       paged <-
         runDb
           pool
           ( Ops.findMany @WidgetTable @WidgetRow $
-              offset 1 . limit 1 . orderBy widgetCreatedAt Asc . matching (eq widgetName "alpha")
+              offset 1 . limit 1 . orderBy widgetCreatedAt Asc . matching (eq widgetDescription "page")
           )
       length allAlpha `shouldBe` 3
       length paged `shouldBe` 1
 
     it "delete removes a widget by id" $ \TestEnv {envPool = pool} -> do
       widget <- WidgetFixtures.insertWidget pool "doomed"
-      deleted <- runDb pool (Ops.delete @WidgetTable widget.id)
+      deleted <- runDb pool (Ops.delete @WidgetTable widget.id) >>= assertRight
       deleted `shouldBe` 1
       found <- runDb pool (Ops.findUnique @WidgetTable @WidgetRow widget.id)
       found `shouldBe` Nothing
 
     it "delete returns 0 when no row matches" $ \TestEnv {envPool = pool} -> do
-      deleted <- runDb pool (Ops.delete @WidgetTable (nil :: UUID))
+      deleted <- runDb pool (Ops.delete @WidgetTable (nil :: UUID)) >>= assertRight
       deleted `shouldBe` 0
+
+    it "deleteWhere without WHERE returns EmptyWhere" $ \TestEnv {envPool = pool} -> do
+      result <- runDb pool (Delete.deleteWhere (Delete.emptyDelete @WidgetTable))
+      result
+        `shouldSatisfy` ( \case
+                            Left (EmptyWhere _) -> True
+                            _ -> False
+                        )
+
+    it "deleteReturning without WHERE returns EmptyWhere" $ \TestEnv {envPool = pool} -> do
+      result <-
+        runDb
+          pool
+          (Delete.deleteReturning @WidgetTable @WidgetRow (Delete.emptyDelete @WidgetTable))
+      result
+        `shouldSatisfy` ( \case
+                            Left (EmptyWhere _) -> True
+                            _ -> False
+                        )
+
+    it "updateReturning without WHERE returns EmptyWhere" $ \TestEnv {envPool = pool} -> do
+      result <-
+        runDb
+          pool
+          ( Update.updateReturning @WidgetTable @WidgetRow $
+              Update.setField widgetName "x" (Update.emptyUpdate @WidgetTable)
+          )
+      result
+        `shouldSatisfy` ( \case
+                            Left (EmptyWhere _) -> True
+                            _ -> False
+                        )
 
     it "deleteMany removes rows matching a Where predicate" $ \TestEnv {envPool = pool} -> do
       _ <- WidgetFixtures.insertWidget pool "doomed"
@@ -330,3 +320,17 @@ operationsSpec =
                             Left (ForeignKeyViolation _) -> True
                             _ -> False
                         )
+
+insertDescribed pool name description =
+  runDb
+    pool
+    ( Insert.insert @WidgetTable @WidgetRow
+        WidgetCreate
+          { id = Nothing,
+            createdAt = Nothing,
+            updatedAt = Nothing,
+            name,
+            description = Value description
+          }
+    )
+    >>= assertRight

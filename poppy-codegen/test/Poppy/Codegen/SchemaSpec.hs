@@ -5,33 +5,34 @@ module Poppy.Codegen.SchemaSpec
   )
 where
 
+import Poppy.Codegen.IR (modelName, modelRelations, relName, schemaModels)
 import Poppy.Codegen.Schema
+import Poppy.Codegen.Spec.Editor (editorSchema)
 import Poppy.Codegen.Spec.Shelf (shelfSchema)
 import Test.Hspec
 
 schemaSpec :: Spec
 schemaSpec =
   describe "Poppy.Codegen.Schema" $ do
-    it "auto-emits {Model}Include when a model has relations" $ do
+    it "keeps relation names as declared" $ do
       let parent =
             model
               "Parent"
               [uuid "id" & pk]
-              [hasMany "parentKids" "Kid" "parentId"]
+              [hasMany "kids" "Kid" "parentId"]
           child =
             model
               "Kid"
               [uuid "id" & pk, uuid "parentId"]
               []
           built = schema [] [parent, child] []
-          incl = head (schemaIncludes built)
-      map includeName (schemaIncludes built) `shouldBe` ["ParentInclude"]
-      includeRootModel incl `shouldBe` "Parent"
-      map includeRelation (includeTree incl) `shouldBe` ["parentKids"]
+          parentModel = head (schemaModels built)
+      map relName (modelRelations parentModel) `shouldBe` ["kids"]
 
-    it "derives Shelf includes from relations only" $ do
-      let names = map includeName (schemaIncludes shelfSchema)
-          shelfIncl = head (schemaIncludes shelfSchema)
-      names `shouldBe` ["ShelfInclude", "BookInclude", "ChapterInclude"]
-      includeRootModel shelfIncl `shouldBe` "Shelf"
-      map includeRelation (includeTree shelfIncl) `shouldBe` ["shelfBooks", "shelfTags"]
+    it "derives Shelf relations from the model" $ do
+      let shelf = head [m | m <- schemaModels shelfSchema, modelName m == "Shelf"]
+      map relName (modelRelations shelf) `shouldBe` ["books", "tags"]
+
+    it "keeps two relations to the same model as distinct edges" $ do
+      let editor = head [m | m <- schemaModels editorSchema, modelName m == "Editor"]
+      map relName (modelRelations editor) `shouldBe` ["writtenPosts", "editedPosts"]

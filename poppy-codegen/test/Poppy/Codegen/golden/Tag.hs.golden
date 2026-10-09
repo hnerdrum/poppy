@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NoFieldSelectors #-}
 {-# LANGUAGE OverloadedRecordDot #-}
@@ -23,15 +24,30 @@ where
 
 import Data.Text (Text)
 import Data.UUID (UUID)
-import Poppy.PG (FromRow (..), RowParser, field)
-import Poppy.Core
-import Poppy.Select (Picked (..), picked)
-import Poppy.Insert (Insertable (..), emptyInsert, set, setMaybe)
-import Poppy.Update (Updatable (..), emptyUpdate, setFieldMaybe)
+import Poppy.Internal.Generated
+  ( FromRow (..),
+    RowParser,
+    field,
+    Entity (..),
+    Field (..),
+    PrimaryKeyType,
+    ModelTable,
+    Picked (..),
+    picked,
+    Insertable (..),
+    emptyInsert,
+    set,
+    setMaybe,
+    Updatable (..),
+    emptyUpdate,
+    setFieldMaybe
+  )
 
 data TagTable = TagTable
 
 type instance PrimaryKeyType TagTable = UUID
+
+type instance ModelTable "Tag" = TagTable
 
 instance Entity TagTable where
   tableName = "test_tag"

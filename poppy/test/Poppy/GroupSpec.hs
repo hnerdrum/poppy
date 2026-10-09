@@ -3,12 +3,12 @@ module Poppy.GroupSpec
   )
 where
 
-import Poppy.Group (groupByKey)
+import Poppy.Internal.Group (groupByKey)
 import Test.Hspec (Spec, describe, it, shouldBe)
 
 groupSpec :: Spec
 groupSpec =
-  describe "Poppy.Group.groupByKey" $ do
+  describe "Poppy.Internal.Group.groupByKey" $ do
     it "preserves first-seen key order rather than sorted key order" $ do
       groupByKey id ([3, 1, 3, 2, 1] :: [Int]) `shouldBe` [[3, 3], [1, 1], [2]]
 

@@ -10,7 +10,7 @@ import Poppy.Codegen.Schema
 
 widgetSchema :: Schema
 widgetSchema =
-  schema [] [widgetModel] []
+  schema [] [widgetModel] [unique_ "Widget" ["name"]]
 
 widgetModel :: Model
 widgetModel =

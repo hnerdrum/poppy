@@ -6,6 +6,7 @@ module Poppy.Codegen.Drift
   ( DbCatalog (..),
     DbTable (..),
     DbColumn (..),
+    DbForeignKey (..),
     DriftError (..),
     emptyCatalog,
     checkSchema,
@@ -13,7 +14,7 @@ module Poppy.Codegen.Drift
   )
 where
 
-import Data.List (find, sort)
+import Data.List (find, nub, sort)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
@@ -21,10 +22,12 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
 import Poppy.Codegen.IR hiding (field, variant)
+import Poppy.Codegen.TextUtil (lowerFirst)
 
 data DbCatalog = DbCatalog
   { dbTables :: Map Text DbTable,
-    dbEnums :: Map Text [Text]
+    dbEnums :: Map Text [Text],
+    dbForeignKeys :: [DbForeignKey]
   }
   deriving (Show, Eq)
 
@@ -39,7 +42,16 @@ data DbTable = DbTable
 data DbColumn = DbColumn
   { dbColName :: Text,
     dbColType :: Text,
-    dbColNullable :: Bool
+    dbColNullable :: Bool,
+    dbColDefault :: Maybe Text
+  }
+  deriving (Show, Eq)
+
+data DbForeignKey = DbForeignKey
+  { dbFkFromTable :: Text,
+    dbFkFromColumn :: Text,
+    dbFkToTable :: Text,
+    dbFkToColumn :: Text
   }
   deriving (Show, Eq)
 
@@ -54,10 +66,18 @@ data DriftError
   | DriftUnexpectedUnique Text [Text]
   | DriftMissingEnum Text Text
   | DriftEnumLabels Text [Text] [Text]
+  | DriftMissingDefault Text Text FieldDefault
+  | DriftDefaultMismatch Text Text FieldDefault Text
+  | DriftMissingForeignKey Text Text Text Text
   deriving (Show, Eq)
 
 emptyCatalog :: DbCatalog
-emptyCatalog = DbCatalog {dbTables = Map.empty, dbEnums = Map.empty}
+emptyCatalog =
+  DbCatalog
+    { dbTables = Map.empty,
+      dbEnums = Map.empty,
+      dbForeignKeys = []
+    }
 
 checkSchema :: Schema -> DbCatalog -> [DriftError]
 checkSchema schema catalog =
@@ -65,6 +85,7 @@ checkSchema schema catalog =
     ++ concatMap (checkEnum catalog) (schemaEnums schema)
     ++ concatMap (checkMissingUnique catalog schema) (schemaUniques schema)
     ++ concatMap (checkUnexpectedUniques catalog schema) (schemaModels schema)
+    ++ checkForeignKeys catalog schema
 
 formatDriftError :: DriftError -> Text
 formatDriftError = \case
@@ -95,6 +116,33 @@ formatDriftError = \case
     "IR enum " <> name <> " (database type " <> dbName <> ") is missing"
   DriftEnumLabels name expected actual ->
     "enum " <> name <> " labels: IR " <> csv expected <> " database " <> csv actual
+  DriftMissingDefault table col expected ->
+    "IR column "
+      <> table
+      <> "."
+      <> col
+      <> " declares DEFAULT "
+      <> defaultLabel expected
+      <> " but the database has none"
+  DriftDefaultMismatch table col expected actual ->
+    "default drift on "
+      <> table
+      <> "."
+      <> col
+      <> ": IR "
+      <> defaultLabel expected
+      <> " database "
+      <> actual
+  DriftMissingForeignKey fromTable fromCol toTable toCol ->
+    "IR foreign key "
+      <> fromTable
+      <> "."
+      <> fromCol
+      <> " → "
+      <> toTable
+      <> "."
+      <> toCol
+      <> " is missing from the database"
 
 showBool :: Bool -> Text
 showBool True = "true"
@@ -125,8 +173,31 @@ checkColumn table spec =
         ++ [ DriftType (dbTableName table) (fieldColumn spec) expected (dbColType col)
              | dbColType col /= expected
            ]
+        ++ checkDefault (dbTableName table) (fieldColumn spec) (fieldDefault spec) (dbColDefault col)
   where
     expected = irType spec
+
+checkDefault :: Text -> Text -> Maybe FieldDefault -> Maybe Text -> [DriftError]
+checkDefault _ _ Nothing _ = []
+checkDefault table col (Just expected) Nothing =
+  [DriftMissingDefault table col expected]
+checkDefault table col (Just expected) (Just actual) =
+  [ DriftDefaultMismatch table col expected actual
+    | canonicalizeDefault actual /= Just expected
+  ]
+
+canonicalizeDefault :: Text -> Maybe FieldDefault
+canonicalizeDefault raw
+  | mentions ["uuid_generate_v4", "gen_random_uuid"] = Just DefaultUuidV4
+  | mentions ["now()", "current_timestamp"] = Just DefaultNow
+  | otherwise = Nothing
+  where
+    normalized = T.toLower (T.strip raw)
+    mentions = any (`T.isInfixOf` normalized)
+
+defaultLabel :: FieldDefault -> Text
+defaultLabel DefaultUuidV4 = "uuid_generate_v4()"
+defaultLabel DefaultNow = "now()"
 
 extraColumns :: DbTable -> [FieldSpec] -> [DriftError]
 extraColumns table fields =
@@ -198,7 +269,7 @@ variantSqlValue :: EnumVariant -> Text
 variantSqlValue spec =
   case variantDbValue spec of
     Just value -> value
-    Nothing -> variantName spec
+    Nothing -> lowerFirst (variantName spec)
 
 irType :: FieldSpec -> Text
 irType spec =
@@ -206,6 +277,60 @@ irType spec =
     TyText -> "text"
     TyUuid -> "uuid"
     TyInt -> "int"
+    TyNumeric -> "numeric"
+    TyJsonb -> "jsonb"
     TyTimestamptz -> "timestamptz"
     TyBool -> "boolean"
     TyEnum name -> "enum:" <> T.toLower name
+
+checkForeignKeys :: DbCatalog -> Schema -> [DriftError]
+checkForeignKeys catalog schema =
+  [ DriftMissingForeignKey fromTable fromCol toTable toCol
+    | DbForeignKey fromTable fromCol toTable toCol <- impliedForeignKeys schema,
+      Map.member fromTable (dbTables catalog),
+      DbForeignKey fromTable fromCol toTable toCol `notElem` dbForeignKeys catalog
+  ]
+
+impliedForeignKeys :: Schema -> [DbForeignKey]
+impliedForeignKeys schema =
+  nub
+    [ fk
+      | model <- schemaModels schema,
+        rel <- modelRelations model,
+        Just fk <- [relationForeignKey schema rel]
+    ]
+
+relationForeignKey :: Schema -> RelationSpec -> Maybe DbForeignKey
+relationForeignKey schema rel =
+  case (findModel (relFromModel rel), findModel (relToModel rel)) of
+    (Just fromModel, Just toModel) ->
+      Just $
+        case relKind rel of
+          RelHasMany ->
+            DbForeignKey
+              { dbFkFromTable = modelTable toModel,
+                dbFkFromColumn = fieldColumn (lookupNamedField toModel (relForeignField rel)),
+                dbFkToTable = modelTable fromModel,
+                dbFkToColumn = fieldColumn (lookupNamedField fromModel (relLocalField rel))
+              }
+          RelBelongsTo ->
+            DbForeignKey
+              { dbFkFromTable = modelTable fromModel,
+                dbFkFromColumn = fieldColumn (lookupNamedField fromModel (relForeignField rel)),
+                dbFkToTable = modelTable toModel,
+                dbFkToColumn = fieldColumn (lookupNamedField toModel (relLocalField rel))
+              }
+    _ -> Nothing
+  where
+    findModel name = find ((== name) . modelName) (schemaModels schema)
+
+lookupNamedField :: Model -> Text -> FieldSpec
+lookupNamedField model name =
+  case find ((== name) . fieldName) (modelFields model) of
+    Just spec -> spec
+    Nothing ->
+      error $
+        "Poppy.Codegen.Drift: unknown field "
+          <> T.unpack name
+          <> " on "
+          <> T.unpack (modelName model)

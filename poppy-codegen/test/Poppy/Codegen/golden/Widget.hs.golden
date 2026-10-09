@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NoFieldSelectors #-}
 {-# LANGUAGE OverloadedRecordDot #-}
@@ -26,20 +27,39 @@ where
 import Data.Text (Text)
 import Data.Time (UTCTime)
 import Data.UUID (UUID)
-import Poppy.PG (FromRow (..), RowParser, field)
-import Poppy.Core
-import Poppy.Select (Picked (..), picked)
-import Poppy.Insert (Insertable (..), emptyInsert, set, setMaybe, setNullable)
-import Poppy.Update (Updatable (..), emptyUpdate, setFieldMaybe, setFieldNullable)
+import Poppy.Internal.Generated
+  ( FromRow (..),
+    RowParser,
+    field,
+    Entity (..),
+    Field (..),
+    PrimaryKeyType,
+    ModelTable,
+    Picked (..),
+    picked,
+    Insertable (..),
+    emptyInsert,
+    NullableValue (..),
+    set,
+    setMaybe,
+    setNullable,
+    Updatable (..),
+    emptyUpdate,
+    setFieldMaybe,
+    setFieldNullable
+  )
 
 data WidgetTable = WidgetTable
 
 type instance PrimaryKeyType WidgetTable = UUID
 
+type instance ModelTable "Widget" = WidgetTable
+
 instance Entity WidgetTable where
   tableName = "test_widget"
   primaryKey = widgetId
   tableColumns = ["id", "created_at", "updated_at", "name", "description"]
+  uniqueKeys = [["id"], ["name"]]
 
 instance Insertable WidgetTable where
   type CreateInput WidgetTable = WidgetCreate

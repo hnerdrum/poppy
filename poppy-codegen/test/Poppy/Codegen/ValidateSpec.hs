@@ -7,15 +7,17 @@ where
 
 import Poppy.Codegen.IR
 import qualified Poppy.Codegen.Schema as Builder
+import Poppy.Codegen.Spec.Editor (editorSchema)
 import Poppy.Codegen.Spec.Example (exampleSchema)
 import Poppy.Codegen.Spec.Flag (flagSchema)
+import Poppy.Codegen.Spec.Packet (packetSchema)
 import Poppy.Codegen.Spec.Shelf (shelfSchema)
 import Poppy.Codegen.Validate
 import Test.Hspec
 
-emptySchema :: [Model] -> [ModelInclude] -> Schema
-emptySchema models includes =
-  Schema {schemaEnums = [], schemaModels = models, schemaIncludes = includes, schemaUniques = []}
+emptySchema :: [Model] -> Schema
+emptySchema models =
+  Schema {schemaEnums = [], schemaModels = models, schemaUniques = []}
 
 validateSpec :: Spec
 validateSpec =
@@ -29,6 +31,9 @@ validateSpec =
 
       it "accepts a Schema with a boolean field" $
         validateSchema flagSchema `shouldBe` []
+
+      it "accepts a Schema with numeric and jsonb fields" $
+        validateSchema packetSchema `shouldBe` []
 
       it "rejects a builder model with no primary key" $
         validateSchema (Builder.schema [] [Builder.model "Widget" [text "name"] []] [])
@@ -45,7 +50,6 @@ validateSpec =
                       modelRelations = []
                     }
                 ]
-                []
         validateSchema schema
           `shouldBe` [ModelMissingPrimaryKey "Widget"]
 
@@ -59,7 +63,6 @@ validateSpec =
                       modelRelations = []
                     }
                 ]
-                []
         validateSchema schema
           `shouldBe` [ModelMultiplePrimaryKeys "Widget"]
 
@@ -74,7 +77,6 @@ validateSpec =
                       modelRelations = []
                     }
                 ]
-                []
         validateSchema schema
           `shouldBe` [UnknownEnumType "Item" "unit" "Unit"]
 
@@ -90,7 +92,6 @@ validateSpec =
                           modelRelations = []
                         }
                     ],
-                  schemaIncludes = [],
                   schemaUniques = []
                 }
         validateSchema schema
@@ -108,7 +109,6 @@ validateSpec =
                           modelRelations = []
                         }
                     ],
-                  schemaIncludes = [],
                   schemaUniques = []
                 }
         validateSchema schema
@@ -127,7 +127,6 @@ validateSpec =
                         ]
                     }
                 ]
-                []
         validateSchema schema
           `shouldBe` [UnknownRelationModel "shelfBooks" "to" "Missing"]
 
@@ -149,112 +148,50 @@ validateSpec =
                       modelRelations = []
                     }
                 ]
-                []
         validateSchema schema
           `shouldBe` [UnknownRelationField "shelfBooks" "Book" "shelfId"]
 
-    describe "includes" $ do
-      it "rejects an include rooted at an unknown model" $ do
+      it "rejects a relation name used twice on one model" $ do
         let schema =
-              emptySchema
-                [ Model
-                    { modelName = "Shelf",
-                      modelTable = "test_shelf",
-                      modelFields = [pk (uuid "id")],
-                      modelRelations = []
-                    }
+              Builder.schema
+                []
+                [ Builder.model
+                    "Author"
+                    [pk (uuid "id"), text "name"]
+                    [ Builder.hasMany "posts" "Post" "authorId",
+                      Builder.hasMany "posts" "Post" "authorId"
+                    ],
+                  Builder.model
+                    "Post"
+                    [pk (uuid "id"), uuid "authorId", text "title"]
+                    []
                 ]
-                [ ModelInclude
-                    { includeName = "BadInclude",
-                      includeRootModel = "Nope",
-                      includeTree = []
-                    }
-                ]
+                []
         validateSchema schema
-          `shouldBe` [UnknownIncludeRoot "BadInclude" "Nope"]
+          `shouldBe` [ DuplicateRelationName "Author" "posts"
+                     ]
 
-      it "rejects an include that references an unknown relation" $ do
+      it "rejects a relation name equal to a scalar field" $ do
         let schema =
-              emptySchema
-                [ Model
-                    { modelName = "Shelf",
-                      modelTable = "test_shelf",
-                      modelFields = [pk (uuid "id")],
-                      modelRelations = []
-                    }
+              Builder.schema
+                []
+                [ Builder.model
+                    "Author"
+                    [pk (uuid "id"), text "name"]
+                    [Builder.hasMany "name" "Post" "authorId"],
+                  Builder.model
+                    "Post"
+                    [pk (uuid "id"), uuid "authorId"]
+                    []
                 ]
-                [ ModelInclude
-                    { includeName = "ShelfInclude",
-                      includeRootModel = "Shelf",
-                      includeTree =
-                        [ IncludeTree
-                            { includeRelation = "shelfBooks",
-                              includeChildren = []
-                            }
-                        ]
-                    }
-                ]
+                []
         validateSchema schema
-          `shouldBe` [UnknownIncludeRelation "ShelfInclude" "Shelf" "shelfBooks"]
+          `shouldBe` [RelationNameClashesWithField "Author" "name"]
 
-      it "rejects duplicate relations at the same include level" $ do
-        let schema =
-              emptySchema
-                [ Model
-                    { modelName = "Shelf",
-                      modelTable = "test_shelf",
-                      modelFields = [pk (uuid "id"), uuid "name"],
-                      modelRelations =
-                        [ hasMany "shelfBooks" "Shelf" "Book" "id" "shelfId"
-                        ]
-                    },
-                  Model
-                    { modelName = "Book",
-                      modelTable = "test_book",
-                      modelFields = [pk (uuid "id"), column "shelf_id" (uuid "shelfId")],
-                      modelRelations = []
-                    }
-                ]
-                [ ModelInclude
-                    { includeName = "ShelfInclude",
-                      includeRootModel = "Shelf",
-                      includeTree =
-                        [ IncludeTree {includeRelation = "shelfBooks", includeChildren = []},
-                          IncludeTree {includeRelation = "shelfBooks", includeChildren = []}
-                        ]
-                    }
-                ]
-        validateSchema schema
-          `shouldBe` [DuplicateIncludeRelation "ShelfInclude" "Shelf" "shelfBooks"]
+      it "accepts two relations from one model to the same model" $ do
+        validateSchema editorSchema `shouldBe` []
 
-      it "rejects leftover include declarations that are not the relation graph" $ do
-        let schema =
-              emptySchema
-                [ Model
-                    { modelName = "Shelf",
-                      modelTable = "test_shelf",
-                      modelFields = [pk (uuid "id"), uuid "name"],
-                      modelRelations =
-                        [ hasMany "shelfBooks" "Shelf" "Book" "id" "shelfId"
-                        ]
-                    },
-                  Model
-                    { modelName = "Book",
-                      modelTable = "test_book",
-                      modelFields = [pk (uuid "id"), column "shelf_id" (uuid "shelfId")],
-                      modelRelations = []
-                    }
-                ]
-                [ ModelInclude
-                    { includeName = "ShelfBooksOnly",
-                      includeRootModel = "Shelf",
-                      includeTree =
-                        [IncludeTree {includeRelation = "shelfBooks", includeChildren = []}]
-                    }
-                ]
-        validateSchema schema
-          `shouldBe` [LeftoverIncludeDeclaration "ShelfBooksOnly"]
-
+    describe "uniques" $ do
       it "rejects a unique constraint on an unknown model" $ do
         let schema =
               emptySchema
@@ -265,7 +202,6 @@ validateSpec =
                       modelRelations = []
                     }
                 ]
-                []
             drifted = schema {schemaUniques = [unique_ "Nope" ["id"]]}
         validateSchema drifted
           `shouldBe` [UnknownUniqueModel "Nope"]
@@ -280,7 +216,6 @@ validateSpec =
                       modelRelations = []
                     }
                 ]
-                []
             drifted = schema {schemaUniques = [unique_ "Widget" ["name"]]}
         validateSchema drifted
           `shouldBe` [UnknownUniqueField "Widget" "name"]

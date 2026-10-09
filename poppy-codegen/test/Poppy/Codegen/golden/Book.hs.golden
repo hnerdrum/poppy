@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NoFieldSelectors #-}
 {-# LANGUAGE OverloadedRecordDot #-}
@@ -17,24 +18,36 @@ module Schema.Book
     BookUpdate (..),
     bookId,
     bookShelfId,
-    bookTitle,
-    bookChapters
+    bookTitle
   )
 where
 
 import Data.Text (Text)
 import Data.UUID (UUID)
-import Poppy.PG (FromRow (..), RowParser, field)
-import Poppy.Core
-import Poppy.Select (Picked (..), picked)
-import Poppy.Insert (Insertable (..), emptyInsert, set, setMaybe)
-import Poppy.Update (Updatable (..), emptyUpdate, setFieldMaybe)
-import Poppy.Relation (HasMany (..), JoinType (..))
-import Schema.Chapter (ChapterTable, chapterBookRef)
+import Poppy.Internal.Generated
+  ( FromRow (..),
+    RowParser,
+    field,
+    Entity (..),
+    Field (..),
+    PrimaryKeyType,
+    ModelTable,
+    Picked (..),
+    picked,
+    Insertable (..),
+    emptyInsert,
+    set,
+    setMaybe,
+    Updatable (..),
+    emptyUpdate,
+    setFieldMaybe
+  )
 
 data BookTable = BookTable
 
 type instance PrimaryKeyType BookTable = UUID
+
+type instance ModelTable "Book" = BookTable
 
 instance Entity BookTable where
   tableName = "test_book"
@@ -135,12 +148,4 @@ bookShelfId = Field "shelfId" "shelf_id"
 
 bookTitle :: Field BookTable Text
 bookTitle = Field "title" "title"
-
-bookChapters :: HasMany BookTable ChapterTable UUID
-bookChapters =
-  HasMany
-    { localKey = bookId,
-      foreignKey = chapterBookRef,
-      joinType = LeftJoin
-    }
 

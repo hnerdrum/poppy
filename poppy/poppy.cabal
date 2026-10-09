@@ -26,6 +26,15 @@ extra-source-files:
     test/migrations/003-test-chapter.sql
     test/migrations/004-test-section.sql
     test/migrations/005-test-tag.sql
+    test/migrations/006-test-author-post.sql
+    test/migrations/007-test-packet.sql
+    test/migrations/008-test-comment.sql
+    test/migrations/009-test-widget-name-unique.sql
+    include-fail/RecordUpdateAmbiguous.hs
+    include-fail/SkippedChapters.hs
+    include-fail/SkippedChaptersNoSelectors.hs
+    include-fail/WrongChild.hs
+    unique-fail/NonUniqueFilter.hs
 extra-doc-files:
     README.md
     CHANGELOG.md
@@ -37,24 +46,24 @@ source-repository head
 library
   exposed-modules:
       Poppy
-      Poppy.Column
-      Poppy.Core
-      Poppy.Db
-      Poppy.Delete
-      Poppy.Errors
-      Poppy.Group
-      Poppy.Include
-      Poppy.Insert
-      Poppy.JoinChain
-      Poppy.Operations
-      Poppy.PG
-      Poppy.Query
-      Poppy.Relation
-      Poppy.Select
-      Poppy.SelectIn
-      Poppy.Sql
-      Poppy.Update
-      Poppy.Where
+      Poppy.Internal.Generated
+      Poppy.Internal.Column
+      Poppy.Internal.Core
+      Poppy.Internal.Db
+      Poppy.Internal.Delete
+      Poppy.Internal.Errors
+      Poppy.Internal.Group
+      Poppy.Internal.Include
+      Poppy.Internal.Insert
+      Poppy.Internal.Migrate
+      Poppy.Internal.Operations
+      Poppy.Internal.PG
+      Poppy.Internal.Query
+      Poppy.Internal.Select
+      Poppy.Internal.SelectIn
+      Poppy.Internal.Sql
+      Poppy.Internal.Update
+      Poppy.Internal.Where
   other-modules:
       Paths_poppy
   hs-source-dirs:
@@ -67,12 +76,16 @@ library
       TypeFamilies
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
-      base >=4.17 && <4.21
+      aeson >=2.0 && <2.3
+    , base >=4.17 && <4.21
     , bytestring >=0.11 && <0.13
     , containers >=0.6 && <0.8
+    , directory ==1.3.*
+    , filepath >=1.4 && <1.6
     , mtl >=2.2 && <2.4
     , postgresql-simple >=0.6 && <0.8
     , resource-pool ==0.4.*
+    , scientific >=0.3.4 && <0.4
     , text >=2.0 && <2.2
     , time >=1.12 && <1.15
     , uuid ==1.3.*
@@ -82,26 +95,56 @@ test-suite poppy-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Poppy.AuthorFixtures
+      Poppy.BelongsToSpec
+      Poppy.ClientWriteSpec
+      Poppy.CommentSpec
+      Poppy.DbSpec
+      Poppy.EnumSpec
       Poppy.ErrorsSpec
       Poppy.GroupSpec
+      Poppy.IncludeFailSpec
       Poppy.IncludeSpec
-      Poppy.JoinSpec
+      Poppy.IncludeUpdate
+      Poppy.MigrateSpec
       Poppy.NestedWriteSpec
       Poppy.OperationsSpec
       Poppy.RawSpec
+      Poppy.ScalarSpec
       Poppy.SelectSpec
       Poppy.ShelfFixtures
+      Poppy.UniqueFailSpec
       Poppy.WhereSpec
       Poppy.WidgetFixtures
+      Schema.Article
+      Schema.Author
       Schema.Book
-      Schema.BookInclude
       Schema.Chapter
-      Schema.ChapterInclude
+      Schema.Client.Article
+      Schema.Client.Author
+      Schema.Client.Book
+      Schema.Client.Chapter
+      Schema.Client.Comment
+      Schema.Client.Editor
+      Schema.Client.Post
+      Schema.Client.Section
       Schema.Client.Shelf
+      Schema.Client.Tag
       Schema.Client.Widget
+      Schema.Comment
+      Schema.Editor
+      Schema.Include.Author
+      Schema.Include.Book
+      Schema.Include.Chapter
+      Schema.Include.Comment
+      Schema.Include.Editor
+      Schema.Include.Post
+      Schema.Include.Shelf
+      Schema.Packet
+      Schema.Post
+      Schema.PostStatus
       Schema.Section
       Schema.Shelf
-      Schema.ShelfInclude
       Schema.Tag
       Schema.Widget
       Support.Assert
@@ -122,7 +165,8 @@ test-suite poppy-test
       TypeFamilies
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.17 && <4.21
+      aeson >=2.0 && <2.3
+    , base >=4.17 && <4.21
     , bytestring >=0.11 && <0.13
     , containers >=0.6 && <0.8
     , directory ==1.3.*
@@ -131,7 +175,9 @@ test-suite poppy-test
     , mtl >=2.2 && <2.4
     , poppy
     , postgresql-simple >=0.6 && <0.8
+    , process ==1.6.*
     , resource-pool ==0.4.*
+    , scientific >=0.3.4 && <0.4
     , text >=2.0 && <2.2
     , time >=1.12 && <1.15
     , uuid ==1.3.*

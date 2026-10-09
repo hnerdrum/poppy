@@ -6,8 +6,8 @@ module Poppy.WhereSpec
 where
 
 import Data.Text (Text)
-import Poppy.Core (Field (..))
-import Poppy.Where
+import Poppy.Internal.Core (Field (..))
+import Poppy.Internal.Where
   ( Where,
     and_,
     compileWhere,
@@ -34,7 +34,7 @@ whereSql = fst . compileWhere
 
 whereSpec :: Spec
 whereSpec =
-  describe "Poppy.Where" $ do
+  describe "Poppy.Internal.Where" $ do
     it "compiles eq" $
       whereSql (eq userName "Ada") `shouldBe` "\"name\" = ?"
 

@@ -45,34 +45,28 @@ library:
   source-dirs: src
   exposed-modules:
     - Poppy.Codegen.CLI
-    - Poppy.Codegen.Drift
-    - Poppy.Codegen.IR
-    - Poppy.Codegen.Run
     - Poppy.Codegen.Schema
-    - Poppy.Codegen.Target
-    - Poppy.Codegen.Validate
   other-modules:
-    - Poppy.Codegen.Combinator
+    - Poppy.Codegen.Drift
     - Poppy.Codegen.Emit.Client
-    - Poppy.Codegen.Emit.Combinator
-    - Poppy.Codegen.Emit.FlatRow
     - Poppy.Codegen.Emit.Include
-    - Poppy.Codegen.Emit.Nest
+    - Poppy.Codegen.Emit.NestedWrite
     - Poppy.Codegen.Emit.Schema
-    - Poppy.Codegen.Emit.SelectIn
     - Poppy.Codegen.EmitCommon
-    - Poppy.Codegen.IncludePath
+    - Poppy.Codegen.IR
     - Poppy.Codegen.Introspect
-    - Poppy.Codegen.JoinAlias
     - Poppy.Codegen.Lookup
+    - Poppy.Codegen.Run
+    - Poppy.Codegen.Target
     - Poppy.Codegen.TextUtil
+    - Poppy.Codegen.Validate
   default-extensions:
     - NamedFieldPuns
     - OverloadedRecordDot
     - OverloadedStrings
 
-# Compile library sources with the test suite so hidden Emit/JoinAlias/IncludePath
-# modules can be unit-tested without exposing them to consumers.
+# Compile library sources with the test suite so hidden Emit modules can be
+# unit-tested without exposing them to consumers.
 tests:
   poppy-codegen-test:
     main: Spec.hs

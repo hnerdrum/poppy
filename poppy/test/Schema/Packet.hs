@@ -1,0 +1,153 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE NoFieldSelectors #-}
+{-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE TypeApplications #-}
+
+module Schema.Packet
+  ( PacketTable (..),
+    PacketRow (..),
+    PacketSelect (..),
+    PacketPicked (..),
+    packetSelect,
+    packetSelectColumns,
+    parsePacketPicked,
+    toPacketPicked,
+    PacketCreate (..),
+    PacketUpdate (..),
+    packetId,
+    packetAmount,
+    packetPayload
+  )
+where
+
+import Data.Text (Text)
+import Data.UUID (UUID)
+import Data.Scientific (Scientific)
+import Data.Aeson (Value)
+import Poppy.Internal.Generated
+  ( FromRow (..),
+    RowParser,
+    field,
+    Entity (..),
+    Field (..),
+    PrimaryKeyType,
+    ModelTable,
+    Picked (..),
+    picked,
+    Insertable (..),
+    emptyInsert,
+    set,
+    setMaybe,
+    Updatable (..),
+    emptyUpdate,
+    setFieldMaybe
+  )
+
+data PacketTable = PacketTable
+
+type instance PrimaryKeyType PacketTable = UUID
+
+type instance ModelTable "Packet" = PacketTable
+
+instance Entity PacketTable where
+  tableName = "test_packet"
+  primaryKey = packetId
+  tableColumns = ["id", "amount", "payload"]
+
+instance Insertable PacketTable where
+  type CreateInput PacketTable = PacketCreate
+  toInsertBuilder input =
+    setMaybe packetId input.id $
+      set packetAmount input.amount $
+      set packetPayload input.payload $
+      emptyInsert @PacketTable
+
+
+instance Updatable PacketTable where
+  type UpdateInput PacketTable = PacketUpdate
+  updatedAtField = Nothing
+  toUpdateBuilder input =
+    setFieldMaybe packetAmount input.amount $
+      setFieldMaybe packetPayload input.payload $
+      emptyUpdate @PacketTable
+
+
+data PacketRow = PacketRow
+  { id :: UUID,
+    amount :: Scientific,
+    payload :: Value
+  }
+  deriving (Show, Eq)
+
+
+data PacketCreate = PacketCreate
+  { id :: Maybe UUID,
+    amount :: Scientific,
+    payload :: Value
+  }
+  deriving (Show, Eq)
+
+
+data PacketUpdate = PacketUpdate
+  { amount :: Maybe Scientific,
+    payload :: Maybe Value
+  }
+  deriving (Show, Eq)
+
+
+instance FromRow PacketRow where
+  fromRow = PacketRow <$> field <*> field <*> field
+
+
+data PacketSelect = PacketSelect
+  { id :: Bool,
+    amount :: Bool,
+    payload :: Bool
+  }
+  deriving (Show, Eq)
+data PacketPicked = PacketPicked
+  { id :: UUID,
+    amount :: Picked Scientific,
+    payload :: Picked Value
+  }
+  deriving (Show, Eq)
+packetSelect :: PacketSelect
+packetSelect =
+  PacketSelect
+    { id = False,
+      amount = False,
+      payload = False
+    }
+packetSelectColumns :: PacketSelect -> [Text]
+packetSelectColumns select_ =
+  fieldColumn packetId
+    : concat
+      [ [fieldColumn packetAmount | select_.amount]
+      , [fieldColumn packetPayload | select_.payload]
+      ]
+parsePacketPicked :: PacketSelect -> RowParser PacketPicked
+parsePacketPicked select_ = do
+  idVal <- field
+  amountVal <- if select_.amount then Picked <$> field else pure Skipped
+  payloadVal <- if select_.payload then Picked <$> field else pure Skipped
+  pure PacketPicked { id = idVal, amount = amountVal, payload = payloadVal }
+toPacketPicked :: PacketSelect -> PacketRow -> PacketPicked
+toPacketPicked select_ row =
+  PacketPicked
+    { id = row.id,
+      amount = picked select_.amount row.amount,
+      payload = picked select_.payload row.payload
+    }
+
+
+packetId :: Field PacketTable UUID
+packetId = Field "id" "id"
+
+packetAmount :: Field PacketTable Scientific
+packetAmount = Field "amount" "amount"
+
+packetPayload :: Field PacketTable Value
+packetPayload = Field "payload" "payload"
+
