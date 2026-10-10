@@ -5,11 +5,12 @@ cabal-version: 1.18
 -- see: https://github.com/sol/hpack
 
 name:           poppy-codegen
-version:        0.1.0.0
+version:        1.0.0
 synopsis:       Schema builder and Client codegen for Poppy
 description:    Write a Schema, generate table types and a Client, and compare that
                 Schema to live Postgres.
 category:       Database
+stability:      stable
 homepage:       https://github.com/hnerdrum/poppy#readme
 bug-reports:    https://github.com/hnerdrum/poppy/issues
 author:         Henrik Nerdrum
@@ -82,7 +83,7 @@ library
     , containers >=0.6 && <0.8
     , directory ==1.3.*
     , filepath >=1.4 && <1.6
-    , poppy ==0.1.*
+    , poppy ==1.0.*
     , postgresql-simple >=0.6 && <0.8
     , text >=2.0 && <2.2
   default-language: Haskell2010

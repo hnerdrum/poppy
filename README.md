@@ -5,7 +5,7 @@
 
 Poppy is a Postgres ORM for Haskell. You describe tables in a schema, generate a client, then query and write through that client.
 
-The generator and the runtime are separate Cabal packages. [`poppy-codegen`](poppy-codegen/) is for generating the client, while [`poppy`](poppy/) is the runtime library.
+The generator and the runtime are separate Cabal packages. [`poppy-codegen`](poppy-codegen/) is for generating the client, while [`poppy`](poppy/) is the runtime library. Both are **1.0** and released in lockstep — use matching versions.
 
 All the example code below is from the example folder in [`examples/task/`](examples/task/). There are also a number of guides in [docs/](docs/).
 

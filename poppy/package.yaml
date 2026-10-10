@@ -1,5 +1,5 @@
 name: poppy
-version: 0.1.0.0
+version: 1.0.0
 github: "hnerdrum/poppy"
 license: BSD3
 license-file: LICENSE
@@ -7,6 +7,7 @@ author: "Henrik Nerdrum"
 maintainer: "henrik.nerdrum@gmail.com"
 copyright: "2023–2026 Henrik Nerdrum"
 category: Database
+stability: stable
 tested-with: GHC == 9.4.8, GHC == 9.10.3
 synopsis: Postgres runtime for generated Poppy Clients
 description: |
