@@ -131,6 +131,16 @@ export DATABASE_URL=postgres://poppy:poppy@127.0.0.1:5435/poppy_test
 (cd examples/blog && cabal run blog)
 ```
 
+## Releasing
+
+`poppy` and `poppy-codegen` ship in lockstep from a `v*` tag.
+
+1. Bump both packages to the same version, update the changelogs, merge to `main`.
+2. From a clean `main` that matches `origin/main`: `./scripts/tag-release.sh 1.0.0`
+3. The [Release](.github/workflows/release.yml) workflow tests, publishes both packages to Hackage (`poppy` first), and opens a GitHub Release.
+
+The workflow needs repo secret `HACKAGE_TOKEN` (Hackage API token with upload rights on both packages).
+
 ## License
 
 BSD-3-Clause. See [LICENSE](LICENSE).

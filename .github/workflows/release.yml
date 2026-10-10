@@ -1,0 +1,103 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Hackage
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      TEST_DATABASE_URL: postgres://poppy:poppy@127.0.0.1:5432/poppy_test
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: poppy
+          POSTGRES_PASSWORD: poppy
+          POSTGRES_DB: poppy_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U poppy -d poppy_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version from tag
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          echo "VERSION=$v" >> "$GITHUB_ENV"
+          ./scripts/check-release-version.sh "$v"
+
+      - name: Set up GHC
+        uses: haskell-actions/setup@v2
+        id: setup
+        with:
+          ghc-version: "9.4.8"
+          cabal-version: latest
+          cabal-update: true
+
+      - name: Plan
+        run: cabal build all --enable-tests --dry-run
+
+      - name: Cache cabal store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.setup.outputs.cabal-store }}
+          key: ${{ runner.os }}-release-ghc-${{ steps.setup.outputs.ghc-version }}-${{ hashFiles('dist-newstyle/cache/plan.json') }}
+          restore-keys: |
+            ${{ runner.os }}-release-ghc-${{ steps.setup.outputs.ghc-version }}-
+
+      - name: Test
+        run: cabal test all
+
+      - name: Examples
+        env:
+          DATABASE_URL: postgres://poppy:poppy@127.0.0.1:5432/poppy_test
+        run: |
+          (cd examples/task && cabal run task-codegen -- --check && cabal run task && cabal run task-codegen -- --check-schema)
+          (cd examples/blog && cabal run blog-codegen -- --check && cabal run blog && cabal run blog-codegen -- --check-schema)
+
+      - name: cabal check
+        run: |
+          (cd poppy && cabal check)
+          (cd poppy-codegen && cabal check)
+
+      - name: sdist
+        run: cabal sdist all
+
+      - name: Haddock for Hackage
+        run: |
+          cabal haddock --haddock-for-hackage poppy
+          cabal haddock --haddock-for-hackage poppy-codegen
+
+      - name: Upload Hackage
+        env:
+          HACKAGE_TOKEN: ${{ secrets.HACKAGE_TOKEN }}
+        run: ./scripts/hackage-upload.sh "$VERSION"
+
+      - name: Release notes
+        run: |
+          {
+            echo "# ${{ github.ref_name }}"
+            echo
+            ./scripts/changelog-notes.sh "$VERSION"
+          } > /tmp/release-notes.md
+
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body_path: /tmp/release-notes.md
+          files: dist-newstyle/sdist/*.tar.gz
+          fail_on_unmatched_files: true
